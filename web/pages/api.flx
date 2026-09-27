@@ -91,6 +91,32 @@
                 (do (reset! fl-git-repo target) {"ok" true "root" target})
                 {"ok" false "error" (or (get created "stderr") "저장소를 만들 수 없습니다.")}))))))))
 
+(defn api-project-setup [parent name github-name visibility]
+  (let [base (str-trim (str parent))
+        project-name (str-trim (str name))
+        gh-name (str-trim (str (or github-name "")))
+        resolved (api-run-at base "pwd -P")
+        root (api-out resolved)
+        target (str root "/" project-name)
+        visibility-flag (if (= visibility "public") "--public" "--private")]
+    (if (or (= project-name "") (= project-name ".") (= project-name "..") (str-includes project-name "/"))
+      {"ok" false "error" "프로젝트 이름을 확인하세요. 경로 구분자는 사용할 수 없습니다."}
+      (if (or (str-starts-with gh-name "-") (str-includes gh-name " "))
+        {"ok" false "error" "GitHub 저장소 이름을 확인하세요."}
+      (if (not (= (api-code resolved) 0))
+        {"ok" false "error" "상위 폴더를 읽을 수 없습니다."}
+        (if (not (api-root-allowed root))
+          {"ok" false "error" (str "허용된 폴더 밖입니다. 허용 범위: " fl-git-roots)}
+          (let [created (api-run-at root (str "test ! -e " (api-shell-quote project-name) " && mkdir -p -- " (api-shell-quote project-name) " && git init -q -- " (api-shell-quote project-name)))]
+            (if (not (= (api-code created) 0))
+              {"ok" false "error" "프로젝트 폴더가 이미 존재하거나 생성할 수 없습니다."}
+              (if (= gh-name "")
+                (do (reset! fl-git-repo target) {"ok" true "root" target "message" "로컬 Git 프로젝트를 만들었습니다."})
+                (let [linked (api-run-at root (str "gh repo create " (api-shell-quote gh-name) " " visibility-flag " --source " (api-shell-quote target) " --remote origin"))]
+                  (if (= (api-code linked) 0)
+                    (do (reset! fl-git-repo target) {"ok" true "root" target "message" "로컬 Git과 GitHub 저장소를 연결했습니다."})
+                    {"ok" false "error" (or (get linked "stderr") "GitHub 저장소 연결에 실패했습니다.")})))))))))))
+
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
 
@@ -213,6 +239,11 @@
               upstream-result (api-run "git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")
               upstream (if (= (api-code upstream-result) 0) (api-out upstream-result) (if (= branch "") "origin/main" (str "origin/" branch)))]
           (server-json (api-file-content (get body "side") (get body "path") upstream)))
+      (= action "project-setup")
+        (let [created (api-project-setup (get body "parent") (get body "name") (get body "github_name") (get body "visibility"))]
+          (if (= (get created "ok") true)
+            (server-json (api-payload (get created "message")))
+            (server-json created 400)))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
