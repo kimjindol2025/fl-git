@@ -69,7 +69,7 @@
         select-commit (fn [commit]
                         (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 상세 정보를 불러오는 중…") (fetch-post! "/api" {"action" "commit-detail" "hash" (get commit "hash")} commit-detail-result)))
         view-tab (fn [name label]
-                   (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (fn [] (reset! tab name))} label))
+                   (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (if (= name "compare") open-compare (fn [] (reset! tab name)))} label))
         status-card (fn [label value tone]
                       (h "div" {:class "stat-card"}
                         (str (h "span" {:class "stat-label"} label) (h "strong" {:class (str "tone-" tone)} (or value "—")))))
