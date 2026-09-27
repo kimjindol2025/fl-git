@@ -8,7 +8,7 @@
 - 초기 진입점: `src/main.fl`
 - 제품 범위·계획·명령·TTY 계약 문서 작성 완료
 - 기존 `fl-split-term`과 소스 분리 완료
-- CLI·TUI·GitHub·AI 문맥 기능 구현 완료
+- 브라우저 UI·CLI·TUI·GitHub·AI 문맥 기능 구현 완료
 
 ## 검증 상태
 
@@ -21,6 +21,8 @@
 | 원격 안전장치 | PASS | `pull/push/branch-delete`에 `--yes` 요구 |
 | GitHub 연동 | 구현 PASS / 외부 인증 BLOCKED | `gh` 명령 연결 완료, 현재 로컬 토큰 invalid |
 | TUI | PASS | PTY에서 상태·커밋 입력·종료 키 검증 |
+| 브라우저 UI | PASS | FL-Front 빌드 errors=0/warnings=0, 실제 HTTP 200 |
+| 화면 중심 흐름 | 진행 중 | Stage/commit/pull/push 구현, 폴더 선택·GitHub 연결 화면 예정 |
 | AI 문맥 | PASS | Markdown `context`, JSON `context-json` |
 
 ## 발견된 경계

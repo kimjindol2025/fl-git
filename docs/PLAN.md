@@ -1,5 +1,14 @@
 # fl-git 구현 계획
 
+## 제품 흐름
+
+```text
+폴더 선택 → Git 상태 → 파일 선택/Stage → Commit
+→ GitHub 연결·branch 확인 → Pull/Push
+```
+
+웹 UI가 이 흐름의 정본이며, CLI/TUI는 보조 실행 경로다.
+
 ## Phase 0 — 프로젝트 준비
 
 - [x] 독립 폴더 생성
@@ -15,6 +24,8 @@
 - [x] `git status --short --branch` 표시
 - [x] staged/unstaged/untracked/conflict 원문 보존 표시
 - [x] 임시 저장소 테스트 추가
+- [x] 브라우저 저장소 대시보드와 상태 API
+- [ ] 화면에서 폴더 선택 및 저장소 전환
 
 ## Phase 2 — 안전한 변경 작업
 
@@ -23,6 +34,7 @@
 - [x] commit 메시지 입력
 - [x] TUI commit 입력 화면
 - [x] `reset --hard`, `clean -fd` 미제공으로 기본 차단
+- [x] 브라우저에서 Stage/unstage와 commit 입력
 
 ## Phase 3 — 원격과 브랜치
 
@@ -31,6 +43,8 @@
 - [x] branch 생성·전환·삭제
 - [x] Git 출력 기반 conflict 오류 보존
 - [x] stash 조회
+- [x] 브라우저 Pull/Push 확인창
+- [ ] 브라우저 GitHub 연결·branch 선택 화면
 
 ## Phase 4 — 터미널 UI
 
@@ -39,6 +53,7 @@
 - [x] TTY 크기 조회 계약
 - [x] TTY capability 호스트 경계
 - [ ] 마우스 선택은 TTY 계약 확인 후 추가
+- [x] 웹 UI를 본체로 전환
 
 ## Phase 5 — GitHub와 AI 문맥
 

@@ -1,16 +1,31 @@
-# fl-git 작업 규칙
+# 서버에서 VS Code 소스제어에 해당하는 화면. 폴더 선택부터 push까지.
+
+`fl-git` 작업 규칙
 
 ## 제품 방향
 
-`fl-git`는 실제 터미널에서 Git과 GitHub 작업을 안전하게 돕는 FreeLang 기반
-도구다. 웹 UI나 VS Code 확장이 본체가 아니다.
+`fl-git`는 서버에서 VS Code Source Control에 해당하는 화면을 제공하는
+FreeLang 기반 Git 작업공간이다. 웹 UI가 본체이며, CLI/TUI는 같은 동작을
+터미널에서 실행하기 위한 보조 경로다.
+
+핵심 흐름은 다음 순서를 따른다.
+
+```text
+폴더 선택 → 이 폴더 Git 상태 → 파일 선택/Stage → Commit
+→ GitHub 연결·branch 확인 → Pull/Push
+```
+
+AI context는 부가 기능이다. 제품의 중심은 저장소를 화면으로 선택하고
+변경을 안전하게 처리하는 것이다. 직원용 업무 앱과 데이터·메뉴·인증을
+공유하지 않는 독립 제품이다.
 
 ## 구현 경계
 
 - Git 프로세스·장기 실행 업무 규칙: FreeLang AFJ `.fl`
 - 짧은 검증 자동화: FreeLangScript `.fls`
+- 브라우저 UI: `web/pages/index.flx`, `web/pages/api.flx`, FL-Front Island
 - TTY/PTY 호스트 경계: 기존 `fl-split-term/host` 계약을 참고한다.
-- JavaScript는 호스트 브리지나 개발 도구가 필요한 경우에만 사용한다.
+- JavaScript는 Front 빌드·TTY capability 같은 호스트 경계에만 사용한다.
 
 ## 안전
 

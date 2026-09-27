@@ -1,20 +1,20 @@
-# fl-git
+# fl-git — 화면으로 쓰는 서버 Git 작업공간
 
-FreeLang 기반 서버·터미널용 Git 관리 도구.
+서버에서 VS Code Source Control처럼 Git을 화면으로 관리하는 FreeLang 제품.
 
-`fl-git`는 VS Code나 웹 화면을 복제하는 프로젝트가 아니다. 서버 터미널에서
-실제 Git 저장소를 안전하게 확인하고, 선택한 작업을 실행하며, GitHub와 AI에
-현재 프로젝트 문맥을 전달하는 CLI/TUI를 목표로 한다.
+`fl-git`의 본체는 브라우저 UI다. 폴더를 선택하고, 변경을 확인하고, 파일을
+Stage하고, 커밋한 뒤 GitHub 연결·branch를 확인하고 Pull/Push한다. CLI와 TUI는
+같은 동작을 터미널에서 수행하는 보조 경로이며, AI context는 부가 기능이다.
 
 ## 현재 상태
 
-- CLI, TUI, GitHub 연결, AI 문맥 출력까지 구현된 실행 가능한 MVP
+- 브라우저 UI, CLI, TUI, GitHub 연결, AI 문맥 출력까지 구현된 실행 가능한 MVP
 - 기존 `fl-split-term`의 TTY/PTY 계약을 참고하되 소스는 독립 유지
 - Git 명령 실행, TUI, GitHub 연동을 AFJ로 구현 완료
 - 본체는 Git 프로세스 권한이 필요한 AFJ(`.fl`)로 구현한다.
 - `scripts/tui-runner.mjs`는 TTY capability만 여는 얇은 호스트 경계다.
 
-## 실행 예정
+## 실행
 
 ```bash
 node /home/kim/kim/platform/freelang-afj/bootstrap.js check src/main.fl
@@ -46,8 +46,8 @@ fl-git branch-delete <이름> --yes
 ```
 
 브라우저에서 [http://127.0.0.1:40850](http://127.0.0.1:40850)을 열면 저장소
-대시보드가 표시된다. 변경 파일, diff, 커밋 입력, stage/unstage, fetch/pull/push,
-AI Context 탭을 클릭으로 사용할 수 있다.
+대시보드가 표시된다. 현재는 실행한 `FL_GIT_REPO` 저장소를 대상으로 하며,
+다음 단계에서 화면의 폴더 선택을 추가한다.
 
 ## 안전 원칙
 
