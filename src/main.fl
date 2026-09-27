@@ -1,0 +1,40 @@
+;; fl-git CLI — 실제 Git 저장소에서 읽기·변경·원격 작업을 수행한다.
+(load "./git.fl")
+
+(define args (cli-args))
+(define command (or (get args 0) "help"))
+(define first-arg (or (get args 1) ""))
+
+(defn help []
+  (println "fl-git 0.1.0 — FreeLang Git 관리 도구")
+  (println "사용법: fl-git <명령> [인자]")
+  (println "")
+  (println "읽기: status diff log branch stash context context-json")
+  (println "변경: add [파일...] unstage [파일...] commit <메시지>")
+  (println "원격: pull|push --yes")
+  (println "브랜치: branch-create <이름> | branch-delete <이름> --yes")
+  (println "GitHub: github <repo|pr|status|pr-create> [제목]")
+  (println "TUI: tui"))
+
+(cond
+  (= command "help") (help)
+  (= command "--help") (help)
+  (= command "status") (git-status)
+  (= command "diff") (git-diff)
+  (= command "log") (git-log)
+  (= command "branch") (git-branch)
+  (= command "stash") (git-stash)
+  (= command "fetch") (git-fetch)
+  (= command "add") (git-add (rest args))
+  (= command "unstage") (git-unstage (rest args))
+  (= command "commit") (git-commit first-arg)
+  (= command "pull") (git-pull first-arg)
+  (= command "push") (git-push first-arg)
+  (= command "branch-create") (git-branch-create first-arg)
+  (= command "branch-delete") (git-branch-delete first-arg (or (get args 2) ""))
+  (= command "context") (git-context)
+  (= command "context-json") (git-context-json)
+  (= command "github") (git-github first-arg (or (get args 2) ""))
+  true (do (println (str "알 수 없는 명령: " command)) (help)))
+
+(println "")

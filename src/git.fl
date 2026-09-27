@@ -1,0 +1,107 @@
+;; Git 업무 계층 — 모든 명령은 결과와 exit를 보존한다.
+
+(defn git-shell-quote [value]
+  (str "'" (str-replace-all (str value) "'" "'\\''") "'"))
+
+(defn git-run [command]
+  (shell-exec-result command))
+
+(defn git-print [result]
+  (let [out (or (get result "stdout") "")
+        err (or (get result "stderr") "")
+        code (or (get result "exit") -1)]
+    (if (> (length out) 0) (print out) nil)
+    (if (> (length err) 0) (print err) nil)
+    (if (= code 0)
+      true
+      (println (str "fl-git: 명령 실패 (exit " code ")")))))
+
+(defn git-capture [command]
+  (let [result (git-run command)]
+    (if (= (or (get result "exit") -1) 0)
+      (or (get result "stdout") "")
+      (str "[실패 exit " (or (get result "exit") -1) "]\n"
+           (or (get result "stderr") "")))))
+
+(defn git-status [] (git-print (git-run "git status --short --branch")))
+(defn git-diff [] (git-print (git-run "git diff --stat && git diff --color=always")))
+(defn git-log [] (git-print (git-run "git --no-pager log --graph --decorate --oneline -20")))
+(defn git-branch [] (git-print (git-run "git branch --all --verbose --no-abbrev")))
+(defn git-stash [] (git-print (git-run "git stash list")))
+(defn git-fetch [] (git-print (git-run "git fetch --all --prune")))
+(defn git-pull [confirmation]
+  (if (= confirmation "--yes")
+    (git-print (git-run "git pull"))
+    (do (println "pull은 원격 변경을 통합합니다. 실행하려면: fl-git pull --yes") false)))
+(defn git-push [confirmation]
+  (if (= confirmation "--yes")
+    (git-print (git-run "git push"))
+    (do (println "push는 원격 저장소를 변경합니다. 실행하려면: fl-git push --yes") false)))
+
+(defn git-add [paths]
+  (let [target (if (> (length paths) 0)
+                 (str-join (map git-shell-quote paths) " ")
+                 ".")]
+    (git-print (git-run (str "git add -- " target)))))
+
+(defn git-unstage [paths]
+  (let [target (if (> (length paths) 0)
+                 (str-join (map git-shell-quote paths) " ")
+                 ".")]
+    (git-print (git-run (str "git reset -- " target)))))
+
+(defn git-commit [message]
+  (if (= (str-trim (str message)) "")
+    (do (println "사용법: fl-git commit \"커밋 메시지\"") false)
+    (git-print (git-run (str "git commit -m " (git-shell-quote message))))))
+
+(defn git-branch-create [name]
+  (if (= (str-trim (str name)) "")
+    (do (println "사용법: fl-git branch-create <이름>") false)
+    (git-print (git-run (str "git switch -c " (git-shell-quote name))))))
+
+(defn git-branch-delete [name confirmation]
+  (if (not (= confirmation "--yes"))
+    (do (println "branch 삭제는 로컬 branch를 제거합니다. 실행하려면: fl-git branch-delete <이름> --yes") false)
+    (if (= (str-trim (str name)) "")
+      (do (println "사용법: fl-git branch-delete <이름> --yes") false)
+      (git-print (git-run (str "git branch -d " (git-shell-quote name)))))))
+
+(defn git-context []
+  (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
+        branch (str-trim (git-capture "git branch --show-current"))
+        remote (git-capture "git remote -v")
+        status (git-capture "git status --short --branch")
+        log (git-capture "git --no-pager log -5 --oneline")]
+    (println "# fl-git 프로젝트 문맥")
+    (println "")
+    (println (str "- 브랜치: " branch))
+    (println (str "- 저장소 루트: " root))
+    (println "")
+    (println "## 원격")
+    (print remote)
+    (println "## 상태")
+    (print status)
+    (println "## 최근 커밋")
+    (print log)
+    true))
+
+(defn git-context-json []
+  (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
+        branch (str-trim (git-capture "git branch --show-current"))
+        remote (str-trim (git-capture "git remote -v"))
+        status (str-trim (git-capture "git status --short --branch"))
+        log (str-trim (git-capture "git --no-pager log -5 --oneline"))]
+    (println (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
+    true))
+
+(defn git-github [action argument]
+  (cond
+    (= action "repo") (git-print (git-run "gh repo view"))
+    (= action "pr") (git-print (git-run "gh pr list"))
+    (= action "status") (git-print (git-run "gh auth status"))
+    (= action "pr-create")
+      (if (= (str-trim (str argument)) "")
+        (do (println "사용법: fl-git github pr-create \"제목\"") false)
+        (git-print (git-run (str "gh pr create --title " (git-shell-quote argument)))))
+    true (do (println "사용법: fl-git github <repo|pr|status|pr-create> [제목]") false)))

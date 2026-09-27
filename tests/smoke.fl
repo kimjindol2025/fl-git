@@ -1,0 +1,2 @@
+; Phase 0 smoke test: 초기 진입점과 기본 FreeLang 문법 확인
+(println "PASS fl-git project smoke")

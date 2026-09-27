@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNNER="/home/kim/kim/platform/freelang-afj/bootstrap.js"
+
+if [[ "${1:-}" == "tui" ]]; then
+  shift
+  exec node "$ROOT/scripts/tui-runner.mjs" "$@"
+fi
+
+exec node "$RUNNER" run "$ROOT/src/main.fl" "$@"

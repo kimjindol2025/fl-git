@@ -1,0 +1,50 @@
+;; 키보드 기반 Git TUI. 실행: fl-git tui
+(load "./git.fl")
+
+(defn tui-read-line [buffer]
+  (let [byte (tty-read-byte)]
+    (cond
+      (or (= byte 10) (= byte 13)) buffer
+      (= byte 127)
+        (if (> (length buffer) 0)
+          (do (print "\b \b") (tui-read-line (slice buffer 0 (- (length buffer) 1))))
+          (tui-read-line buffer))
+      (= byte 27) buffer
+      true (do (print (char-from-code byte)) (tui-read-line (str buffer (char-from-code byte)))))))
+
+(defn draw [message]
+  (print "\x1b[2J\x1b[H")
+  (println "fl-git — Git 터미널 관리")
+  (println "────────────────────────────────────────")
+  (print (git-capture "git status --short --branch"))
+  (println "────────────────────────────────────────")
+  (println "s 상태  d diff  l log  b branch  t stash")
+  (println "a add .  n unstage .  c commit  p push  u pull  x 종료")
+  (if (> (length message) 0) (println (str "\n" message)) nil))
+
+(defn tui-loop [message]
+  (draw message)
+  (let [key (tty-read-byte)]
+    (cond
+      (= key 120) false
+      (= key 115) (tui-loop "status는 화면 상단에 표시됩니다.")
+      (= key 100) (do (print "\x1b[2J\x1b[H") (git-diff) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
+      (= key 108) (do (print "\x1b[2J\x1b[H") (git-log) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
+      (= key 98) (do (print "\x1b[2J\x1b[H") (git-branch) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
+      (= key 116) (do (print "\x1b[2J\x1b[H") (git-stash) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
+      (= key 97) (do (git-add []) (tui-loop "전체 파일을 stage했습니다."))
+      (= key 110) (do (git-unstage []) (tui-loop "전체 파일의 stage를 취소했습니다."))
+      (= key 99) (do
+        (print "\n커밋 메시지: ")
+        (let [message (tui-read-line "")]
+          (println "")
+          (git-commit message)
+          (tui-loop "commit 완료 여부를 확인하세요.")))
+      (= key 112) (do (git-push "--yes") (tui-loop "push 완료 여부를 확인하세요."))
+      (= key 117) (do (git-pull "--yes") (tui-loop "pull 완료 여부를 확인하세요."))
+      true (tui-loop "지원 키: s d l b t a c p u x"))))
+
+(try
+  (do (tty-raw-enter!) (tui-loop ""))
+  (catch error (print (str "\nfl-git TUI 오류: " (get error "message") "\n")))
+  (finally (tty-raw-leave!)))
