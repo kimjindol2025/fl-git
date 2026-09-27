@@ -67,7 +67,7 @@
                 (fn [acc root]
                   (let [base (str-trim root)
                         result (api-run-at base "find . -type d -name .git -prune -print | sort")
-                        names (filter (fn [name] (> (length (str-trim name)) 0)) (regex_split (api-out result) "\\n"))
+                        names (filter (fn [name] (> (length (str-trim name)) 0)) (regex_split (api-out result) "\\n"))]
                     (concat acc (api-repo-paths base names))))
                 [] roots)]
     {"ok" true "roots" roots "repositories" repos}))
