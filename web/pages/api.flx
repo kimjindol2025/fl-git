@@ -44,6 +44,39 @@
         {"ok" false "error" (str "허용된 폴더 밖의 저장소입니다. 허용 범위: " fl-git-roots)}
         (do (reset! fl-git-repo root) {"ok" true "root" root})))))
 
+(defn api-list-folders [requested]
+  (let [candidate (str-trim (str (or requested "")))
+        base (if (= candidate "") (first (regex_split fl-git-roots ":")) candidate)
+        result (api-run-at base "pwd -P")
+        root (api-out result)]
+    (if (not (= (api-code result) 0))
+      {"ok" false "error" "폴더를 읽을 수 없습니다."}
+      (if (not (api-root-allowed root))
+        {"ok" false "error" (str "허용된 폴더 밖입니다. 허용 범위: " fl-git-roots)}
+        (let [entries (api-run-at root "find . -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort")
+              names (filter (fn [name] (> (length (str-trim name)) 0)) (regex_split (api-out entries) "\\n"))]
+          {"ok" true "root" root
+           "folders" (map (fn [name] (str root "/" (str-trim name))) names)})))))
+
+(defn api-create-repo [parent name]
+  (let [base (str-trim (str parent))
+        repo-name (str-trim (str name))
+        resolved (api-run-at base "pwd -P")
+        root (api-out resolved)
+        target (str root "/" repo-name)]
+    (if (= repo-name "")
+      {"ok" false "error" "새 저장소 이름을 입력하세요."}
+      (if (or (= repo-name ".") (= repo-name "..") (str-includes repo-name "/"))
+        {"ok" false "error" "저장소 이름에는 경로 구분자를 사용할 수 없습니다."}
+        (if (not (= (api-code resolved) 0))
+          {"ok" false "error" "상위 폴더를 읽을 수 없습니다."}
+          (if (not (api-root-allowed root))
+            {"ok" false "error" (str "허용된 폴더 밖입니다. 허용 범위: " fl-git-roots)}
+            (let [created (api-run-at root (str "mkdir -p -- " (api-shell-quote repo-name) " && git init -q -- " (api-shell-quote repo-name)))]
+              (if (= (api-code created) 0)
+                (do (reset! fl-git-repo target) {"ok" true "root" target})
+                {"ok" false "error" (or (get created "stderr") "저장소를 만들 수 없습니다.")}))))))))
+
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
 
@@ -70,6 +103,13 @@
   (let [body (or (get req "body") {})
         action (or (get body "action") "")]
     (cond
+      (= action "list-folders")
+        (server-json (api-list-folders (get body "path")))
+      (= action "create-repo")
+        (let [created (api-create-repo (get body "parent") (get body "name"))]
+          (if (= (get created "ok") true)
+            (server-json (api-payload "새 저장소를 만들었습니다."))
+            (server-json created 400)))
       (= action "select-repo")
         (let [selected (api-select-repo (get body "path"))]
           (if (= (get selected "ok") true)

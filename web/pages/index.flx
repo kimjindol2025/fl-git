@@ -5,6 +5,8 @@
         loaded (atom false)
         tab (atom "overview")
         repo-input (atom "")
+        folders (atom [])
+        new-repo-name (atom "")
         commit-message (atom "")
         notice (atom "")
         error (atom "")
@@ -17,6 +19,15 @@
                    (reset! error (or (get res "error") "상태를 불러오지 못했습니다"))
                    (do (reset! data res) (reset! repo-input (or (get res "root") @repo-input)) (reset! error ""))))
         send (fn [payload] (fetch-post! "/api" payload apply-result))
+        browse-result (fn [res]
+                        (if (= (get res "ok") false)
+                          (reset! error (or (get res "error") "폴더를 불러오지 못했습니다"))
+                          (do (reset! folders (or (get res "folders") [])) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice "폴더 목록을 불러왔습니다."))))
+        browse-folders (fn [] (fetch-post! "/api" {"action" "list-folders" "path" @repo-input} browse-result))
+        create-repo (fn []
+                      (if (= (str-trim @new-repo-name) "")
+                        (reset! error "새 저장소 이름을 입력하세요")
+                        (do (reset! notice "저장소 생성 중…") (fetch-post! "/api" {"action" "create-repo" "parent" @repo-input "name" @new-repo-name} apply-result) (reset! new-repo-name ""))))
         do-action (fn [action]
                     (if (or (= action "push") (= action "pull"))
                       (if (js_confirm (str action "은 원격 저장소를 변경합니다. 실행할까요?"))
@@ -60,7 +71,12 @@
                     (str (h "span" {:class "muted"} "관리할 저장소 폴더")
                          (h "div" {:class "picker-row"}
                            (h "input" {:class "repo-input" :type "text" :value @repo-input :placeholder "/home/kim/kim/projects/my-repo" :on-input (fn [e] (reset! repo-input (.-value (.-target e))))})
-                           (h "button" {:class "button primary picker-button" :on-click select-repo} "저장소 열기"))))
+                           (h "button" {:class "button primary picker-button" :on-click select-repo} "저장소 열기")
+                           (h "button" {:class "button ghost picker-button" :on-click browse-folders} "폴더 선택"))))
+                    (if (= (length @folders) 0)
+                      ""
+                      (h "div" {:class "folder-list"}
+                        (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (reset! repo-input folder))} (str "📁 " folder))) @folders) ""))))
                (h "div" {:class "branch-pill"} (str "⎇ " (or (get @data "branch") "—")))))
         (h "section" {:class "stats-grid"}
           (str (status-card "BRANCH" (get @data "branch") "blue")
@@ -99,8 +115,16 @@
                    (h "div" {:class "panel"}
                      (str (h "div" {:class "panel-heading"} (h "h2" {} "최근 커밋"))
                           (h "pre" {:class "log-output"} (or (get @data "log") "커밋이 없습니다."))))))))
+        (if (= @tab "overview")
+          (h "section" {:class "panel create-panel"}
+            (str (h "div" {:class "panel-heading"} (h "h2" {} "새 저장소 만들기"))
+                 (h "p" {:class "muted"} "현재 폴더에 새 로컬 Git 저장소를 생성합니다.")
+                 (h "div" {:class "picker-row"}
+                   (h "input" {:class "repo-input" :type "text" :value @new-repo-name :placeholder "예: my-new-repo" :on-input (fn [e] (reset! new-repo-name (.-value (.-target e))))})
+                   (h "button" {:class "button primary picker-button" :on-click create-repo} "저장소 생성"))))
+          "")
         (if (> (length @error) 0) (h "div" {:class "toast error"} @error) "")
-        (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) "")))))
+        (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) ""))))
 
 (defn render [req]
   (server_header
@@ -118,6 +142,7 @@
 </style>
 <style>
 .repo-bar{gap:18px}.repo-picker{flex:1;min-width:0}.picker-row{display:flex;gap:9px;margin-top:8px}.repo-input{width:100%;min-width:0;background:#0a0e15;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:11px 12px;font:12px ui-monospace,monospace;outline:none}.repo-input:focus{border-color:var(--blue)}.picker-button{white-space:nowrap}
+.folder-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.folder-item{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:8px 10px;cursor:pointer;font:11px ui-monospace,monospace}.folder-item:hover{border-color:var(--blue);color:var(--text)}.create-panel{margin-top:22px}.create-panel .picker-row{max-width:600px}
 </style>
 """))
           (h "body" {}
