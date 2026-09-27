@@ -94,6 +94,16 @@
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
 
+(defn api-commit-list []
+  (let [result (api-run "git --no-pager log --date=short --pretty=format:'%H|%ad|%an|%s' -12")
+        rows (filter (fn [row] (> (length (str-trim row)) 0)) (regex_split (api-out result) "\\n"))]
+    (map (fn [row]
+           (let [parts (regex_split row "|")]
+             {"hash" (or (get parts 0) "")
+              "date" (or (get parts 1) "")
+              "author" (or (get parts 2) "")
+              "message" (or (get parts 3) "")})) rows)))
+
 (defn api-payload [message]
   (let [root-result (api-run "git rev-parse --show-toplevel")
         branch-result (api-run "git branch --show-current")
@@ -101,13 +111,14 @@
         status-result (api-run "git status --short --branch")
         diff-result (api-run "git --no-pager diff --stat && git --no-pager diff")
         log-result (api-run "git --no-pager log --oneline --decorate -12")
+        commits (api-commit-list)
         root (api-out root-result)
         branch (api-out branch-result)
         remote (api-out remote-result)
         status (api-out status-result)
         log (api-out log-result)]
     {"ok" true "message" (or message "") "root" root "branch" branch
-     "remote" remote "status" status "diff" (api-out diff-result) "log" log
+     "remote" remote "status" status "diff" (api-out diff-result) "log" log "commits" commits
      "context_json" (api-context-json root branch remote status log)}))
 
 (defn render [req]
