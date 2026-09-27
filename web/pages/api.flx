@@ -125,6 +125,22 @@
      "ahead" (if (= (api-code counts) 0) (or (get parts 0) "0") "—")
      "behind" (if (= (api-code counts) 0) (or (get parts 1) "0") "—")}))
 
+(defn api-file-lines [result]
+  (filter (fn [line] (> (length (str-trim line)) 0)) (regex_split (api-out result) "\\n")))
+
+(defn api-file-compare []
+  (let [branch-result (api-run "git branch --show-current")
+        branch (api-out branch-result)
+        upstream-result (api-run "git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")
+        upstream (if (= (api-code upstream-result) 0) (api-out upstream-result) (if (= branch "") "origin/main" (str "origin/" branch)))
+        server-result (api-run "git ls-files -co --exclude-standard")
+        github-result (api-run (str "git ls-tree -r --name-only " (api-shell-quote upstream)))]
+    (if (not (= (api-code github-result) 0))
+      {"ok" false "error" (or (get github-result "stderr") (str "GitHub 원격 브랜치를 읽을 수 없습니다: " upstream))}
+      {"ok" true "branch" branch "upstream" upstream
+       "server_files" (api-file-lines server-result)
+       "github_files" (api-file-lines github-result)})))
+
 (defn api-payload [message]
   (let [root-result (api-run "git rev-parse --show-toplevel")
         branch-result (api-run "git branch --show-current")
@@ -162,6 +178,8 @@
           (if (= (api-code result) 0)
             (server-json {"ok" true "hash" hash "detail" (get result "stdout")})
             (server-json {"ok" false "error" (or (get result "stderr") "커밋 상세 정보를 불러오지 못했습니다.")} 400)))
+      (= action "compare-files")
+        (server-json (api-file-compare))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
