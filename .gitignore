@@ -1,3 +1,8 @@
 .tmp/
 .fl-git/
 *.log
+web/_app.fl
+web/AGENTS.md
+web/public/app.css
+web/.build-*
+web/data/*

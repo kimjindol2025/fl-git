@@ -1,0 +1,76 @@
+; fl-git 웹 API — Git 명령은 FL_GIT_REPO 경로에서만 실행한다.
+
+(define fl-git-repo (or (fl-env-get "FL_GIT_REPO") ".."))
+
+(defn api-shell-quote [value]
+  (str "'" (str-replace-in (str value) "'" "'\\''") "'"))
+
+(defn api-run [command]
+  (shell_capture (str "cd " (api-shell-quote fl-git-repo) " && " command)))
+
+(defn api-out [result]
+  (str-trim (or (get result "stdout") "")))
+
+(defn api-code [result]
+  (or (get result "code") -1))
+
+(defn api-command [command]
+  (let [result (api-run command)]
+    {"stdout" (or (get result "stdout") "")
+     "stderr" (or (get result "stderr") "")
+     "code" (api-code result)}))
+
+(defn api-context-json [root branch remote status log]
+  (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
+
+(defn api-payload [message]
+  (let [root-result (api-run "git rev-parse --show-toplevel")
+        branch-result (api-run "git branch --show-current")
+        remote-result (api-run "git remote -v")
+        status-result (api-run "git status --short --branch")
+        diff-result (api-run "git --no-pager diff --stat && git --no-pager diff")
+        log-result (api-run "git --no-pager log --oneline --decorate -12")
+        root (api-out root-result)
+        branch (api-out branch-result)
+        remote (api-out remote-result)
+        status (api-out status-result)
+        log (api-out log-result)]
+    {"ok" true "message" (or message "") "root" root "branch" branch
+     "remote" remote "status" status "diff" (api-out diff-result) "log" log
+     "context_json" (api-context-json root branch remote status log)}))
+
+(defn render [req]
+  (server-json (api-payload "")))
+
+(defn render_post [req]
+  (let [body (or (get req "body") {})
+        action (or (get body "action") "")]
+    (cond
+      (= action "add-all")
+        (let [r (api-command "git add -- .")]
+          (if (= (api-code r) 0) (server-json (api-payload "전체 파일을 Stage했습니다.")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+      (= action "unstage-all")
+        (let [r (api-command "git reset -- .")]
+          (if (= (api-code r) 0) (server-json (api-payload "Stage를 취소했습니다.")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+      (= action "fetch")
+        (let [r (api-command "git fetch --all --prune")]
+          (if (= (api-code r) 0) (server-json (api-payload "Fetch 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+      (= action "pull")
+        (if (= (get body "confirm") true)
+          (let [r (api-command "git pull")]
+            (if (= (api-code r) 0) (server-json (api-payload "Pull 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+          (server-json {"ok" false "error" "Pull은 confirm=true가 필요합니다."} 400))
+      (= action "push")
+        (if (= (get body "confirm") true)
+          (let [r (api-command "git push")]
+            (if (= (api-code r) 0) (server-json (api-payload "Push 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+          (server-json {"ok" false "error" "Push는 confirm=true가 필요합니다."} 400))
+      (= action "commit")
+        (let [message (str-trim (or (get body "message") ""))]
+          (if (= message "")
+            (server-json {"ok" false "error" "커밋 메시지가 필요합니다."} 400)
+            (let [r (api-command (str "git commit -m " (api-shell-quote message)))]
+              (if (= (api-code r) 0)
+                (server-json (api-payload "커밋 완료"))
+                (server-json {"ok" false "error" (or (get r "stderr") (get r "stdout"))} 400)))))
+      true (server-json {"ok" false "error" (str "알 수 없는 action: " action)} 400))))

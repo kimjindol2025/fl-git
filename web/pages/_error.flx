@@ -1,0 +1,30 @@
+; pages/_error.flx — 에러 페이지 헬퍼
+; (page-404 req) → server-html 404 응답
+; (page-500 msg req) → server-html 500 응답
+
+(defn page-404 [req]
+  (server-status 404
+    (layout "404 — 페이지를 찾을 수 없음" (str
+      "<div style='text-align:center;padding:48px 0'>"
+      "<div style='font-size:5rem;margin-bottom:16px'>🔍</div>"
+      "<h2 style='font-size:2rem;font-weight:800;color:#111;margin:0 0 12px'>404</h2>"
+      "<p style='color:#6b7280;font-size:1.1rem;margin:0 0 32px'>페이지를 찾을 수 없습니다</p>"
+      "<a href='/' style='background:#6366f1;color:white;border-radius:8px;"
+      "padding:12px 28px;font-weight:600;text-decoration:none'>← 홈으로</a>"
+      "</div>") req)))
+
+(defn page-500 [msg req]
+  (server-status 500
+    (layout "500 — 서버 오류" (str
+      "<div style='text-align:center;padding:48px 0'>"
+      "<div style='font-size:5rem;margin-bottom:16px'>💥</div>"
+      "<h2 style='font-size:2rem;font-weight:800;color:#111;margin:0 0 12px'>500</h2>"
+      "<p style='color:#6b7280;font-size:1.1rem;margin:0 0 8px'>서버에서 오류가 발생했습니다</p>"
+      "<p style='color:#9ca3af;font-size:.85rem;font-family:monospace;margin:0 0 32px'>" msg "</p>"
+      "<a href='/' style='background:#6366f1;color:white;border-radius:8px;"
+      "padding:12px 28px;font-weight:600;text-decoration:none'>← 홈으로</a>"
+      "</div>") req)))
+
+; 와일드카드 핸들러 — 등록되지 않은 모든 경로
+(defn not-found-handler [req]
+  (page-404 req))

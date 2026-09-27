@@ -1,0 +1,861 @@
+; pages/_layout.flx — 공통 레이아웃 헬퍼 (h() SSR 적용)
+
+(style layout_shell :display "flex" :min-h "100dvh")
+(style layout_nav :bg "#6366f1" :width "220px" :min-w "220px" :display "flex" :flex-dir "column"
+  :p "16px 0" :position "sticky" :top "0" :height "100dvh" :overflow "auto")
+(style layout_main :flex "1" :min-w "0" :display "flex" :flex-dir "column")
+(style layout_wrap :flex "1" :p "0" :max-w "none" :mx "0")
+(style layout_foot :align "center" :p "16px 24px" :color "#9ca3af" :size ".75rem"
+  :border-top "1px solid #e5e7eb")
+(style nav-brand :color "white" :weight "700" :size "1rem" :p "4px 20px 16px" :decoration "none" :display "block")
+(style nav-section-label :color "rgba(255,255,255,.45)" :size ".65rem" :weight "700"
+  :p "12px 20px 6px")
+(style nav-link-base :color "white" :decoration "none" :p "10px 20px" :display "block" :size ".88rem")
+(style nav-bottom :mt "auto" :p "12px 16px 8px" :border-top "1px solid rgba(255,255,255,.12)")
+(style global-style :bg "#f9fafb" :color "#111")
+
+; DEV CSP — inline style + HMR connect 허용
+(define DEV-CSP "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' blob:; img-src 'self' data: blob:; connect-src 'self' http://localhost:40851 http://127.0.0.1:40851 ws://localhost:40851 ws://127.0.0.1:40851; font-src 'self' data: https://fonts.gstatic.com")
+
+; nav 링크 — 현재 경로 강조 + SPA 라우팅
+(defn nav-link [href label current]
+  (if (= href current)
+    (h "a" {:href href :class nav-link-base :data-spa "1"
+            :style "opacity:1;border-left:3px solid white;background:rgba(255,255,255,.15)"}
+      label)
+    (h "a" {:href href :class nav-link-base :data-spa "1"
+            :style "opacity:.82;border-left:3px solid transparent"}
+      label)))
+
+; 공통 글로벌 CSS — 모던 CSS 전면 적용
+(define GLOBAL-CSS "<style>
+:root{
+  --c-bg:#f9fafb;--c-surface:#fff;--c-border:#e5e7eb;
+  --c-text:#111827;--c-muted:#9ca3af;
+  --c-primary:#6366f1;--c-primary-d:#4f46e5;--c-primary-l:#ede9fe;
+  --c-success:#16a34a;--c-warning:#d97706;--c-danger:#dc2626;
+  --radius-sm:8px;--radius-md:12px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.07);--shadow-md:0 4px 16px rgba(0,0,0,.10);
+  --ease-spring:linear(0,0.009,0.035 2.1%,0.141,0.281 6.7%,0.723 12.9%,0.938 16.7%,1.017,1.06,1.081 21%,1.09,1.088 24.6%,1.081,1.037 33.3%,1.009 38.3%,1);
+  --ease-bounce:linear(0,0.063,0.25,0.563,1.001,1.199 18.2%,1.249,1.27,1.274,1.25 25%,1.008 32.8%,0.96,0.944 37%,0.944 38.6%,0.96,1.001 46.6%,1.015,1.016 52.5%,1.001 56.6%,0.994,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--c-bg);color:var(--c-text);min-height:100dvh}
+h1,h2,h3{text-wrap:balance;overflow-wrap:break-word}
+p,.muted{text-wrap:pretty;overflow-wrap:break-word}
+a{color:var(--c-primary);text-decoration:none}
+a:hover{text-decoration:underline;color:var(--c-primary-d)}
+.card{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-md);padding:20px;box-shadow:var(--shadow-sm);margin-bottom:16px;transition:box-shadow .2s var(--ease-spring)}
+.card:hover{box-shadow:var(--shadow-md)}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.76rem;font-weight:600}
+.badge-primary{background:var(--c-primary-l);color:var(--c-primary-d)}
+.badge-success{background:#dcfce7;color:var(--c-success)}
+.badge-warning{background:#fef3c7;color:var(--c-warning)}
+.badge-danger{background:#fee2e2;color:var(--c-danger)}
+.table-wrap{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-md);overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+table{width:100%;border-collapse:collapse}
+th{background:#f8fafc;padding:10px 14px;font-size:.82rem;font-weight:600;color:#6b7280;border-bottom:1px solid var(--c-border);text-align:left}
+td{padding:11px 14px;font-size:.9rem;border-bottom:1px solid #f1f3f6;transition:background .15s}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f5f7ff}
+tr:has(input[type=checkbox]:checked) td{background:color-mix(in srgb,var(--c-primary) 6%,transparent)}
+form{display:grid;gap:14px;max-width:520px}
+label{font-size:.88rem;font-weight:600;display:block;margin-bottom:4px;transition:color .15s}
+.field:has(input:focus) label,.field:has(textarea:focus) label,.field:has(select:focus) label{color:var(--c-primary)}
+input,select{font:inherit;padding:9px 12px;border:1px solid #d1d5db;border-radius:var(--radius-sm);width:100%;background:var(--c-surface);color:var(--c-text);transition:all .18s}
+textarea{font:inherit;padding:9px 12px;border:1px solid #d1d5db;border-radius:var(--radius-sm);width:100%;background:var(--c-surface);color:var(--c-text);transition:all .18s;resize:none;min-height:90px;field-sizing:content;overflow-y:auto;max-height:360px}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--c-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--c-primary) 15%,transparent)}
+form:has(input:invalid:not(:placeholder-shown)) [type=submit]{opacity:.55;cursor:not-allowed}
+button,[type=submit]{font:inherit;background:var(--c-primary);color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 22px;font-weight:600;cursor:pointer;width:fit-content;transition:transform .35s var(--ease-spring),background .18s,box-shadow .35s var(--ease-spring)}
+button:hover,[type=submit]:hover{background:var(--c-primary-d);transform:translateY(-2px);box-shadow:0 4px 12px rgba(99,102,241,.3)}
+button:active,[type=submit]:active{transform:translateY(0);box-shadow:none}
+button.secondary{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}
+button.secondary:hover{background:#e5e7eb;transform:none;box-shadow:none}
+button.danger{background:var(--c-danger)}
+button.danger:hover{background:#b91c1c}
+.muted{color:var(--c-muted);font-size:.85rem}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.stat{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-md);padding:20px;box-shadow:var(--shadow-sm);transition:transform .4s var(--ease-spring),box-shadow .4s var(--ease-spring)}
+.stat:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}
+.stat .v{font-size:1.8rem;font-weight:800;color:var(--c-primary);line-height:1}
+.stat .l{font-size:.8rem;color:var(--c-muted);margin-top:6px;text-wrap:balance}
+[class*=nav-section-label]{text-transform:uppercase;letter-spacing:.06em}
+[class*=nav-link-base]{border-left:3px solid transparent}
+@media(max-width:640px){body{font-size:15px}.table-wrap{overflow-x:auto}table{min-width:480px}
+[class*=layout_nav]{width:56px!important;min-width:56px!important}
+[class*=nav-brand]{font-size:0;padding:12px 8px!important}
+[class*=nav-brand]::after{content:'FL';font-size:.75rem}
+[class*=nav-section-label]{display:none}
+[class*=nav-link-base]{padding:10px 6px!important;font-size:.72rem;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[class*=nav-bottom]{padding:8px 4px!important}}
+</style>")
+
+; 다크모드 토글 — localStorage 기반 영구 저장
+(define dark_mode_script
+  "<script>(function(){
+var root=document.documentElement;
+var btn=document.getElementById('dark-btn');
+var DARK='fl-dark';
+function apply(dark){
+  root.style.colorScheme=dark?'dark':'light';
+  if(btn){btn.textContent=dark?'☀️':'🌙';btn.style.color=dark?'#fbbf24':'#94a3b8';}
+}
+apply(localStorage.getItem(DARK)==='1');
+if(btn){btn.addEventListener('click',function(){
+  var next=root.style.colorScheme!=='dark';
+  localStorage.setItem(DARK,next?'1':'0');
+  apply(next);
+});}
+})()</script>")
+
+; HMR 클라이언트 — L1 full reload / L2 css-reload / L3 soft-reload(store·atom 유지)
+(define HMR-SCRIPT
+  """<script>(function(){
+var isDev=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+if(!isDev)return;
+var HMR='http://'+location.hostname+':40851/~hmr';
+function cssReload(){
+  return fetch(location.href,{cache:'no-store',headers:{'Accept':'text/html'}})
+    .then(function(r){return r.text();})
+    .then(function(html){
+      var doc=new DOMParser().parseFromString(html,'text/html');
+      var oldLinks=[].slice.call(document.querySelectorAll('link[rel="stylesheet"]'));
+      var newLinks=[].slice.call(doc.querySelectorAll('link[rel="stylesheet"]'));
+      oldLinks.forEach(function(link,i){
+        var href=(newLinks[i]&&newLinks[i].getAttribute('href'))||link.getAttribute('href');
+        if(!href)return;
+        var u=href.split('?')[0]+'?hmr='+Date.now();
+        link.setAttribute('href',u);
+      });
+      var oldStyles=[].slice.call(document.querySelectorAll('style'));
+      var newStyles=[].slice.call(doc.querySelectorAll('style'));
+      for(var i=0;i<newStyles.length;i++){
+        if(oldStyles[i]) oldStyles[i].textContent=newStyles[i].textContent;
+        else document.head.appendChild(document.importNode(newStyles[i],true));
+      }
+      console.log('[hmr] css-reload');
+    });
+}
+function softReload(){
+  try{
+    if(window._fl&&_fl.hmr_snapshot){
+      sessionStorage.setItem('__fl_hmr',JSON.stringify(_fl.hmr_snapshot()));
+    }
+  }catch(e){}
+  return fetch(location.href,{cache:'no-store',headers:{'Accept':'text/html'}})
+    .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.text();})
+    .then(function(html){
+      document.open();
+      document.write(html);
+      document.close();
+      console.log('[hmr] soft-reload');
+    })
+    .catch(function(err){
+      console.warn('[hmr] soft-reload failed → full reload',err);
+      location.reload();
+    });
+}
+function onMsg(type){
+  if(type==='css-reload') return cssReload();
+  if(type==='soft-reload') return softReload();
+  if(type==='reload'){ location.reload(); return; }
+}
+// PM2(npm start)는 :40851 없음 — EventSource 전에 GET probe. 실패 시 아예 연결 안 함.
+function connect(){
+  fetch('http://'+location.hostname+':40851/~errors',{method:'GET',mode:'cors',cache:'no-store'})
+    .then(function(r){
+      if(!r.ok) throw new Error('no-hmr');
+      var es=new EventSource(HMR);
+      es.onmessage=function(e){ if(e.data&&e.data!=='connected') onMsg(e.data); };
+      es.onerror=function(){
+        try{es.close();}catch(x){}
+        setTimeout(connect,2000);
+      };
+    })
+    .catch(function(){
+      console.info('[hmr] off — :40851 없음 (PM2/start). HMR 생략');
+    });
+}
+connect();
+})()</script>""")
+
+; FL DevTools — dev 전용 floating 디버그 패널
+; store 현재값 · Island 마운트 목록 · 최근 에러 표시
+; 단축키: Ctrl+Shift+D
+(define DEBUG-PANEL
+  "<script>(function(){
+var isDev=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+if(!isDev)return;
+var islands={};
+var errors=[];
+var open=false;
+
+function waitFl(cb){if(window._fl){cb();}else{setTimeout(function(){waitFl(cb);},80);}}
+
+waitFl(function(){
+  var omR=_fl.mount_reactive.bind(_fl);
+  var omM=_fl.mount.bind(_fl);
+  var odD=_fl.dispatch.bind(_fl);
+  _fl.mount=function(id,fn){
+    islands[id]={id:id,watch:null};
+    if(open)render();
+    return omM(id,fn);
+  };
+  _fl.mount_reactive=function(id,fn,keys){
+    islands[id]={id:id,watch:keys};
+    if(open)render();
+    return omR(id,fn,keys);
+  };
+  _fl.dispatch=function(k,v){
+    var r=odD(k,v);
+    if(open)render();
+    return r;
+  };
+});
+
+function fetchErrors(){
+  fetch('/api/errors?limit=5')
+    .then(function(r){return r.json();})
+    .then(function(d){errors=(d.data||d||[]).slice(0,5);render();})
+    .catch(function(){});
+}
+
+function esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function render(){
+  if(!open||!panel)return;
+  var store=window._fl?window._fl._store.v:{};
+  var sk=Object.keys(store);
+  var ik=Object.keys(islands);
+  var sec=function(title,n,body){
+    return '<div style=\"padding:10px 16px;border-top:1px solid #2d3748\">'+
+      '<div style=\"color:#94a3b8;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px\">'+title+' ('+n+')</div>'+
+      body+'</div>';
+  };
+  var storeHtml=sk.length===0?'<div style=\"color:#4a5568\">비어있음</div>':
+    sk.map(function(k){
+      return '<div style=\"display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #2d3748\">'+
+        '<span style=\"color:#a78bfa\">'+esc(k)+'</span>'+
+        '<span style=\"color:#34d399\">'+esc(JSON.stringify(store[k]).slice(0,28))+'</span></div>';
+    }).join('');
+  var islandHtml=ik.length===0?'<div style=\"color:#4a5568\">없음</div>':
+    ik.map(function(id){
+      var w=islands[id].watch;
+      return '<div style=\"padding:2px 0;border-bottom:1px solid #2d3748\">'+
+        '<span style=\"color:#60a5fa\">'+esc(id)+'</span>'+
+        (w?'<span style=\"color:#94a3b8\"> ↺['+w.join(',')+']</span>':'')+
+        '</div>';
+    }).join('');
+  var errHtml=errors.length===0?'<div style=\"color:#4a5568\">없음 ✓</div>':
+    errors.map(function(e){
+      return '<div style=\"padding:2px 0;border-bottom:1px solid #2d3748;color:#f87171\">'+esc((e.message||'').slice(0,52))+'</div>';
+    }).join('');
+  panel.innerHTML=
+    '<div style=\"padding:10px 16px;display:flex;justify-content:space-between;align-items:center\">'+
+      '<span style=\"font-weight:700;color:#818cf8;font-size:.82rem\">🔧 FL DevTools</span>'+
+      '<button id=\"fl-dp-x\" style=\"background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.1rem;line-height:1\">×</button>'+
+    '</div>'+
+    sec('Store',sk.length,storeHtml)+
+    sec('Islands',ik.length,islandHtml)+
+    sec('Errors',errors.length,errHtml);
+  document.getElementById('fl-dp-x').onclick=toggle;
+}
+
+var btn=document.createElement('button');
+btn.title='FL DevTools (Ctrl+Shift+D)';
+btn.textContent='🔧';
+btn.style.cssText='position:fixed;bottom:16px;right:16px;z-index:9999;width:36px;height:36px;border-radius:50%;background:#6366f1;color:white;border:none;font-size:1rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);transition:background .15s;';
+
+var panel=document.createElement('div');
+panel.style.cssText='display:none;position:fixed;bottom:60px;right:16px;z-index:9998;width:300px;max-height:440px;overflow-y:auto;background:#1e2433;color:#e2e8f0;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);font-family:monospace;font-size:.76rem;';
+
+document.body.appendChild(btn);
+document.body.appendChild(panel);
+
+function toggle(){
+  open=!open;
+  panel.style.display=open?'block':'none';
+  btn.style.background=open?'#4f46e5':'#6366f1';
+  if(open){fetchErrors();render();}
+}
+
+btn.onclick=toggle;
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.shiftKey&&e.key==='D'){e.preventDefault();toggle();}
+});
+setInterval(function(){if(open)fetchErrors();},3000);
+})()</script>")
+
+; Next.js 스타일 페이지 내 오류 오버레이 (localhost 전용)
+; Esc 닫기 · ←/→ 여러 에러 · 우하단 배지로 다시 열기 · Ctrl+Shift+E
+(define ERROR-OVERLAY
+  """<script>(function(){
+var isDev=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+if(!isDev){window.__FL_EO={report:function(){},clear:function(){},open:function(){}};return;}
+
+var errors=[];
+var idx=0;
+var open=false;
+var root=null;
+var badge=null;
+
+function noisy(msg){
+  var s=String(msg||'');
+  return s.indexOf('429')>=0
+    || s.indexOf('Too Many Requests')>=0
+    || s.indexOf('ERR_CONNECTION_REFUSED')>=0
+    || s.indexOf('/~hmr')>=0
+    || s.indexOf('/~errors')>=0
+    || s.indexOf('[circuit]')>=0
+    || s.indexOf('api/metrics')>=0
+    || s.indexOf('모니터링 일시')>=0
+    || s.indexOf('Failed to fetch')>=0
+    || s.indexOf('NetworkError')>=0
+    || s.indexOf('Load failed')>=0;
+}
+
+function esc(s){
+  return String(s==null?'':s)
+    .split('&').join('&amp;')
+    .split('<').join('&lt;')
+    .split('>').join('&gt;')
+    .split('"').join('&quot;');
+}
+
+function dedupeKey(e){
+  return (e.type||'')+'|'+(e.message||'')+'|'+(e.source||'')+'|'+(e.line||0);
+}
+
+// FreeLang 문자열에서 \\n / \\d 재해석 방지 — fromCharCode·indexOf 만 사용
+function parseFrames(stack){
+  var NL=String.fromCharCode(10);
+  var lines=String(stack||'').split(NL);
+  var out=[];
+  for(var i=0;i<lines.length;i++){
+    var L=lines[i].trim();
+    if(!L) continue;
+    if(L.indexOf('Error')===0 && L.indexOf('at ')!==0) continue;
+    var ignored=L.indexOf('node_modules')>=0
+      || L.indexOf('island-compiler')>=0
+      || L.indexOf('chrome-extension')>=0
+      || L.indexOf('_fl.')>=0;
+    // "at fn (url:line:col)" 또는 "url:line:col"
+    var file='';
+    var line='';
+    var col='';
+    var fn=L;
+    var lp=L.lastIndexOf('(');
+    var rp=L.lastIndexOf(')');
+    var loc='';
+    if(lp>=0 && rp>lp){
+      fn=L.slice(0,lp).trim();
+      if(fn.indexOf('at ')===0) fn=fn.slice(3).trim();
+      if(!fn) fn='(anonymous)';
+      loc=L.slice(lp+1,rp);
+    }else if(L.indexOf('at ')===0){
+      fn=L.slice(3).trim();
+      loc='';
+    }else{
+      loc=L;
+      fn='(anonymous)';
+    }
+    if(loc){
+      var parts=loc.split(':');
+      if(parts.length>=3){
+        col=parts.pop();
+        line=parts.pop();
+        file=parts.join(':');
+      }else{
+        file=loc;
+      }
+    }
+    out.push({fn:fn,file:file,line:line,col:col,ignored:ignored});
+  }
+  return out;
+}
+
+function shortUrl(u){
+  var s=String(u||'');
+  var i=s.indexOf('://');
+  if(i<0) return s;
+  var j=s.indexOf('/', i+3);
+  return j>=0 ? s.slice(j) : s;
+}
+
+function ensureDom(){
+  if(root) return;
+  root=document.createElement('div');
+  root.id='fl-eo-root';
+  root.setAttribute('aria-live','assertive');
+  root.style.cssText='display:none;position:fixed;inset:0;z-index:2147483000;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
+  document.body.appendChild(root);
+
+  badge=document.createElement('button');
+  badge.id='fl-eo-badge';
+  badge.type='button';
+  badge.title='FL Error Overlay (Ctrl+Shift+E)';
+  badge.style.cssText='display:none;position:fixed;bottom:16px;left:16px;z-index:2147482999;min-width:40px;height:40px;padding:0 12px;border:none;border-radius:999px;background:#e11d48;color:#fff;font:700 13px/40px ui-sans-serif,system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 24px rgba(225,29,72,.45);';
+  badge.onclick=function(){ open=true; paint(); };
+  document.body.appendChild(badge);
+}
+
+function paint(){
+  ensureDom();
+  if(!errors.length){
+    open=false;
+    root.style.display='none';
+    badge.style.display='none';
+    return;
+  }
+  if(idx>=errors.length) idx=errors.length-1;
+  if(idx<0) idx=0;
+  badge.textContent=String(errors.length);
+  badge.style.display=open?'none':'block';
+  if(!open){ root.style.display='none'; return; }
+
+  var e=errors[idx];
+  var frames=parseFrames(e.stack);
+  var shown=frames.filter(function(f){return !f.ignored;});
+  var hidden=frames.length-shown.length;
+  var use=shown.length?shown:frames;
+  var stackHtml=use.length===0
+    ? '<div style="color:#71717a;padding:8px 0">스택 없음</div>'
+    : use.map(function(f){
+        return '<div style="padding:8px 0;border-bottom:1px solid #27272a">'
+          +'<div style="color:#fafafa;font-size:13px">'+esc(f.fn)+'</div>'
+          +'<div style="color:#a1a1aa;font-size:12px;margin-top:2px">'
+          +esc(f.file)+(f.line?':'+esc(f.line)+':'+esc(f.col):'')
+          +'</div></div>';
+      }).join('');
+
+  root.style.display='block';
+  root.innerHTML=
+    '<div id="fl-eo-backdrop" style="position:absolute;inset:0;background:rgba(9,9,11,.72);backdrop-filter:blur(6px)"></div>'
+    +'<div role="dialog" aria-modal="true" aria-label="Runtime Error" style="position:absolute;left:50%;top:8%;transform:translateX(-50%);width:min(720px,92vw);max-height:84vh;overflow:auto;background:#18181b;color:#e4e4e7;border:1px solid #3f3f46;border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.55)">'
+      +'<div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #27272a;position:sticky;top:0;background:#18181b;z-index:1">'
+        +'<span style="color:#fb7185;font-weight:800;font-size:12px;letter-spacing:.04em">RUNTIME ERROR</span>'
+        +'<span style="color:#a1a1aa;font-size:12px;font-variant-numeric:tabular-nums">'+(idx+1)+' / '+errors.length+'</span>'
+        +'<div style="margin-left:auto;display:flex;gap:6px">'
+          +'<button type="button" data-eo="prev" style="width:32px;height:28px;border:1px solid #3f3f46;border-radius:6px;background:#27272a;color:#e4e4e7;cursor:pointer">←</button>'
+          +'<button type="button" data-eo="next" style="width:32px;height:28px;border:1px solid #3f3f46;border-radius:6px;background:#27272a;color:#e4e4e7;cursor:pointer">→</button>'
+          +'<button type="button" data-eo="clear" style="height:28px;padding:0 10px;border:1px solid #3f3f46;border-radius:6px;background:#27272a;color:#a1a1aa;cursor:pointer;font-size:12px">Clear</button>'
+          +'<button type="button" data-eo="close" style="width:32px;height:28px;border:1px solid #3f3f46;border-radius:6px;background:#27272a;color:#e4e4e7;cursor:pointer">×</button>'
+        +'</div>'
+      +'</div>'
+      +'<div style="padding:20px 22px 8px">'
+        +'<div style="color:#fb7185;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">'+esc(e.type||'error')+'</div>'
+        +'<div style="color:#fafafa;font-size:18px;font-weight:650;line-height:1.35;white-space:pre-wrap;word-break:break-word">'+esc(e.message)+'</div>'
+        +'<div style="margin-top:10px;color:#a1a1aa;font-size:12px">'
+          +esc(e.source||'(unknown)')+(e.line?':'+e.line:'')
+          +' · '+esc(shortUrl(e.url||location.href))
+        +'</div>'
+      +'</div>'
+      +'<div style="padding:8px 22px 22px">'
+        +'<div style="color:#71717a;font-size:11px;font-weight:700;letter-spacing:.06em;margin:12px 0 4px">CALL STACK'
+          +(hidden?' <button type="button" data-eo="all" style="all:unset;color:#a1a1aa;cursor:pointer;text-decoration:underline dotted">+'+hidden+' ignored</button>':'')
+        +'</div>'
+        +'<div id="fl-eo-stack">'+stackHtml+'</div>'
+        +'<div style="margin-top:16px;color:#52525b;font-size:11px">Esc 닫기 · Ctrl+Shift+E 토글 · Clear 로 목록 비우기</div>'
+      +'</div>'
+    +'</div>';
+
+  root.onclick=function(ev){
+    var t=ev.target;
+    if(!t||!t.getAttribute) return;
+    if(t.id==='fl-eo-backdrop'||t.getAttribute('data-eo')==='close'){ open=false; paint(); return; }
+    if(t.getAttribute('data-eo')==='prev'){ idx=(idx-1+errors.length)%errors.length; paint(); return; }
+    if(t.getAttribute('data-eo')==='next'){ idx=(idx+1)%errors.length; paint(); return; }
+    if(t.getAttribute('data-eo')==='clear'){ errors=[]; idx=0; paint(); return; }
+    if(t.getAttribute('data-eo')==='all'){
+      var all=parseFrames(e.stack);
+      var el=document.getElementById('fl-eo-stack');
+      if(!el) return;
+      el.innerHTML=all.map(function(f){
+        return '<div style="padding:8px 0;border-bottom:1px solid #27272a;opacity:'+(f.ignored?'.55':'1')+'">'
+          +'<div style="color:#fafafa;font-size:13px">'+esc(f.fn)+(f.ignored?' <span style="color:#71717a">ignored</span>':'')+'</div>'
+          +'<div style="color:#a1a1aa;font-size:12px;margin-top:2px">'
+          +esc(f.file)+(f.line?':'+esc(f.line)+':'+esc(f.col):'')
+          +'</div></div>';
+      }).join('');
+    }
+  };
+}
+
+function report(entry){
+  if(!entry) return;
+  var msg=entry.message||'';
+  if(noisy(msg)) return;
+  if(noisy(entry.stack)) return;
+  ensureDom();
+  var row={
+    type:entry.type||'error',
+    message:String(msg),
+    source:entry.source||'',
+    line:entry.line||0,
+    stack:String(entry.stack||''),
+    url:entry.url||location.href,
+    ts:Date.now()
+  };
+  var key=dedupeKey(row);
+  for(var i=0;i<errors.length;i++){
+    if(dedupeKey(errors[i])===key){
+      errors[i]=row;
+      idx=i;
+      open=true;
+      paint();
+      return;
+    }
+  }
+  errors.push(row);
+  if(errors.length>30) errors.shift();
+  idx=errors.length-1;
+  open=true;
+  paint();
+}
+
+window.__FL_EO={
+  report:report,
+  clear:function(){ errors=[]; idx=0; paint(); },
+  open:function(){ if(errors.length){ open=true; paint(); } },
+  list:function(){ return errors.slice(); }
+};
+
+document.addEventListener('keydown',function(ev){
+  if(ev.key==='Escape'&&open){ open=false; paint(); return; }
+  if(ev.ctrlKey&&ev.shiftKey&&(ev.key==='E'||ev.key==='e')){
+    ev.preventDefault();
+    if(!errors.length) return;
+    open=!open;
+    paint();
+  }
+});
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',ensureDom);
+}else{
+  ensureDom();
+}
+})()</script>""")
+
+; 브라우저 에러 수집 + 오버레이 연동
+; v0.2.2: ERROR-OVERLAY(__FL_EO) 연동, 노이즈(429/HMR)는 API·오버레이 모두 스킵
+(define ERROR-COLLECTOR
+  "<script>(function(){
+var EVs=['/api/errors'];
+
+function noisy(msg){
+  var s=String(msg||'');
+  return s.indexOf('429')>=0
+    || s.indexOf('Too Many Requests')>=0
+    || s.indexOf('ERR_CONNECTION_REFUSED')>=0
+    || s.indexOf('/~hmr')>=0
+    || s.indexOf('/~errors')>=0
+    || s.indexOf('[circuit]')>=0
+    || s.indexOf('api/metrics')>=0
+    || s.indexOf('모니터링 일시')>=0
+    || s.indexOf('Failed to fetch')>=0;
+}
+
+function send(type,msg,src,line,stack){
+  if(noisy(msg)||noisy(stack)) return;
+  var payload={type:type,message:String(msg),source:src||'',line:line||0,stack:String(stack||''),url:location.href};
+  if(window.__FL_EO&&window.__FL_EO.report){
+    try{window.__FL_EO.report(payload);}catch(x){}
+  }
+  var isDev=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  if(!isDev){
+    EVs.forEach(function(url){
+      fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(){});
+    });
+    return;
+  }
+  // localhost: 오버레이가 1차, API는 스로틀(같은 메시지 3초 1회)
+  var k=type+'|'+String(msg).slice(0,120);
+  var now=Date.now();
+  window.__FL_EO_LAST=window.__FL_EO_LAST||{};
+  if(window.__FL_EO_LAST[k]&&now-window.__FL_EO_LAST[k]<3000) return;
+  window.__FL_EO_LAST[k]=now;
+  EVs.forEach(function(url){
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(){});
+  });
+}
+
+window.onerror=function(m,s,l,c,e){send('error',m,s,l,e&&e.stack);return false;};
+window.addEventListener('unhandledrejection',function(e){
+  var r=e.reason;
+  send('promise',r&&r.message||String(r),'',0,r&&r.stack);
+});
+var _ce=console.error.bind(console);
+console.error=function(){
+  _ce.apply(console,arguments);
+  send('console',Array.from(arguments).join(' '),'',0,'');
+};
+})()</script>")
+
+; 성능 모니터링 스크립트 — 서킷 브레이커 탑재 (dec-009)
+; v0.3.0: 서킷 브레이커(timeout 500ms, 3회 실패→OPEN 30초)
+(define PERFORMANCE-MONITOR
+  "<script>(function(){
+var perfStart=performance.now();
+var apiCallStart={};
+var routeTransitionStart=null;
+
+// ── 서킷 브레이커 (dec-009) ──────────────────────────────────
+var CB={
+  state:'closed',      // closed | open | half-open
+  failures:0,
+  FAIL_THRESHOLD:3,
+  TIMEOUT_MS:500,
+  RESET_MS:30000,
+  openedAt:null
+};
+
+function cbSend(payload){
+  if(CB.state==='open'){
+    var elapsed=Date.now()-CB.openedAt;
+    if(elapsed>CB.RESET_MS){
+      CB.state='half-open';
+      console.log('[circuit] half-open — 재시도');
+    } else {
+      return; // 차단
+    }
+  }
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ctrl.abort();},CB.TIMEOUT_MS);
+  fetch('/api/metrics',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),
+    signal:ctrl.signal
+  }).then(function(r){
+    clearTimeout(timer);
+    if(!r.ok) throw new Error('http '+r.status);
+    if(CB.state==='half-open'){
+      CB.state='closed'; CB.failures=0;
+      console.log('[circuit] closed — 복구');
+    }
+  }).catch(function(e){
+    clearTimeout(timer);
+    CB.failures++;
+    if(CB.failures>=CB.FAIL_THRESHOLD&&CB.state!=='open'){
+      CB.state='open'; CB.openedAt=Date.now();
+      console.warn('[circuit] open — 모니터링 일시 중단 (30s)');
+    } else if(CB.state==='half-open'){
+      CB.state='open'; CB.openedAt=Date.now();
+    }
+  });
+}
+// ─────────────────────────────────────────────────────────────
+
+// 1️⃣  페이지 로드 시간
+window.addEventListener('load',function(){
+  var loadTime=performance.now()-perfStart;
+  cbSend({metric:'page-load',value:Math.round(loadTime),unit:'ms'});
+});
+
+// 2️⃣  API 응답 시간 추적 (모니터링 자신 제외)
+var origFetch=window.fetch;
+window.fetch=function(){
+  var args=Array.from(arguments);
+  var url=String(args[0]||'');
+  if(url.indexOf('/api/metrics')===0) return origFetch.apply(this,args);
+  var callId=Math.random().toString(36);
+  apiCallStart[callId]=performance.now();
+  return origFetch.apply(this,args).then(function(r){
+    var elapsed=Math.round(performance.now()-apiCallStart[callId]);
+    cbSend({metric:'api-call',value:elapsed,unit:'ms',endpoint:url.split('?')[0]});
+    return r;
+  }).catch(function(e){
+    var elapsed=Math.round(performance.now()-apiCallStart[callId]);
+    cbSend({metric:'api-error',value:elapsed,unit:'ms',error:String(e)});
+    throw e;
+  });
+};
+
+// 3️⃣  라우트 전환 시간 (SPA 네비게이션)
+var origPushState=history.pushState;
+history.pushState=function(){
+  if(routeTransitionStart!==null){
+    var elapsed=Math.round(performance.now()-routeTransitionStart);
+    cbSend({metric:'route-transition',value:elapsed,unit:'ms',href:location.pathname});
+    routeTransitionStart=null;
+  }
+  return origPushState.apply(this,arguments);
+};
+
+// SPA 라우트 시작 감지
+document.addEventListener('click',function(e){
+  var a=e.target.closest('[data-spa]');
+  if(a){routeTransitionStart=performance.now();}
+});
+
+// 4️⃣  Long Task 감지 (Performance Observer)
+if(window.PerformanceObserver){
+  try{
+    var longTaskObs=new PerformanceObserver(function(list){
+      list.getEntries().forEach(function(entry){
+        if(entry.duration>50){
+          cbSend({metric:'long-task',value:Math.round(entry.duration),unit:'ms'});
+        }
+      });
+    });
+    longTaskObs.observe({entryTypes:['longtask']});
+  }catch(e){}
+}
+
+// 5️⃣  메모리 모니터링 (5초마다)
+if(performance.memory){
+  setInterval(function(){
+    var used=Math.round(performance.memory.usedJSHeapSize/1048576);
+    cbSend({metric:'memory',value:used,unit:'MB'});
+  },5000);
+}
+})()</script>")
+
+; SPA 클라이언트 라우터 — View Transitions API 적용
+(define SPA-ROUTER
+  "<script>(function(){
+function doNav(href){
+  return fetch(href,{headers:{'X-SPA':'1'}})
+    .then(function(r){return r.text();})
+    .then(function(html){
+      var doc=new DOMParser().parseFromString(html,'text/html');
+      var nw=doc.querySelector('[class*=\"layout_wrap\"]');
+      var cw=document.querySelector('[class*=\"layout_wrap\"]');
+      if(nw&&cw)cw.innerHTML=nw.innerHTML;
+      doc.querySelectorAll('script:not([src])').forEach(function(s){
+        if(s.textContent.indexOf('_fl.')>-1){try{eval(s.textContent);}catch(e){}}
+      });
+      if(window._fl)window._fl.dispatch('route',href);
+      history.pushState({href:href},'',href);
+      window.scrollTo(0,0);
+    })
+    .catch(function(){location.href=href;});
+}
+function spa(href){
+  if(document.startViewTransition){
+    document.startViewTransition(function(){return doNav(href);});
+  }else{
+    doNav(href);
+  }
+}
+document.addEventListener('click',function(e){
+  var a=e.target.closest('[data-spa]');
+  if(!a)return;
+  e.preventDefault();
+  spa(a.getAttribute('href'));
+});
+window.addEventListener('popstate',function(e){
+  var href=e.state&&e.state.href?e.state.href:location.pathname;
+  spa(href);
+});
+})()</script>")
+
+; ── SEO meta 태그 생성 ──
+; 사용: (seo-tags {:title "제목" :desc "설명" :image "/og.png" :type "article"})
+(defn seo-tags [m]
+  (let [title  (if (= (get m "title") nil) "" (str (get m "title")))
+        desc   (if (= (get m "desc") nil) "" (str (get m "desc")))
+        image  (get m "image")
+        type   (if (= (get m "type") nil) "website" (str (get m "type")))
+        url    (if (= (get m "url") nil) "" (str (get m "url")))]
+    (str
+      (h! "meta" {:name "description" :content desc})
+      (h! "meta" {:property "og:title" :content title})
+      (h! "meta" {:property "og:description" :content desc})
+      (h! "meta" {:property "og:type" :content type})
+      (if (= image nil) "" (h! "meta" {:property "og:image" :content (str image)}))
+      (if (= url "") "" (h! "meta" {:property "og:url" :content url}))
+      (h! "meta" {:name "twitter:card" :content "summary_large_image"})
+      (h! "meta" {:name "twitter:title" :content title})
+      (h! "meta" {:name "twitter:description" :content desc})
+      (if (= image nil) "" (h! "meta" {:name "twitter:image" :content (str image)})))))
+
+; 공통 레이아웃 → HTML 문자열 (meta-str: seo-tags 결과 또는 nil)
+(defn layout-core [title content req meta-str]
+  (let [path (server-req-path req)]
+    (str
+      "<!DOCTYPE html>"
+      (h "html" {:lang "ko"}
+        (str
+          (h "head" {}
+            (str
+              (h! "meta" {:charset "utf-8"})
+              (h! "meta" {:name "viewport" :content "width=device-width,initial-scale=1"})
+              (h "title" {} (str title " — FreeLang Front"))
+              (if (= meta-str nil) "" meta-str)
+              GLOBAL-CSS))
+          (h "body" {}
+            (str
+              (h "div" {:class layout_shell}
+                (str
+                  (h "nav" {:class layout_nav :aria-label "사이드 메뉴"}
+                    (str
+                      (h "a" {:href "/" :class nav-brand} "FL Front")
+                      (h "div" {:class nav-section-label} "C2C")
+                      (nav-link "/people" "People" path)
+                      (nav-link "/market" "Market" path)
+                      (nav-link "/followups" "Followups" path)
+                      (nav-link "/flow" "C2C Flow" path)
+                      (h "div" {:class nav-section-label} "앱")
+                      (nav-link "/" "홈" path)
+                      (nav-link "/dashboard" "대시보드" path)
+                      (nav-link "/notes" "Notes" path)
+                      (nav-link "/todo" "To-do" path)
+                      (nav-link "/about" "About" path)
+                      (h "div" {:class nav-bottom}
+                        (str
+                          (h "a" {:href "/logout" :class nav-link-base :style "opacity:.82;font-size:.82rem"}
+                            "로그아웃")
+                          (h "button" {:id "dark-btn" :title "다크모드"
+                                       :style "background:none;border:1px solid rgba(255,255,255,.2);color:#94a3b8;border-radius:6px;padding:6px 10px;font-size:.85rem;cursor:pointer;margin-top:8px;width:100%"}
+                            "🌙")))))
+                  (h "div" {:class layout_main}
+                    (str
+                      (h "div" {:class layout_wrap} content)
+                      (h "footer" {:class layout_foot}
+                        "FreeLang Front · SSR · Island")))))
+              ERROR-OVERLAY
+              ERROR-COLLECTOR
+              PERFORMANCE-MONITOR
+              SPA-ROUTER
+              dark_mode_script
+              HMR-SCRIPT
+              DEBUG-PANEL)))))))
+
+; layout — 기존 호환 유지
+(defn layout [title content req]
+  (layout-core title content req nil))
+
+; layout-html — server-html + DEV CSP
+(defn layout-html [title content req]
+  (server_header
+    (server-html (layout title content req))
+    "Content-Security-Policy" DEV-CSP))
+
+; 독립 랜딩용 레이아웃 — 공통 앱 사이드바/푸터를 씌우지 않는다.
+; 자체 전체 화면 구조를 가진 페이지에서 사용한다.
+(defn landing-html [title content req]
+  (server_header
+    (server-html
+      (str
+        "<!DOCTYPE html>"
+        (h "html" {:lang "ko"}
+          (str
+            (h "head" {}
+              (str
+                (h! "meta" {:charset "utf-8"})
+                (h! "meta" {:name "viewport" :content "width=device-width,initial-scale=1"})
+                (h "title" {} title)
+                GLOBAL-CSS))
+            (h "body" {}
+              (str content ERROR-OVERLAY ERROR-COLLECTOR PERFORMANCE-MONITOR HMR-SCRIPT DEBUG-PANEL))))))
+    "Content-Security-Policy" DEV-CSP))
+
+; layout-html-seo — SEO meta 포함 버전
+; 사용: (layout-html-seo "제목" content req {:title "..." :desc "..." :image "/og.png"})
+(defn layout-html-seo [title content req seo-opts]
+  (server_header
+    (server-html (layout-core title content req (seo-tags seo-opts)))
+    "Content-Security-Policy" DEV-CSP))

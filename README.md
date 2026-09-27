@@ -39,6 +39,16 @@ fl-git branch-create <이름>
 fl-git branch-delete <이름> --yes
 ```
 
+## 브라우저 UI
+
+```bash
+./scripts/fl-git-web
+```
+
+브라우저에서 [http://127.0.0.1:40850](http://127.0.0.1:40850)을 열면 저장소
+대시보드가 표시된다. 변경 파일, diff, 커밋 입력, stage/unstage, fetch/pull/push,
+AI Context 탭을 클릭으로 사용할 수 있다.
+
 ## 안전 원칙
 
 - 현재 저장소·브랜치·원격을 먼저 표시한다.

@@ -1,0 +1,82 @@
+; pages/_charts.flx — SVG 차트 DSL 헬퍼
+; (chart-bar data w h) : [{:label "A" :value 40} ...] → SVG 문자열
+; (chart-line data w h): [{:label "A" :value 40} ...] → SVG 문자열
+
+; 막대 차트
+(defn chart-bar [data w h]
+  (let [n       (length data)
+        pad     40
+        inner-w (- w (* pad 2))
+        inner-h (- h (* pad 2))
+        values  (map (fn [d] (get d :value)) data)
+        max-v   (reduce (fn [a b] (if (> a b) a b)) 1 values)
+        bar-w   (- (/ inner-w n) 6)]
+    (str
+      "<svg viewBox='0 0 " w " " h "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:auto'>"
+      "<line x1='" pad "' y1='" pad "' x2='" pad "' y2='" (+ pad inner-h) "' stroke='#e5e7eb' stroke-width='1'/>"
+      "<line x1='" pad "' y1='" (+ pad inner-h) "' x2='" (+ pad inner-w) "' y2='" (+ pad inner-h) "' stroke='#e5e7eb' stroke-width='1'/>"
+      (reduce str ""
+        (map-indexed
+          (fn [i d]
+            (let [val   (get d :value)
+                  label (get d :label)
+                  bar-h (round (* inner-h (/ val max-v)))
+                  x     (+ pad (* i (+ bar-w 6)))
+                  y     (+ pad (- inner-h bar-h))]
+              (str
+                "<rect x='" x "' y='" y "' width='" bar-w "' height='" bar-h
+                "' fill='#6366f1' rx='3' opacity='0.85'/>"
+                "<text x='" (+ x (/ bar-w 2)) "' y='" (+ (+ pad inner-h) 14)
+                "' text-anchor='middle' font-size='11' fill='#6b7280'>" label "</text>"
+                "<text x='" (+ x (/ bar-w 2)) "' y='" (- y 4)
+                "' text-anchor='middle' font-size='10' fill='#374151'>" val "</text>")))
+          data))
+      "</svg>")))
+
+; 선 차트
+(defn chart-line [data w h]
+  (let [n       (length data)
+        pad     40
+        inner-w (- w (* pad 2))
+        inner-h (- h (* pad 2))
+        values  (map (fn [d] (get d :value)) data)
+        max-v   (reduce (fn [a b] (if (> a b) a b)) 1 values)
+        min-v   (reduce (fn [a b] (if (< a b) a b)) max-v values)
+        range-v (if (= max-v min-v) 1 (- max-v min-v))
+        step-x  (if (= n 1) inner-w (/ inner-w (- n 1)))
+        ; 포인트 좌표 계산
+        points  (map-indexed
+                  (fn [i d]
+                    (let [val (get d :value)
+                          cx  (+ pad (* i step-x))
+                          cy  (+ pad (- inner-h (* inner-h (/ (- val min-v) range-v))))]
+                      (str cx "," cy)))
+                  data)]
+    (str
+      "<svg viewBox='0 0 " w " " h "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:auto'>"
+      "<line x1='" pad "' y1='" pad "' x2='" pad "' y2='" (+ pad inner-h) "' stroke='#e5e7eb' stroke-width='1'/>"
+      "<line x1='" pad "' y1='" (+ pad inner-h) "' x2='" (+ pad inner-w) "' y2='" (+ pad inner-h) "' stroke='#e5e7eb' stroke-width='1'/>"
+      ; 그라데이션 영역 (fill)
+      "<defs><linearGradient id='grad' x1='0' y1='0' x2='0' y2='1'>"
+      "<stop offset='0%' stop-color='#6366f1' stop-opacity='0.2'/>"
+      "<stop offset='100%' stop-color='#6366f1' stop-opacity='0'/>"
+      "</linearGradient></defs>"
+      "<polyline points='"
+      (reduce str "" (map (fn [p] (str p " ")) points))
+      "' fill='none' stroke='#6366f1' stroke-width='2.5' stroke-linejoin='round'/>"
+      ; 데이터 포인트 + 레이블
+      (reduce str ""
+        (map-indexed
+          (fn [i d]
+            (let [val   (get d :value)
+                  label (get d :label)
+                  cx    (+ pad (* i step-x))
+                  cy    (+ pad (- inner-h (* inner-h (/ (- val min-v) range-v))))]
+              (str
+                "<circle cx='" cx "' cy='" cy "' r='4' fill='#6366f1'/>"
+                "<text x='" cx "' y='" (+ (+ pad inner-h) 14)
+                "' text-anchor='middle' font-size='11' fill='#6b7280'>" label "</text>"
+                "<text x='" cx "' y='" (- cy 8)
+                "' text-anchor='middle' font-size='10' fill='#374151'>" val "</text>")))
+          data))
+      "</svg>")))

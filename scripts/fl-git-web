@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WEB="$ROOT/web"
+
+cd "$WEB"
+FL_GIT_REPO="$ROOT" FL_HTTP_ALLOW=127.0.0.1,localhost node "$WEB/fl-front-build.js"
+exec env FL_GIT_REPO="$ROOT" FL_HTTP_ALLOW=127.0.0.1,localhost node "$WEB/runtime/bootstrap.js" run "$WEB/_app.fl"

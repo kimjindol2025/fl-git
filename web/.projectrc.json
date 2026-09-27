@@ -1,0 +1,16 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "language": "FreeLang v11 + FL-Front",
+  "status": "in_progress",
+  "description": "web — FL-Front 앱",
+  "ports": [
+    40850
+  ],
+  "entry": "_app.fl",
+  "commands": {
+    "dev": "FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node dev-server.js",
+    "build": "PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node fl-front-build.js",
+    "start": "FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node runtime/bootstrap.js run _app.fl"
+  }
+}
