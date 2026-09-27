@@ -58,6 +58,20 @@
           {"ok" true "root" root
            "folders" (map (fn [name] (str root "/" (str-trim name))) names)})))))
 
+(defn api-repo-paths [base names]
+  (map (fn [name] (str-replace-in (str base "/" (str-replace-in (str-trim name) "./" "") "/") "/.git/" "")) names))
+
+(defn api-list-repos []
+  (let [roots (filter (fn [root] (> (length (str-trim root)) 0)) (regex_split fl-git-roots ":"))
+        repos (reduce
+                (fn [acc root]
+                  (let [base (str-trim root)
+                        result (api-run-at base "find . -type d -name .git -prune -print | sort")
+                        names (filter (fn [name] (> (length (str-trim name)) 0)) (regex_split (api-out result) "\\n"))
+                    (concat acc (api-repo-paths base names))))
+                [] roots)]
+    {"ok" true "roots" roots "repositories" repos}))
+
 (defn api-create-repo [parent name]
   (let [base (str-trim (str parent))
         repo-name (str-trim (str name))
@@ -105,6 +119,8 @@
     (cond
       (= action "list-folders")
         (server-json (api-list-folders (get body "path")))
+      (= action "list-repos")
+        (server-json (api-list-repos))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)

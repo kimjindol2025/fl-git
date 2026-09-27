@@ -6,6 +6,7 @@
         tab (atom "overview")
         repo-input (atom "")
         folders (atom [])
+        repositories (atom [])
         new-repo-name (atom "")
         commit-message (atom "")
         notice (atom "")
@@ -22,8 +23,13 @@
         browse-result (fn [res]
                         (if (= (get res "ok") false)
                           (reset! error (or (get res "error") "폴더를 불러오지 못했습니다"))
-                          (do (reset! folders (or (get res "folders") [])) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice "폴더 목록을 불러왔습니다."))))
+                          (do (reset! folders (or (get res "folders") [])) (reset! repositories []) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice "폴더 목록을 불러왔습니다."))))
         browse-folders (fn [] (fetch-post! "/api" {"action" "list-folders" "path" @repo-input} browse-result))
+        repo-result (fn [res]
+                      (if (= (get res "ok") false)
+                        (reset! error (or (get res "error") "저장소 목록을 불러오지 못했습니다"))
+                        (do (reset! repositories (or (get res "repositories") [])) (reset! folders []) (reset! error "") (reset! notice "서버 저장소 목록을 불러왔습니다."))))
+        browse-repositories (fn [] (fetch-post! "/api" {"action" "list-repos"} repo-result))
         create-repo (fn []
                       (if (= (str-trim @new-repo-name) "")
                         (reset! error "새 저장소 이름을 입력하세요")
@@ -42,6 +48,7 @@
                       (if (= (str-trim @repo-input) "")
                         (reset! error "저장소 폴더 경로를 입력하세요")
                         (do (reset! notice "저장소 확인 중…") (send {"action" "select-repo" "path" @repo-input}))))
+        open-repository (fn [path] (do (reset! repo-input path) (reset! repositories []) (select-repo)))
         view-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (fn [] (reset! tab name))} label))
         status-card (fn [label value tone]
@@ -72,11 +79,16 @@
                          (h "div" {:class "picker-row"}
                            (h "input" {:class "repo-input" :type "text" :value @repo-input :placeholder "/home/kim/kim/projects/my-repo" :on-input (fn [e] (reset! repo-input (.-value (.-target e))))})
                            (h "button" {:class "button primary picker-button" :on-click select-repo} "저장소 열기")
-                           (h "button" {:class "button ghost picker-button" :on-click browse-folders} "폴더 선택"))))
+                           (h "button" {:class "button ghost picker-button" :on-click browse-folders} "폴더 선택")
+                           (h "button" {:class "button ghost picker-button" :on-click browse-repositories} "서버 저장소"))))
                     (if (= (length @folders) 0)
                       ""
                       (h "div" {:class "folder-list"}
                         (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (do (reset! repo-input folder) (reset! folders [])))} (str "📁 " folder))) @folders) "")))
+                    (if (= (length @repositories) 0)
+                      ""
+                      (h "div" {:class "folder-list repo-list"}
+                        (arr-join (map (fn [path] (h "button" {:class "folder-item repo-item" :on-click (fn [] (open-repository path))} (str "◆ " path))) @repositories) "")))
                     (h "div" {:class "selected-folder"} (str "선택 경로: " (or @repo-input "—"))))
                (h "div" {:class "branch-pill"} (str "⎇ " (or (get @data "branch") "—")))))
         (h "section" {:class "stats-grid"}
