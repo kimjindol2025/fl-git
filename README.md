@@ -59,3 +59,4 @@ fl-git branch-delete <이름> --yes
 
 자세한 범위는 [`docs/PROJECT.md`](docs/PROJECT.md), 단계별 계획은
 [`docs/PLAN.md`](docs/PLAN.md), TTY 경계는 [`docs/TTY-CONTRACT.md`](docs/TTY-CONTRACT.md)를 참조한다.
+내부용과 외부용 보안 경계는 [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md)에 기록한다.
