@@ -76,7 +76,8 @@
                     (if (= (length @folders) 0)
                       ""
                       (h "div" {:class "folder-list"}
-                        (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (reset! repo-input folder))} (str "📁 " folder))) @folders) ""))))
+                        (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (do (reset! repo-input folder) (select-repo)))} (str "📁 " folder))) @folders) "")))
+                    (h "div" {:class "selected-folder"} (str "선택 경로: " (or @repo-input "—"))))
                (h "div" {:class "branch-pill"} (str "⎇ " (or (get @data "branch") "—")))))
         (h "section" {:class "stats-grid"}
           (str (status-card "BRANCH" (get @data "branch") "blue")
@@ -142,7 +143,7 @@
 </style>
 <style>
 .repo-bar{gap:18px}.repo-picker{flex:1;min-width:0}.picker-row{display:flex;gap:9px;margin-top:8px}.repo-input{width:100%;min-width:0;background:#0a0e15;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:11px 12px;font:12px ui-monospace,monospace;outline:none}.repo-input:focus{border-color:var(--blue)}.picker-button{white-space:nowrap}
-.folder-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.folder-item{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:8px 10px;cursor:pointer;font:11px ui-monospace,monospace}.folder-item:hover{border-color:var(--blue);color:var(--text)}.create-panel{margin-top:22px}.create-panel .picker-row{max-width:600px}
+.folder-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.folder-item{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:8px 10px;cursor:pointer;font:11px ui-monospace,monospace}.folder-item:hover{border-color:var(--blue);color:var(--text)}.create-panel{margin-top:22px}.create-panel .picker-row{max-width:600px}.repo-bar{align-items:flex-start}.repo-picker{width:calc(100% - 100px)}.picker-row{min-width:0}.repo-input{flex:1;min-width:0}.selected-folder{margin-top:10px;color:var(--blue);font:11px ui-monospace,monospace;word-break:break-all}
 </style>
 """))
           (h "body" {}
