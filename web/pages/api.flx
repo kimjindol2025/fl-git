@@ -132,6 +132,12 @@
         (server-json (api-list-folders (get body "path")))
       (= action "list-repos")
         (server-json (api-list-repos))
+      (= action "commit-detail")
+        (let [hash (str-trim (str (get body "hash")))
+              result (api-command (str "git --no-pager show --no-ext-diff --format=fuller --stat --patch " (api-shell-quote hash)))]
+          (if (= (api-code result) 0)
+            (server-json {"ok" true "hash" hash "detail" (get result "stdout")})
+            (server-json {"ok" false "error" (or (get result "stderr") "커밋 상세 정보를 불러오지 못했습니다.")} 400)))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
