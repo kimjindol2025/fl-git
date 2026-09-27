@@ -482,6 +482,8 @@ const str_blank_q=(s)=>!s||String(s).trim()==='';
 const str_slice=(s,start,end)=>String(s??'').slice(start,end);
 const str_trim=(s)=>String(s??'').trim();
 const str_split=(s,sep)=>String(s??'').split(sep);
+// Front의 str-split이 생성하는 내부 이름과 직접 호출된 alias를 모두 지원한다.
+const regex_split=(s,sep)=>String(s??'').split(sep);
 const js_prompt=(msg,def)=>window.prompt(msg,def??'');
 const js_confirm=(msg)=>window.confirm(msg);
 </script>`;
