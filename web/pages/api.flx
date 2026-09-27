@@ -95,10 +95,10 @@
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
 
 (defn api-commit-list []
-  (let [result (api-run "git --no-pager log --date=short --pretty=format:'%H|%ad|%an|%s' -12")
+  (let [result (api-run "git --no-pager log --date=short --pretty=format:'%H~%ad~%an~%s' -12")
         rows (filter (fn [row] (> (length (str-trim row)) 0)) (regex_split (api-out result) "\\n"))]
     (map (fn [row]
-           (let [parts (regex_split row "|")]
+           (let [parts (regex_split row "~")]
              {"hash" (or (get parts 0) "")
               "date" (or (get parts 1) "")
               "author" (or (get parts 2) "")
