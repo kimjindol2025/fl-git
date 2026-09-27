@@ -76,7 +76,7 @@
                     (if (= (length @folders) 0)
                       ""
                       (h "div" {:class "folder-list"}
-                        (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (do (reset! repo-input folder) (select-repo)))} (str "📁 " folder))) @folders) "")))
+                        (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (do (reset! repo-input folder) (reset! folders [])))} (str "📁 " folder))) @folders) "")))
                     (h "div" {:class "selected-folder"} (str "선택 경로: " (or @repo-input "—"))))
                (h "div" {:class "branch-pill"} (str "⎇ " (or (get @data "branch") "—")))))
         (h "section" {:class "stats-grid"}
