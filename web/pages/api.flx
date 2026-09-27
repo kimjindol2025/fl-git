@@ -128,6 +128,33 @@
 (defn api-file-lines [result]
   (filter (fn [line] (> (length (str-trim line)) 0)) (regex_split (api-out result) "\\n")))
 
+(defn api-safe-file-path [path]
+  (let [clean (str-trim (str path))]
+    (and (> (length clean) 0)
+         (not (str-starts-with clean "/"))
+         (not (str-includes clean ".."))
+         (not (str-includes clean "\\\\"))
+         (not (= clean ".env"))
+         (not (str-starts-with clean ".env/"))
+         (not (str-includes clean "/.env"))
+         (not (str-includes clean "id_rsa"))
+         (not (str-includes clean ".pem"))
+         (not (str-includes clean ".key")))))
+
+(defn api-file-content [side path upstream]
+  (let [clean (str-trim (str path))]
+    (if (not (api-safe-file-path clean))
+      {"ok" false "error" "보안상 열 수 없는 파일 경로입니다."}
+      (let [target (if (= side "github") (str upstream ":" clean) clean)
+            command (if (= side "github")
+                      (str "git show --no-ext-diff --format= " (api-shell-quote target))
+                      (str "head -c 200000 -- " (api-shell-quote target)))
+            result (api-run command)]
+        (if (not (= (api-code result) 0))
+          {"ok" false "error" (or (get result "stderr") "파일 내용을 읽을 수 없습니다.")}
+          {"ok" true "side" side "path" clean "upstream" upstream
+           "content" (or (get result "stdout") "") "truncated" (> (length (or (get result "stdout") "")) 199999)})))))
+
 (defn api-file-compare []
   (let [branch-result (api-run "git branch --show-current")
         branch (api-out branch-result)
@@ -180,6 +207,12 @@
             (server-json {"ok" false "error" (or (get result "stderr") "커밋 상세 정보를 불러오지 못했습니다.")} 400)))
       (= action "compare-files")
         (server-json (api-file-compare))
+      (= action "file-content")
+        (let [branch-result (api-run "git branch --show-current")
+              branch (api-out branch-result)
+              upstream-result (api-run "git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")
+              upstream (if (= (api-code upstream-result) 0) (api-out upstream-result) (if (= branch "") "origin/main" (str "origin/" branch)))]
+          (server-json (api-file-content (get body "side") (get body "path") upstream)))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
