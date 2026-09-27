@@ -1,12 +1,16 @@
-; fl-git 웹 API — Git 명령은 FL_GIT_REPO 경로에서만 실행한다.
+; fl-git 웹 API — 선택된 Git 저장소에서만 명령을 실행한다.
 
-(define fl-git-repo (or (fl-env-get "FL_GIT_REPO") ".."))
+(define fl-git-repo (atom (or (fl-env-get "FL_GIT_REPO") "/home/kim/kim/projects/fl-git")))
+(define fl-git-roots (or (fl-env-get "FL_GIT_ROOTS") "/home/kim/kim/projects"))
 
 (defn api-shell-quote [value]
   (str "'" (str-replace-in (str value) "'" "'\\''") "'"))
 
+(defn api-run-at [repo command]
+  (shell_capture (str "cd " (api-shell-quote repo) " && " command)))
+
 (defn api-run [command]
-  (shell_capture (str "cd " (api-shell-quote fl-git-repo) " && " command)))
+  (api-run-at (deref fl-git-repo) command))
 
 (defn api-out [result]
   (str-trim (or (get result "stdout") "")))
@@ -19,6 +23,26 @@
     {"stdout" (or (get result "stdout") "")
      "stderr" (or (get result "stderr") "")
      "code" (api-code result)}))
+
+(defn api-root-allowed [root]
+  (or (= (str-trim fl-git-roots) "*")
+      (> (length
+           (filter
+             (fn [allowed]
+               (let [base (str-trim allowed)]
+                 (or (= root base) (str-starts-with root (str base "/")))))
+             (regex_split fl-git-roots ":")))
+         0)))
+
+(defn api-select-repo [requested]
+  (let [path (str-trim (str requested))
+        result (api-run-at path "git rev-parse --show-toplevel")
+        root (api-out result)]
+    (if (not (= (api-code result) 0))
+      {"ok" false "error" "선택한 폴더가 Git 저장소가 아닙니다."}
+      (if (not (api-root-allowed root))
+        {"ok" false "error" (str "허용된 폴더 밖의 저장소입니다. 허용 범위: " fl-git-roots)}
+        (do (reset! fl-git-repo root) {"ok" true "root" root})))))
 
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
@@ -46,6 +70,11 @@
   (let [body (or (get req "body") {})
         action (or (get body "action") "")]
     (cond
+      (= action "select-repo")
+        (let [selected (api-select-repo (get body "path"))]
+          (if (= (get selected "ok") true)
+            (server-json (api-payload "저장소를 전환했습니다."))
+            (server-json selected 400)))
       (= action "add-all")
         (let [r (api-command "git add -- .")]
           (if (= (api-code r) 0) (server-json (api-payload "전체 파일을 Stage했습니다.")) (server-json {"ok" false "error" (get r "stderr")} 400)))
