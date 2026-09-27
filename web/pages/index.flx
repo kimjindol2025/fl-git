@@ -121,6 +121,19 @@
           (str (status-card "BRANCH" (get @data "branch") "blue")
                (status-card "REMOTE" (if (> (length (or (get @data "remote") "")) 0) "CONNECTED" "LOCAL ONLY") "green")
                (status-card "CHANGES" (if (= (str-trim (or (get @data "status") "")) "") "0" "OPEN") "orange")))
+        (h "section" {:class "source-grid"}
+          (str (h "div" {:class "source-card server-source"}
+                   (str (h "div" {:class "source-label"} "SERVER")
+                        (h "strong" {} (or (get @data "root") "—"))
+                        (h "div" {:class "source-meta"} (str "branch " (or (get @data "branch") "—")))))
+               (h "div" {:class "source-card github-source"}
+                 (str (h "div" {:class "source-label"} "GITHUB")
+                      (h "strong" {} (if (= (get (get @data "github") "connected") true) (get (get @data "github") "name") "연결 정보 없음"))
+                      (h "div" {:class "source-meta"}
+                        (str (if (= (get (get @data "github") "private") true) "PRIVATE" "PUBLIC")
+                             " · default " (or (get (get @data "github") "default_branch") "—")
+                             " · ↑" (or (get (get @data "sync") "ahead") "—")
+                             " ↓" (or (get (get @data "sync") "behind") "—")))))))
         (h "nav" {:class "tabs"}
           (str (view-tab "overview" "Overview") (view-tab "changes" "Changes") (view-tab "context" "AI Context")))
         (if (= @tab "context")
@@ -189,6 +202,7 @@
 .folder-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.folder-item{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:8px 10px;cursor:pointer;font:12px ui-monospace,monospace}.folder-item:hover{border-color:var(--blue);color:var(--text)}.create-panel{margin-top:22px}.create-panel .picker-row{max-width:600px}.repo-bar{display:block;position:relative}.repo-picker{width:100%;padding-right:110px}.picker-row{min-width:0}.repo-input{flex:1;min-width:0;font-size:12px}.picker-button{font-size:12px}.branch-pill{position:absolute;top:18px;right:22px}.selected-folder{margin-top:10px;color:var(--blue);font:12px ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.repo-list-heading{margin-top:16px;color:var(--text);font-size:12px;font-weight:700}.repo-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));max-height:220px;overflow-y:auto;padding:8px;border:1px solid var(--line);border-radius:10px;background:#0d131d}.repo-item{display:block;width:100%;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.repo-item:hover{background:#253452}
 .commit-list{display:flex;flex-direction:column;gap:9px;max-height:420px;overflow:auto}.commit-row{background:#0d131d;border:1px solid #202c3f;border-radius:10px;padding:12px 13px}.commit-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.commit-hash{color:var(--blue);font:11px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.commit-date,.commit-author{color:var(--muted);font-size:11px}.commit-message{color:var(--text);font-size:13px;font-weight:700;margin:8px 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .commit-row{cursor:pointer}.commit-row:hover{border-color:var(--blue);background:#142039}.commit-detail{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}.commit-detail-heading{color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.08em;margin-bottom:9px}.commit-detail-output{max-height:360px;overflow:auto;margin:0;background:#080c12;border:1px solid #1d2838;border-radius:9px;padding:13px;color:#c6d1e1;font:11px/1.6 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap}
+.source-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.source-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}.source-label{font-size:10px;letter-spacing:.15em;font-weight:800;color:var(--muted);margin-bottom:9px}.source-card strong{display:block;color:var(--text);font:13px ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.source-meta{margin-top:9px;color:var(--muted);font-size:11px}.github-source{border-color:#31557e}.github-source .source-label{color:var(--blue)}@media(max-width:760px){.source-grid{grid-template-columns:1fr}}
 </style>
 """))
           (h "body" {}

@@ -104,6 +104,27 @@
               "author" (or (get parts 2) "")
               "message" (or (get parts 3) "")})) rows)))
 
+(defn api-github-info []
+  (let [result (api-run "gh repo view --json nameWithOwner,isPrivate,defaultBranchRef,url,description")
+        remote-result (api-run "git remote get-url origin")]
+    (if (= (api-code result) 0)
+      (let [info (json_parse (api-out result))]
+        {"connected" true "name" (or (get info "nameWithOwner") "")
+         "private" (or (get info "isPrivate") false)
+         "default_branch" (or (get (get info "defaultBranchRef") "name") "")
+         "url" (or (get info "url") "")
+         "description" (or (get info "description") "")})
+      {"connected" false "name" "" "private" false "default_branch" ""
+       "url" (api-out remote-result) "description" "GitHub 저장소 정보를 불러오지 못했습니다."})))
+
+(defn api-sync-info []
+  (let [upstream (api-run "git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")
+        counts (api-run "git rev-list --left-right --count HEAD...@{upstream}")
+        parts (regex_split (api-out counts) " ")]
+    {"upstream" (if (= (api-code upstream) 0) (api-out upstream) "")
+     "ahead" (if (= (api-code counts) 0) (or (get parts 0) "0") "—")
+     "behind" (if (= (api-code counts) 0) (or (get parts 1) "0") "—")}))
+
 (defn api-payload [message]
   (let [root-result (api-run "git rev-parse --show-toplevel")
         branch-result (api-run "git branch --show-current")
@@ -112,6 +133,8 @@
         diff-result (api-run "git --no-pager diff --stat && git --no-pager diff")
         log-result (api-run "git --no-pager log --oneline --decorate -12")
         commits (api-commit-list)
+        github (api-github-info)
+        sync (api-sync-info)
         root (api-out root-result)
         branch (api-out branch-result)
         remote (api-out remote-result)
@@ -119,6 +142,7 @@
         log (api-out log-result)]
     {"ok" true "message" (or message "") "root" root "branch" branch
      "remote" remote "status" status "diff" (api-out diff-result) "log" log "commits" commits
+     "github" github "sync" sync
      "context_json" (api-context-json root branch remote status log)}))
 
 (defn render [req]
