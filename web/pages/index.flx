@@ -94,13 +94,23 @@
         (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) "")))))
 
 (defn render [req]
-  (layout-html "fl-git · Git Workspace"
-    (str
-      """
+  (server_header
+    (server_html
+      (h "html" {:lang "ko"}
+        (str
+          (h "head" {}
+                 (str (h! "meta" {:charset "utf-8"})
+                      (h! "meta" {:name "viewport" :content "width=device-width,initial-scale=1"})
+                 (h! "link" {:rel "icon" :href "data:,"})
+                 (h "title" {} "fl-git · Git Workspace")
+                 """
 <style>
 :root{color-scheme:dark;--bg:#0a0d12;--surface:#111722;--line:#273244;--text:#f4f7fb;--muted:#8d9aae;--blue:#7c9cff;--green:#61d8a2;--orange:#f7a45b}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.layout_nav{display:none}.layout_main{max-width:none!important;padding:0!important}.app-shell{min-height:100vh;max-width:1240px;margin:0 auto;padding:28px 42px 64px}.topbar{display:flex;justify-content:space-between;align-items:center;padding-bottom:34px;border-bottom:1px solid var(--line)}.brand{font-weight:800;font-size:20px;letter-spacing:-.04em}.brand-dot{color:var(--blue);font-size:13px;margin-right:8px}.connection{font-size:10px;letter-spacing:.18em;color:var(--muted)}.online-dot{color:var(--green);font-size:12px;margin-right:8px}.hero{padding:64px 0 38px;max-width:780px}.eyebrow{color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.2em;margin-bottom:18px}.hero h1{font-size:clamp(38px,6vw,74px);line-height:.98;letter-spacing:-.075em;margin:0 0 24px}.hero-copy{color:var(--muted);font-size:17px;line-height:1.75;max-width:650px}.repo-bar{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:16px}.repo-bar strong{display:block;margin-top:5px;font-family:ui-monospace,monospace;font-size:14px;word-break:break-all}.muted,.stat-label{color:var(--muted);font-size:12px}.branch-pill{background:#202b42;color:var(--blue);padding:9px 13px;border-radius:999px;font:12px ui-monospace,monospace}.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px}.stat-label{display:block;letter-spacing:.13em;font-size:10px}.stat-card strong{display:block;margin-top:10px;font-size:19px}.tone-blue{color:var(--blue)}.tone-green{color:var(--green)}.tone-orange{color:var(--orange)}.tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin-top:42px}.tab{appearance:none;background:none;border:0;color:var(--muted);padding:15px 2px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent}.tab.active{color:var(--text);border-color:var(--blue)}.columns{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;margin-top:22px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px;min-width:0}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel h2{font-size:17px;letter-spacing:-.03em;margin:0}.file-list{min-height:170px}.file-row{display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid #202a39;font-size:13px}.file-mark{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:#263653;color:var(--blue);font-size:11px;font-weight:800}.file-row code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.diff-output,.log-output,.context-output{background:#0a0e15;border:1px solid #1d2838;border-radius:10px;min-height:230px;max-height:420px;overflow:auto;padding:16px;color:#c6d1e1;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap}.action-row,.action-grid{display:flex;gap:9px;margin-top:20px}.action-grid{display:grid;grid-template-columns:repeat(3,1fr)}.button{border:0;border-radius:9px;padding:11px 14px;font-weight:750;cursor:pointer;color:#fff;background:#24314a}.button:hover{filter:brightness(1.16)}.button.primary{background:#587df5}.button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}.button.dark{background:#293548}.empty{color:var(--muted);padding:45px 0;text-align:center;font-size:13px}.context-panel{margin-top:22px}.commit-box{border-top:1px solid var(--line);margin-top:24px;padding-top:20px}.commit-box label{display:block;color:var(--muted);font-size:11px;margin-bottom:8px}.commit-box input{width:100%;background:#0a0e15;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:12px;margin-bottom:10px;outline:none}.toast{position:fixed;right:24px;bottom:24px;background:#1c2d42;border:1px solid #365274;color:#b9d3ff;border-radius:10px;padding:13px 17px;font-size:13px}.toast.error{background:#43242a;border-color:#79434c;color:#ffc2c8}@media(max-width:760px){.app-shell{padding:20px 16px 42px}.hero{padding:46px 0 28px}.hero h1{font-size:43px}.stats-grid,.columns{grid-template-columns:1fr}.repo-bar{display:block}.branch-pill{display:inline-block;margin-top:14px}.topbar{padding-bottom:22px}}
 </style>
-"""
-      "ISLAND_PLACEHOLDER"
-      "ISLAND_SCRIPTS")
-    req))
+"""))
+          (h "body" {}
+            (str
+              "ISLAND_PLACEHOLDER"
+              "ISLAND_SCRIPTS")))))
+    "Content-Security-Policy"
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"))
