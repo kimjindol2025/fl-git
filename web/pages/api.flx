@@ -169,4 +169,15 @@
               (if (= (api-code r) 0)
                 (server-json (api-payload "커밋 완료"))
                 (server-json {"ok" false "error" (or (get r "stderr") (get r "stdout"))} 400)))))
+      (= action "commit-push")
+        (let [message (str-trim (or (get body "message") ""))]
+          (if (= message "")
+            (server-json {"ok" false "error" "커밋 메시지가 필요합니다."} 400)
+            (let [commit-result (api-command (str "git commit -m " (api-shell-quote message)))]
+              (if (not (= (api-code commit-result) 0))
+                (server-json {"ok" false "error" (or (get commit-result "stderr") (get commit-result "stdout"))} 400)
+                (let [push-result (api-command "git push")]
+                  (if (= (api-code push-result) 0)
+                    (server-json (api-payload "커밋 및 Push 완료"))
+                    (server-json {"ok" false "committed" true "error" (str "커밋은 완료됐지만 Push에 실패했습니다: " (or (get push-result "stderr") (get push-result "stdout")))} 400)))))))
       true (server-json {"ok" false "error" (str "알 수 없는 action: " action)} 400))))

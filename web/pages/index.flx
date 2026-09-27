@@ -44,11 +44,19 @@
                  (if (= (str-trim @commit-message) "")
                    (reset! error "커밋 메시지를 입력하세요")
                    (do (send {"action" "commit" "message" @commit-message}) (reset! commit-message ""))))
+        commit-push (fn []
+                      (if (= (str-trim @commit-message) "")
+                        (reset! error "커밋 메시지를 입력하세요")
+                        (if (js_confirm "커밋 후 원격 저장소로 Push할까요?")
+                          (do (reset! notice "커밋 및 Push 실행 중…") (send {"action" "commit-push" "message" @commit-message}) (reset! commit-message ""))
+                          nil)))
         select-repo (fn []
                       (if (= (str-trim @repo-input) "")
                         (reset! error "저장소 폴더 경로를 입력하세요")
                         (do (reset! notice "저장소 확인 중…") (send {"action" "select-repo" "path" @repo-input}))))
         open-repository (fn [path] (do (reset! repo-input path) (reset! repositories []) (select-repo)))
+        select-commit (fn [commit]
+                        (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 메시지를 입력창에 넣었습니다.")))
         view-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (fn [] (reset! tab name))} label))
         status-card (fn [label value tone]
@@ -64,7 +72,7 @@
                           (h "div" {:class "empty"} "작업 트리가 깨끗합니다.")
                           (arr-join (map file-row lines) ""))))
         commit-row (fn [commit]
-                     (h "article" {:class "commit-row"}
+                     (h "article" {:class "commit-row" :on-click (fn [] (select-commit commit))}
                        (str (h "div" {:class "commit-top"}
                               (h "code" {:class "commit-hash"} (get commit "hash"))
                               (h "span" {:class "commit-date"} (get commit "date")))
@@ -137,7 +145,7 @@
                             (h "div" {:class "commit-box"}
                               (str (h "label" {} "로컬 커밋")
                                    (h "input" {:type "text" :placeholder "예: feat: update landing page" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
-                                   (h "button" {:class "button dark" :on-click commit} "Commit")))))
+                                   (h "button" {:class "button primary" :on-click commit-push} "Commit & Push")))))
                    (h "div" {:class "panel"}
                      (str (h "div" {:class "panel-heading"} (h "h2" {} "최근 커밋"))
                           (h "div" {:class "commit-list"} (render-commits))))))))
