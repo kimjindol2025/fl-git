@@ -16,6 +16,9 @@
         project-name (atom "")
         project-github (atom "")
         project-visibility (atom "private")
+        project-readme (atom true)
+        project-gitignore (atom "next")
+        project-initial-push (atom true)
         project-folders (atom [])
         notice (atom "")
         error (atom "")
@@ -53,7 +56,7 @@
                         (if (or (= (str-trim @project-parent) "") (= (str-trim @project-name) ""))
                           (reset! error "상위 폴더와 프로젝트 이름을 입력하세요")
                           (if (js_confirm "새 로컬 Git 프로젝트를 만들고 설정할까요?")
-                            (do (reset! notice "프로젝트 생성 및 GitHub 연결 중…") (fetch-post! "/api" {"action" "project-setup" "parent" @project-parent "name" @project-name "github_name" @project-github "visibility" @project-visibility} setup-project-result))
+                            (do (reset! notice "프로젝트 초기화 및 GitHub 연결 중…") (fetch-post! "/api" {"action" "project-setup" "parent" @project-parent "name" @project-name "github_name" @project-github "visibility" @project-visibility "readme" @project-readme "gitignore_template" @project-gitignore "initial_push" @project-initial-push} setup-project-result))
                             nil)))
         commit-detail-result (fn [res]
                                (if (= (get res "ok") false)
@@ -157,11 +160,20 @@
                                              (arr-join (map (fn [folder] (h "button" {:class "folder-item" :on-click (fn [] (do (reset! project-parent folder) (reset! project-folders [])))} (str "📁 " folder))) @project-folders) "")))
                                        (h "label" {:class "wizard-label"} "새 프로젝트 이름")
                                        (h "input" {:class "repo-input wizard-input" :type "text" :value @project-name :placeholder "예: my-app" :on-input (fn [e] (reset! project-name (.-value (.-target e))))})
-                                       (h "label" {:class "wizard-label"} "새 GitHub 저장소 이름 · 비워두면 로컬 Git만 생성")
-                                       (h "input" {:class "repo-input wizard-input" :type "text" :value @project-github :placeholder "예: my-app 또는 조직/my-app" :on-input (fn [e] (reset! project-github (.-value (.-target e))))})
+                                       (h "label" {:class "wizard-label"} "GitHub 저장소 이름 또는 기존 URL · 비워두면 로컬만 생성")
+                                       (h "input" {:class "repo-input wizard-input" :type "text" :value @project-github :placeholder "새 이름 또는 https://github.com/owner/repo.git" :on-input (fn [e] (reset! project-github (.-value (.-target e))))})
                                        (h "div" {:class "wizard-options"}
                                          (str (h "button" {:class (if (= @project-visibility "private") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-visibility "private"))} "Private")
                                               (h "button" {:class (if (= @project-visibility "public") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-visibility "public"))} "Public")))
+                                       (h "div" {:class "wizard-options"}
+                                         (str (h "button" {:class (if (= @project-readme true) "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-readme (not @project-readme)))} "README 생성")
+                                              (h "button" {:class (if (= @project-initial-push true) "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-initial-push (not @project-initial-push)))} "첫 Push")))
+                                       (h "div" {:class "wizard-options"}
+                                         (str (h "span" {:class "wizard-label inline-label"} ".gitignore")
+                                              (h "button" {:class (if (= @project-gitignore "none") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-gitignore "none"))} "없음")
+                                              (h "button" {:class (if (= @project-gitignore "node") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-gitignore "node"))} "Node")
+                                              (h "button" {:class (if (= @project-gitignore "next") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-gitignore "next"))} "Next.js")
+                                              (h "button" {:class (if (= @project-gitignore "python") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-gitignore "python"))} "Python")))
                                        (h "div" {:class "action-row"}
                                          (h "button" {:class "button primary" :on-click setup-project} "프로젝트 만들고 연결")))))
         render-compare (fn []
@@ -305,6 +317,7 @@
 .compare-shell{margin-top:22px}.compare-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.compare-title{font-size:16px;font-weight:800}.compare-ref{color:var(--muted);font:11px ui-monospace,monospace;margin-left:auto}.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.compare-column{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}.server-column{border-top:2px solid var(--green)}.github-column{border-top:2px solid var(--blue)}.compare-column-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}.compare-column-heading h3{margin:0;font-size:14px}.compare-count{color:var(--muted);font-size:11px;white-space:nowrap}.compare-files{margin-top:14px;max-height:520px;overflow:auto;background:#0b1018;border:1px solid #1d2838;border-radius:9px}.compare-file-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;color:var(--text);background:transparent;padding:9px 11px;border:0;border-bottom:1px solid #1b2635;cursor:pointer;font:12px ui-monospace,monospace}.compare-file-row:last-child{border-bottom:0}.compare-file-row:hover{background:#17243a;color:#fff}.compare-file-row code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compare-loading{margin-top:22px;color:var(--muted)}@media(max-width:760px){.compare-grid{grid-template-columns:1fr}.compare-toolbar{align-items:flex-start;flex-wrap:wrap}.compare-ref{margin-left:0}}
 .file-modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(3,6,11,.78);backdrop-filter:blur(5px)}.file-viewer{width:min(1100px,94vw);max-height:88vh;background:var(--surface);border:1px solid #3b4e6b;border-radius:16px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.55)}.file-viewer-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.file-viewer-title{font:14px ui-monospace,monospace;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-viewer-source,.file-viewer-note{color:var(--muted);font-size:11px}.file-viewer-close{flex:none;padding:8px 12px}.file-viewer-content{margin:0;max-height:calc(88vh - 110px);overflow:auto;background:#080c12;border:1px solid #1d2838;border-radius:9px;padding:16px;color:#d5deeb;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;tab-size:2}.file-viewer-note{margin:-3px 0 10px;color:var(--orange)}
 .project-wizard{margin-top:22px;max-width:760px}.wizard-step{color:var(--blue);font:11px ui-monospace,monospace}.wizard-label{display:block;margin-top:18px;margin-bottom:7px;color:var(--muted);font-size:11px;font-weight:700}.wizard-input{display:block;margin-top:0}.wizard-folders{margin-top:10px}.wizard-options{display:flex;gap:8px;margin-top:18px}.visibility-option{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:9px 14px;cursor:pointer;font-size:12px}.visibility-option.active{border-color:var(--blue);color:var(--text);background:#243555}
+.inline-label{display:inline-flex;align-items:center;margin:0 6px 0 0}
 </style>
 """))
           (h "body" {}

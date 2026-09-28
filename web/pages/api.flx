@@ -91,14 +91,25 @@
                 (do (reset! fl-git-repo target) {"ok" true "root" target})
                 {"ok" false "error" (or (get created "stderr") "저장소를 만들 수 없습니다.")}))))))))
 
-(defn api-project-setup [parent name github-name visibility]
+(defn api-gitignore-content [template]
+  (cond
+    (= template "node") "node_modules/\n.env\n"
+    (= template "next") "node_modules/\n.next/\n.env\n"
+    (= template "python") "__pycache__/\n.venv/\n.env\n"
+    ""))
+
+(defn api-project-setup [parent name github-name visibility readme gitignore-template initial-push]
   (let [base (str-trim (str parent))
         project-name (str-trim (str name))
         gh-name (str-trim (str (or github-name "")))
+        template (str-trim (str (or gitignore-template "none")))
         resolved (api-run-at base "pwd -P")
         root (api-out resolved)
         target (str root "/" project-name)
-        visibility-flag (if (= visibility "public") "--public" "--private")]
+        visibility-flag (if (= visibility "public") "--public" "--private")
+        readme-content (str "# " project-name "\n\n")
+        gitignore-content (api-gitignore-content template)
+        has-seed (or (= readme true) (> (length gitignore-content) 0))]
     (if (or (= project-name "") (= project-name ".") (= project-name "..") (str-includes project-name "/"))
       {"ok" false "error" "프로젝트 이름을 확인하세요. 경로 구분자는 사용할 수 없습니다."}
       (if (or (str-starts-with gh-name "-") (str-includes gh-name " "))
@@ -110,12 +121,26 @@
           (let [created (api-run-at root (str "test ! -e " (api-shell-quote project-name) " && mkdir -p -- " (api-shell-quote project-name) " && git init -q -- " (api-shell-quote project-name)))]
             (if (not (= (api-code created) 0))
               {"ok" false "error" "프로젝트 폴더가 이미 존재하거나 생성할 수 없습니다."}
-              (if (= gh-name "")
-                (do (reset! fl-git-repo target) {"ok" true "root" target "message" "로컬 Git 프로젝트를 만들었습니다."})
-                (let [linked (api-run-at root (str "gh repo create " (api-shell-quote gh-name) " " visibility-flag " --source " (api-shell-quote target) " --remote origin"))]
-                  (if (= (api-code linked) 0)
-                    (do (reset! fl-git-repo target) {"ok" true "root" target "message" "로컬 Git과 GitHub 저장소를 연결했습니다."})
-                    {"ok" false "error" (or (get linked "stderr") "GitHub 저장소 연결에 실패했습니다.")})))))))))))
+              (let [branch-set (api-run-at target "git branch -M main")
+                    readme-write (if (= readme true) (api-run-at target (str "printf %s " (api-shell-quote readme-content) " > README.md")) {"code" 0})
+                    gitignore-write (if (> (length gitignore-content) 0) (api-run-at target (str "printf %s " (api-shell-quote gitignore-content) " > .gitignore")) {"code" 0})
+                    linked (if (= gh-name "")
+                             {"code" 0}
+                             (if (str-starts-with gh-name "https://github.com/")
+                               (api-run-at target (str "git remote add origin " (api-shell-quote gh-name)))
+                               (api-run-at root (str "gh repo create " (api-shell-quote gh-name) " " visibility-flag " --source " (api-shell-quote target) " --remote origin"))))
+                    committed (if (= has-seed true) (api-run-at target "git add -- . && git commit -m 'chore: initialize project'") {"code" 0})
+                    pushed (if (and (= initial-push true) (not (= gh-name "")) (= has-seed true)) (api-run-at target "git push -u origin main") {"code" 0})]
+                (if (or (not (= (api-code branch-set) 0)) (not (= (api-code readme-write) 0)) (not (= (api-code gitignore-write) 0)))
+                  {"ok" false "error" "프로젝트 초기 파일을 만들지 못했습니다."}
+                  (if (not (= (api-code linked) 0))
+                    {"ok" false "error" (or (get linked "stderr") "GitHub 저장소 연결에 실패했습니다.")}
+                    (if (not (= (api-code committed) 0))
+                      {"ok" false "error" (or (get committed "stderr") "초기 커밋을 만들지 못했습니다.")}
+                      (if (not (= (api-code pushed) 0))
+                        {"ok" false "error" (or (get pushed "stderr") "첫 Push에 실패했습니다.")}
+                        (do (reset! fl-git-repo target)
+                            {"ok" true "root" target "message" (if (and (= initial-push true) (not (= gh-name "")) (= has-seed true)) "프로젝트 초기화와 첫 Push를 완료했습니다." (if (= gh-name "") "로컬 프로젝트 초기화를 완료했습니다." "프로젝트 초기화와 GitHub 연결을 완료했습니다."))}))))))))))))))
 
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
@@ -240,7 +265,7 @@
               upstream (if (= (api-code upstream-result) 0) (api-out upstream-result) (if (= branch "") "origin/main" (str "origin/" branch)))]
           (server-json (api-file-content (get body "side") (get body "path") upstream)))
       (= action "project-setup")
-        (let [created (api-project-setup (get body "parent") (get body "name") (get body "github_name") (get body "visibility"))]
+        (let [created (api-project-setup (get body "parent") (get body "name") (get body "github_name") (get body "visibility") (get body "readme") (get body "gitignore_template") (get body "initial_push"))]
           (if (= (get created "ok") true)
             (server-json (api-payload (get created "message")))
             (server-json created 400)))
