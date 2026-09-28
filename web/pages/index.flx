@@ -171,6 +171,9 @@
         open-repository (fn [path] (do (reset! repo-input path) (select-repo)))
         select-commit (fn [commit]
                         (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 상세 정보를 불러오는 중…") (fetch-post! "/api" {"action" "commit-detail" "hash" (get commit "hash")} commit-detail-result)))
+        rail-tab (fn [name label]
+                   (h "button" {:class (if (= @tab name) "rail-nav-item active" "rail-nav-item")
+                                 :on-click (if (= name "compare") open-compare (fn [] (reset! tab name)))} label))
         view-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (if (= name "compare") open-compare (fn [] (reset! tab name)))} label))
         status-card (fn [label value tone]
@@ -383,12 +386,13 @@
                           (str "● GitHub " (or (get (get @data "github") "name") "연결됨"))
                           "○ GitHub 미연결"))))
                (h "nav" {:class "rail-nav"}
-                 (str (h "div" {:class "rail-nav-item active"} "Workspace")
-                      (h "div" {:class "rail-nav-item"} "Changes")
-                      (h "div" {:class "rail-nav-item"} "Diff")
-                      (h "div" {:class "rail-nav-item"} "Commits")
-                      (h "div" {:class "rail-nav-item"} "GitHub")
-                      (h "div" {:class "rail-nav-item"} "AI Context")))
+                 (str (h "style" {} ".rail-nav-item{appearance:none;width:100%;border:0;background:transparent;text-align:left;cursor:pointer;font:inherit}")
+                      (rail-tab "overview" "Workspace")
+                      (rail-tab "changes" "Changes")
+                      (rail-tab "compare" "Diff")
+                      (rail-tab "remote" "Commits")
+                      (rail-tab "remote" "GitHub")
+                      (rail-tab "context" "AI Context")))
                (h "div" {:class "rail-footer"}
                  (str (h "span" {:class "online-dot"} "●") " DESKTOP MODE"))))
         (h "header" {:class "topbar"}
