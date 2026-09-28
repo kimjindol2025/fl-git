@@ -142,6 +142,35 @@
                         (do (reset! fl-git-repo target)
                             {"ok" true "root" target "message" (if (and (= initial-push true) (not (= gh-name "")) (= has-seed true)) "프로젝트 초기화와 첫 Push를 완료했습니다." (if (= gh-name "") "로컬 프로젝트 초기화를 완료했습니다." "프로젝트 초기화와 GitHub 연결을 완료했습니다."))}))))))))))))))
 
+(defn api-connect-github [github-ref visibility initial-push]
+  (let [ref (str-trim (str github-ref))
+        repo (deref fl-git-repo)
+        root-result (api-run "git rev-parse --show-toplevel")
+        root (api-out root-result)
+        branch-result (api-run "git branch --show-current")
+        branch (api-out branch-result)
+        origin-result (api-run "git remote get-url origin")
+        visibility-flag (if (= visibility "public") "--public" "--private")]
+    (if (= ref "")
+      {"ok" false "error" "GitHub 저장소 이름 또는 URL을 입력하세요."}
+      (if (not (= (api-code root-result) 0))
+        {"ok" false "error" "현재 선택된 폴더가 Git 저장소가 아닙니다."}
+        (if (not (api-root-allowed root))
+          {"ok" false "error" "허용된 폴더 밖의 저장소입니다."}
+          (if (= (api-code origin-result) 0)
+            {"ok" false "error" (str "이미 origin이 연결되어 있습니다: " (api-out origin-result))}
+            (let [linked (if (str-starts-with ref "https://github.com/")
+                           (api-run (str "git remote add origin " (api-shell-quote ref)))
+                           (if (or (str-starts-with ref "-") (str-includes ref " "))
+                             {"code" 1 "stderr" "GitHub 저장소 이름을 확인하세요."}
+                             (api-run (str "gh repo create " (api-shell-quote ref) " " visibility-flag " --source " (api-shell-quote repo) " --remote origin"))))
+                  pushed (if (= initial-push true) (api-run (str "git push -u origin " (api-shell-quote branch))) {"code" 0})]
+              (if (not (= (api-code linked) 0))
+                {"ok" false "error" (or (get linked "stderr") "GitHub 연결에 실패했습니다.")}
+                (if (not (= (api-code pushed) 0))
+                  {"ok" false "error" (or (get pushed "stderr") "GitHub 연결은 완료했지만 첫 Push에 실패했습니다.")}
+                  (api-payload (if (= initial-push true) "현재 저장소를 GitHub에 연결하고 Push했습니다." "현재 저장소를 GitHub에 연결했습니다.")))))))))))
+
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
 
@@ -269,6 +298,11 @@
           (if (= (get created "ok") true)
             (server-json (api-payload (get created "message")))
             (server-json created 400)))
+      (= action "connect-github")
+        (let [connected (api-connect-github (get body "github_ref") (get body "visibility") (get body "initial_push"))]
+          (if (= (get connected "ok") true)
+            (server-json connected)
+            (server-json connected 400)))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)

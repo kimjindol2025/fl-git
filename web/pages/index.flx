@@ -20,6 +20,9 @@
         project-gitignore (atom "next")
         project-initial-push (atom true)
         project-folders (atom [])
+        connect-github-ref (atom "")
+        connect-visibility (atom "private")
+        connect-initial-push (atom true)
         notice (atom "")
         error (atom "")
         apply-result (fn [res]
@@ -58,6 +61,16 @@
                           (if (js_confirm "새 로컬 Git 프로젝트를 만들고 설정할까요?")
                             (do (reset! notice "프로젝트 초기화 및 GitHub 연결 중…") (fetch-post! "/api" {"action" "project-setup" "parent" @project-parent "name" @project-name "github_name" @project-github "visibility" @project-visibility "readme" @project-readme "gitignore_template" @project-gitignore "initial_push" @project-initial-push} setup-project-result))
                             nil)))
+        connect-github-result (fn [res]
+                               (if (= (get res "ok") false)
+                                 (reset! error (or (get res "error") "GitHub 연결에 실패했습니다"))
+                                 (do (reset! connect-github-ref "") (reset! tab "overview") (apply-result res))))
+        connect-github (fn []
+                         (if (= (str-trim @connect-github-ref) "")
+                           (reset! error "GitHub 저장소 이름 또는 URL을 입력하세요")
+                           (if (js_confirm "현재 저장소를 GitHub에 연결할까요?")
+                             (do (reset! notice "GitHub 연결 및 Push 중…") (fetch-post! "/api" {"action" "connect-github" "github_ref" @connect-github-ref "visibility" @connect-visibility "initial_push" @connect-initial-push} connect-github-result))
+                             nil)))
         commit-detail-result (fn [res]
                                (if (= (get res "ok") false)
                                  (reset! error (or (get res "error") "커밋 상세 정보를 불러오지 못했습니다"))
@@ -176,6 +189,21 @@
                                               (h "button" {:class (if (= @project-gitignore "python") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-gitignore "python"))} "Python")))
                                        (h "div" {:class "action-row"}
                                          (h "button" {:class "button primary" :on-click setup-project} "프로젝트 만들고 연결")))))
+        render-connect-panel (fn []
+                               (h "section" {:class "panel project-wizard"}
+                                 (str (h "div" {:class "panel-heading"}
+                                          (str (h "div" {} (h "h2" {} "현재 저장소를 GitHub에 연결"))
+                                               (h "span" {:class "wizard-step"} "2 · 기존 폴더 연결")))
+                                      (h "p" {:class "muted"} "새 폴더를 만들지 않고 현재 선택된 Git 저장소에 origin을 추가합니다.")
+                                      (h "div" {:class "selected-folder"} (str "현재 저장소: " (or (get @data "root") "—")))
+                                      (h "label" {:class "wizard-label"} "GitHub 저장소 이름 또는 URL")
+                                      (h "input" {:class "repo-input wizard-input" :type "text" :value @connect-github-ref :placeholder "my-app 또는 https://github.com/owner/repo.git" :on-input (fn [e] (reset! connect-github-ref (.-value (.-target e))))})
+                                      (h "div" {:class "wizard-options"}
+                                        (str (h "button" {:class (if (= @connect-visibility "private") "visibility-option active" "visibility-option") :on-click (fn [] (reset! connect-visibility "private"))} "Private")
+                                             (h "button" {:class (if (= @connect-visibility "public") "visibility-option active" "visibility-option") :on-click (fn [] (reset! connect-visibility "public"))} "Public")
+                                             (h "button" {:class (if (= @connect-initial-push true) "visibility-option active" "visibility-option") :on-click (fn [] (reset! connect-initial-push (not @connect-initial-push)))} "첫 Push")))
+                                      (h "div" {:class "action-row"}
+                                        (h "button" {:class "button primary" :on-click connect-github} "origin 연결")))))
         render-compare (fn []
                         (let [server-files (or (get @file-compare "server_files") [])
                               github-files (or (get @file-compare "github_files") [])]
@@ -240,7 +268,7 @@
                              " · ↑" (or (get (get @data "sync") "ahead") "—")
                              " ↓" (or (get (get @data "sync") "behind") "—")))))))
         (h "nav" {:class "tabs"}
-          (str (view-tab "overview" "Overview") (view-tab "project" "새 프로젝트") (view-tab "changes" "Changes") (view-tab "compare" "파일 비교") (view-tab "context" "AI Context")))
+          (str (view-tab "overview" "Overview") (view-tab "project" "새 프로젝트") (view-tab "remote" "원격 연결") (view-tab "changes" "Changes") (view-tab "compare" "파일 비교") (view-tab "context" "AI Context")))
         (if (= @tab "context")
           (h "section" {:class "panel context-panel"}
             (str (h "div" {:class "panel-heading"} (h "h2" {} "AI에게 전달할 문맥"))
@@ -248,7 +276,9 @@
                  (h "pre" {:class "context-output"} (or (get @data "context_json") "불러오는 중…"))))
           (if (= @tab "project")
             (render-project-wizard)
-            (if (= @tab "compare")
+            (if (= @tab "remote")
+              (render-connect-panel)
+              (if (= @tab "compare")
             (if (= @file-compare nil)
               (h "section" {:class "panel compare-loading"} "파일 비교 정보를 불러오는 중…")
               (render-compare))
@@ -282,7 +312,7 @@
                             ""
                             (h "div" {:class "commit-detail"}
                               (str (h "div" {:class "commit-detail-heading"} "커밋 상세 · 클릭한 커밋의 변경 내용")
-                                   (h "pre" {:class "commit-detail-output"} (get @commit-detail "detail"))))))))))
+                                   (h "pre" {:class "commit-detail-output"} (get @commit-detail "detail")))))))))))
         (if (= @tab "overview")
           (h "section" {:class "panel create-panel"}
             (str (h "div" {:class "panel-heading"} (h "h2" {} "새 저장소 만들기"))
