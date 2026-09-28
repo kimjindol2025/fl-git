@@ -19,32 +19,42 @@
   (print (git-capture "git status --short --branch"))
   (println "────────────────────────────────────────")
   (println "s 상태  d diff  l log  b branch  t stash")
-  (println "a add .  n unstage .  c commit  p push  u pull  x 종료")
+  (println "a add .  n unstage .  c commit  p push(2회)  u pull(2회)  x 종료")
   (if (> (length message) 0) (println (str "\n" message)) nil))
 
-(defn tui-loop [message]
+(defn tui-loop [message pending]
   (draw message)
   (let [key (tty-read-byte)]
     (cond
       (= key 120) false
-      (= key 115) (tui-loop "status는 화면 상단에 표시됩니다.")
-      (= key 100) (do (print "\x1b[2J\x1b[H") (git-diff) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
-      (= key 108) (do (print "\x1b[2J\x1b[H") (git-log) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
-      (= key 98) (do (print "\x1b[2J\x1b[H") (git-branch) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
-      (= key 116) (do (print "\x1b[2J\x1b[H") (git-stash) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop ""))
-      (= key 97) (do (git-add []) (tui-loop "전체 파일을 stage했습니다."))
-      (= key 110) (do (git-unstage []) (tui-loop "전체 파일의 stage를 취소했습니다."))
+      (and (not (= pending ""))
+           (not (or (and (= pending "push") (= key 112))
+                    (and (= pending "pull") (= key 117)))))
+        (tui-loop "대기 중인 원격 작업을 취소했습니다." "")
+      (= key 115) (tui-loop "status는 화면 상단에 표시됩니다." "")
+      (= key 100) (do (print "\x1b[2J\x1b[H") (git-diff) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+      (= key 108) (do (print "\x1b[2J\x1b[H") (git-log) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+      (= key 98) (do (print "\x1b[2J\x1b[H") (git-branch) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+      (= key 116) (do (print "\x1b[2J\x1b[H") (git-stash) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+      (= key 97) (do (git-add []) (tui-loop "전체 파일을 stage했습니다." ""))
+      (= key 110) (do (git-unstage []) (tui-loop "전체 파일의 stage를 취소했습니다." ""))
       (= key 99) (do
         (print "\n커밋 메시지: ")
         (let [message (tui-read-line "")]
           (println "")
           (git-commit message)
-          (tui-loop "commit 완료 여부를 확인하세요.")))
-      (= key 112) (do (git-push "--yes") (tui-loop "push 완료 여부를 확인하세요."))
-      (= key 117) (do (git-pull "--yes") (tui-loop "pull 완료 여부를 확인하세요."))
-      true (tui-loop "지원 키: s d l b t a c p u x"))))
+          (tui-loop "commit 완료 여부를 확인하세요." "")))
+      (= key 112)
+        (if (= pending "push")
+          (do (git-push "--yes") (tui-loop "push 완료 여부를 확인하세요." ""))
+          (tui-loop "push를 실행하려면 p를 한 번 더 누르세요." "push"))
+      (= key 117)
+        (if (= pending "pull")
+          (do (git-pull "--yes") (tui-loop "pull 완료 여부를 확인하세요." ""))
+          (tui-loop "pull을 실행하려면 u를 한 번 더 누르세요." "pull"))
+      true (tui-loop "지원 키: s d l b t a c p u x" ""))))
 
 (try
-  (do (tty-raw-enter!) (tui-loop ""))
+  (do (tty-raw-enter!) (tui-loop "" ""))
   (catch error (print (str "\nfl-git TUI 오류: " (get error "message") "\n")))
   (finally (tty-raw-leave!)))

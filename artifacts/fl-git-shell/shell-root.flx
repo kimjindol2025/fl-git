@@ -1,0 +1,10 @@
+; 1단계 셸 구조 참고 스니펫.
+; 실제 페이지는 index.flx island에서 상태와 기존 렌더러를 함께 조합한다.
+
+(h "main" {:class "app-shell"}
+  (str
+    (h "aside" {:class "desktop-rail"} "저장소")
+    (h "header" {:class "topbar"} "root · branch · upstream · sync")
+    (h "section" {:class "shell-meta"} "저장소 상태")
+    (h "main" {:class "shell-center"} "중앙 작업 영역")
+    (h "aside" {:class "desktop-detail"} "상세")))

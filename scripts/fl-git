@@ -9,4 +9,24 @@ if [[ "${1:-}" == "tui" ]]; then
   exec node "$ROOT/scripts/tui-runner.mjs" "$@"
 fi
 
-exec node "$RUNNER" run "$ROOT/src/main.fl" "$@"
+OUTPUT_FILE="$(mktemp)"
+trap 'rm -f "$OUTPUT_FILE"' EXIT
+
+if node "$RUNNER" run "$ROOT/src/main.fl" "$@" >"$OUTPUT_FILE" 2>&1; then
+  RUNNER_STATUS=0
+else
+  RUNNER_STATUS=$?
+fi
+
+sed '/^FL_GIT_EXIT:[0-9][0-9]*$/d' "$OUTPUT_FILE"
+
+if [[ "$RUNNER_STATUS" -ne 0 ]]; then
+  exit "$RUNNER_STATUS"
+fi
+
+FL_GIT_STATUS="$(sed -n 's/^FL_GIT_EXIT:\([0-9][0-9]*\)$/\1/p' "$OUTPUT_FILE" | tail -n 1)"
+if [[ -n "$FL_GIT_STATUS" ]]; then
+  exit "$FL_GIT_STATUS"
+fi
+
+exit 0

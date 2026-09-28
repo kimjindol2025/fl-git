@@ -12,6 +12,9 @@
         commit-detail (atom nil)
         file-compare (atom nil)
         file-view (atom nil)
+        compare-view (atom nil)
+        selected-files (atom [])
+        right-open (atom true)
         project-parent (atom "/home/kim/kim/projects")
         project-name (atom "")
         project-github (atom "")
@@ -28,7 +31,7 @@
         apply-result (fn [res]
                        (if (= (get res "ok") false)
                          (reset! error (or (get res "error") "요청 실패"))
-                         (do (reset! data res) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice (or (get res "message") "완료")))))
+                         (do (reset! data res) (reset! selected-files []) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice (or (get res "message") "완료")))))
         reload (fn [res]
                  (if (= (get res "ok") false)
                    (reset! error (or (get res "error") "상태를 불러오지 못했습니다"))
@@ -46,6 +49,13 @@
         open-file (fn [side path]
                     (do (reset! notice "파일 내용을 불러오는 중…")
                         (fetch-post! "/api" {"action" "file-content" "side" side "path" path} file-view-result)))
+        compare-file-result (fn [res]
+                              (if (= (get res "ok") false)
+                                (reset! error (or (get res "error") "좌우 파일을 불러오지 못했습니다"))
+                                (do (reset! compare-view res) (reset! error "") (reset! notice "서버와 GitHub 파일을 불러왔습니다."))))
+        open-file-compare (fn [path]
+                           (do (reset! notice "서버와 GitHub 파일을 비교하는 중…")
+                               (fetch-post! "/api" {"action" "compare-file-content" "path" path} compare-file-result)))
         project-browse-result (fn [res]
                                 (if (= (get res "ok") false)
                                   (reset! error (or (get res "error") "상위 폴더를 불러오지 못했습니다"))
@@ -103,13 +113,25 @@
                       (if (= (str-trim @commit-message) "")
                         (reset! error "커밋 메시지를 입력하세요")
                         (if (js_confirm "커밋 후 원격 저장소로 Push할까요?")
-                          (do (reset! notice "커밋 및 Push 실행 중…") (send {"action" "commit-push" "message" @commit-message}) (reset! commit-message ""))
+                          (do (reset! notice "커밋 및 Push 실행 중…") (send {"action" "commit-push" "message" @commit-message "confirm" true}) (reset! commit-message ""))
                           nil)))
+        file-selected? (fn [path]
+                         (> (length (filter (fn [item] (= item path)) @selected-files)) 0))
+        toggle-file (fn [path]
+                      (if (file-selected? path)
+                        (reset! selected-files (filter (fn [item] (not (= item path))) @selected-files))
+                        (reset! selected-files (concat @selected-files [path]))))
+        change-action (fn [action path]
+                        (do (reset! notice "파일 상태를 변경하는 중…") (send {"action" action "path" path})))
+        selected-action (fn [action]
+                          (if (= (length @selected-files) 0)
+                            (reset! error "먼저 파일을 선택하세요.")
+                            (do (reset! notice "선택한 파일을 처리하는 중…") (send {"action" action "paths" @selected-files}))))
         select-repo (fn []
                       (if (= (str-trim @repo-input) "")
                         (reset! error "저장소 폴더 경로를 입력하세요")
                         (do (reset! notice "저장소 확인 중…") (send {"action" "select-repo" "path" @repo-input}))))
-        open-repository (fn [path] (do (reset! repo-input path) (reset! repositories []) (select-repo)))
+        open-repository (fn [path] (do (reset! repo-input path) (select-repo)))
         select-commit (fn [commit]
                         (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 상세 정보를 불러오는 중…") (fetch-post! "/api" {"action" "commit-detail" "hash" (get commit "hash")} commit-detail-result)))
         view-tab (fn [name label]
@@ -126,6 +148,24 @@
                         (if (= (length lines) 0)
                           (h "div" {:class "empty"} "작업 트리가 깨끗합니다.")
                           (arr-join (map file-row lines) ""))))
+        render-change-file (fn [file]
+                            (let [path (get file "path")
+                                  kind (get file "kind")]
+                              (h "div" {:class (str "change-row " kind)}
+                                (str (h "input" {:type "checkbox" :checked (file-selected? path) :on-change (fn [] (toggle-file path))})
+                                     (h "span" {:class "change-kind"} (get {"modified" "M" "added" "A" "deleted" "D" "untracked" "?"} kind))
+                                     (h "button" {:class "change-path" :title "서버 파일 보기" :on-click (fn [] (open-file "server" path))} path)
+                                     (h "span" {:class "change-status"} (get file "status"))
+                                     (h "button" {:class "change-action" :on-click (fn [] (change-action "stage-file" path))} "Stage")
+                                     (h "button" {:class "change-action ghost" :on-click (fn [] (change-action "unstage-file" path))} "Unstage")))))
+        change-group (fn [label kind]
+                       (let [items (filter (fn [file] (= (get file "kind") kind)) (or (get @data "files") []))]
+                         (if (= (length items) 0)
+                           ""
+                           (h "section" {:class (str "change-group " kind)}
+                             (str (h "div" {:class "change-group-heading"}
+                                      (str (h "strong" {} label) (h "span" {} (str (length items) "개"))))
+                                  (arr-join (map render-change-file items) ""))))))
         commit-row (fn [commit]
                      (h "article" {:class "commit-row" :on-click (fn [] (select-commit commit))}
                        (str (h "div" {:class "commit-top"}
@@ -134,7 +174,7 @@
                             (h "div" {:class "commit-message"} (get commit "message"))
                             (h "div" {:class "commit-author"} (str "by " (get commit "author"))))))
         compare-file-row (fn [side path]
-                           (h "button" {:class "compare-file-row" :title (str "열기: " path) :on-click (fn [] (open-file side path))}
+                           (h "button" {:class "compare-file-row" :title (str "서버 ↔ GitHub 비교: " path) :on-click (fn [] (open-file-compare path))}
                              (str (h "span" {:class "file-mark"} "•") (h "code" {} path))))
         compare-column (fn [title paths tone side]
                          (h "div" {:class (str "compare-column " tone)}
@@ -158,6 +198,27 @@
                                       (h "div" {:class "file-viewer-note"} "파일이 너무 커 앞 200KB만 표시합니다.")
                                       "")
                                     (h "pre" {:class "file-viewer-content"} (get @file-view "content")))))))
+        compare-pane (fn [label item tone]
+                       (h "div" {:class (str "compare-pane " tone)}
+                         (str (h "div" {:class "compare-pane-heading"} label)
+                              (if (= (get item "ok") true)
+                                (str (if (= (get item "truncated") true)
+                                       (h "div" {:class "file-viewer-note"} "파일이 너무 커 앞 200KB만 표시합니다.")
+                                       "")
+                                     (h "pre" {:class "compare-pane-content"} (get item "content")))
+                                (h "div" {:class "compare-pane-error"} (or (get item "error") "원격 파일을 불러올 수 없습니다."))))))
+        render-compare-view (fn []
+                              (if (= @compare-view nil)
+                                ""
+                                (h "div" {:class "file-modal"}
+                                  (h "section" {:class "file-viewer compare-viewer"}
+                                    (str (h "div" {:class "file-viewer-heading"}
+                                             (str (h "div" {:class "file-viewer-title"} (get @compare-view "path"))
+                                                  (h "span" {:class "file-viewer-source"} (str "서버 ↔ GitHub · " (get @compare-view "upstream")))
+                                                  (h "button" {:class "button ghost file-viewer-close" :on-click (fn [] (reset! compare-view nil))} "닫기")))
+                                         (h "div" {:class "compare-view-grid"}
+                                           (str (compare-pane "SERVER · 작업 폴더" (get @compare-view "server") "server-pane")
+                                                (compare-pane "GITHUB · 원격" (get @compare-view "github") "github-pane"))))))))
         render-project-wizard (fn []
                                 (h "section" {:class "panel project-wizard"}
                                   (str (h "div" {:class "panel-heading"}
@@ -215,7 +276,7 @@
                                  (h "div" {:class "compare-grid"}
                                    (str (compare-column "1 · 서버 작업 폴더" server-files "server-column" "server")
                                         (compare-column "2 · GitHub 원격" github-files "github-column" "github")))
-                                 (render-file-view)))))
+                                 ""))))
         render-commits (fn []
                          (let [commits (or (get @data "commits") [])]
                            (if (= (length commits) 0)
@@ -224,9 +285,56 @@
     (when (not @loaded) (do (reset! loaded true) (fetch! "/api" reload)))
     (h "main" {:class "app-shell"}
       (str
+        (h "aside" {:class "desktop-rail"}
+          (str (h "div" {:class "rail-brand"} (h "span" {:class "brand-dot"} "●") "fl-git")
+               (h "div" {:class "rail-kicker"} "SERVER REPOSITORIES")
+               (h "div" {:class "rail-repo-toolbar"}
+                 (str (h "span" {:class "rail-section-label"} (str "저장소 " (length @repositories) "개"))
+                      (h "button" {:class "rail-refresh" :title "서버 저장소 새로고침" :on-click browse-repositories} "↻")))
+               (if (= (length @repositories) 0)
+                 (h "div" {:class "rail-empty"} "새로고침을 눌러 저장소를 불러오세요.")
+                 (h "div" {:class "rail-repositories"}
+                   (arr-join
+                     (map (fn [path]
+                            (h "button" {:class (if (= path (get @data "root")) "rail-repo active" "rail-repo")
+                                          :title path
+                                          :on-click (fn [] (open-repository path))}
+                              (str (h "span" {:class "rail-repo-dot"} (if (= path (get @data "root")) "●" "○"))
+                                   (h "span" {:class "rail-repo-path"} path))))
+                           @repositories)
+                     "")))
+               (h "div" {:class "rail-current"}
+                 (str (h "div" {:class "rail-section-label"} "CURRENT")
+                      (h "strong" {} (or (get @data "root") "선택된 저장소 없음"))
+                      (h "span" {:class (if (= (get (get @data "github") "connected") true) "rail-github connected" "rail-github")}
+                        (if (= (get (get @data "github") "connected") true)
+                          (str "● GitHub " (or (get (get @data "github") "name") "연결됨"))
+                          "○ GitHub 미연결"))))
+               (h "nav" {:class "rail-nav"}
+                 (str (h "div" {:class "rail-nav-item active"} "Workspace")
+                      (h "div" {:class "rail-nav-item"} "Changes")
+                      (h "div" {:class "rail-nav-item"} "Diff")
+                      (h "div" {:class "rail-nav-item"} "Commits")
+                      (h "div" {:class "rail-nav-item"} "GitHub")
+                      (h "div" {:class "rail-nav-item"} "AI Context")))
+               (h "div" {:class "rail-footer"}
+                 (str (h "span" {:class "online-dot"} "●") " DESKTOP MODE"))))
         (h "header" {:class "topbar"}
           (str (h "div" {:class "brand"} (h "span" {:class "brand-dot"} "●") "fl-git")
                (h "div" {:class "connection"} (h "span" {:class "online-dot"} "●") "LOCAL REPOSITORY")))
+        (h "section" {:class "shell-meta"}
+          (str (h "div" {:class "shell-meta-item root-meta"}
+                   (str (h "span" {:class "shell-meta-label"} "ROOT")
+                        (h "strong" {} (or (get @data "root") "—"))))
+               (h "div" {:class "shell-meta-item"}
+                 (str (h "span" {:class "shell-meta-label"} "BRANCH")
+                      (h "strong" {} (or (get @data "branch") "—"))))
+               (h "div" {:class "shell-meta-item"}
+                 (str (h "span" {:class "shell-meta-label"} "UPSTREAM")
+                      (h "strong" {} (or (get (get @data "sync") "upstream") "—"))))
+               (h "div" {:class "shell-meta-item compact-meta"}
+                 (str (h "span" {:class "shell-meta-label"} "SYNC")
+                      (h "strong" {} (str "↑" (or (get (get @data "sync") "ahead") "—") "  ↓" (or (get (get @data "sync") "behind") "—")))))))
         (h "section" {:class "hero"}
           (str (h "div" {:class "eyebrow"} "GIT WORKSPACE / WEB CONTROL")
                (h "h1" {} "코드의 흐름을 한 화면에서.")
@@ -267,6 +375,15 @@
                              " · default " (or (get (get @data "github") "default_branch") "—")
                              " · ↑" (or (get (get @data "sync") "ahead") "—")
                              " ↓" (or (get (get @data "sync") "behind") "—")))))))
+        (h "aside" {:class (if (= @right-open true) "desktop-detail" "desktop-detail collapsed")}
+          (if (= @right-open true)
+            (str (h "div" {:class "detail-heading"}
+                     (str (h "span" {} "DETAIL")
+                          (h "button" {:class "detail-toggle" :on-click (fn [] (reset! right-open false))} "접기")))
+                 (h "div" {:class "detail-placeholder"}
+                   (str (h "strong" {} "선택 항목 상세")
+                        (h "p" {} "변경 파일을 선택하면 Diff와 파일 내용을 이 영역에 표시합니다."))))
+            (h "button" {:class "detail-expand" :on-click (fn [] (reset! right-open true))} "‹")))
         (h "nav" {:class "tabs"}
           (str (view-tab "overview" "Overview") (view-tab "project" "새 프로젝트") (view-tab "remote" "원격 연결") (view-tab "changes" "Changes") (view-tab "compare" "파일 비교") (view-tab "context" "AI Context")))
         (if (= @tab "context")
@@ -286,10 +403,16 @@
             (h "section" {:class "columns"}
               (str (h "div" {:class "panel"}
                        (str (h "div" {:class "panel-heading"} (h "h2" {} "변경 파일"))
-                            (h "div" {:class "file-list"} (render-files))
+                            (h "div" {:class "change-summary"} (str "선택 " (length @selected-files) "개 · 전체 " (length (or (get @data "files") [])) "개"))
+                            (h "div" {:class "change-list"}
+                              (str (change-group "Modified" "modified")
+                                   (change-group "Added" "added")
+                                   (change-group "Deleted" "deleted")
+                                   (change-group "Untracked" "untracked")))
                             (h "div" {:class "action-row"}
-                              (str (h "button" {:class "button secondary" :on-click (fn [] (do-action "add-all"))} "전체 Stage")
-                                   (h "button" {:class "button ghost" :on-click (fn [] (do-action "unstage-all"))} "Stage 취소")))))
+                              (str (h "button" {:class "button secondary" :on-click (fn [] (selected-action "stage-files"))} "선택 Stage")
+                                   (h "button" {:class "button ghost" :on-click (fn [] (selected-action "unstage-files"))} "선택 Unstage")
+                                   (h "button" {:class "button dark" :on-click (fn [] (do-action "add-all"))} "전체 Stage")))))
                    (h "div" {:class "panel diff-panel"}
                      (str (h "div" {:class "panel-heading"} (h "h2" {} "Diff 미리보기"))
                           (h "pre" {:class "diff-output"} (or (get @data "diff") "변경 내용이 없습니다."))))))
@@ -322,7 +445,9 @@
                    (h "button" {:class "button primary picker-button" :on-click create-repo} "저장소 생성"))))
           "")
         (if (> (length @error) 0) (h "div" {:class "toast error"} @error) "")
-        (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) "")))))))
+        (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) "")
+        (render-file-view)
+        (render-compare-view)))))))
 
 (defn render [req]
   (server_header
@@ -347,8 +472,9 @@
 .compare-shell{margin-top:22px}.compare-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.compare-title{font-size:16px;font-weight:800}.compare-ref{color:var(--muted);font:11px ui-monospace,monospace;margin-left:auto}.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.compare-column{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}.server-column{border-top:2px solid var(--green)}.github-column{border-top:2px solid var(--blue)}.compare-column-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}.compare-column-heading h3{margin:0;font-size:14px}.compare-count{color:var(--muted);font-size:11px;white-space:nowrap}.compare-files{margin-top:14px;max-height:520px;overflow:auto;background:#0b1018;border:1px solid #1d2838;border-radius:9px}.compare-file-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;color:var(--text);background:transparent;padding:9px 11px;border:0;border-bottom:1px solid #1b2635;cursor:pointer;font:12px ui-monospace,monospace}.compare-file-row:last-child{border-bottom:0}.compare-file-row:hover{background:#17243a;color:#fff}.compare-file-row code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compare-loading{margin-top:22px;color:var(--muted)}@media(max-width:760px){.compare-grid{grid-template-columns:1fr}.compare-toolbar{align-items:flex-start;flex-wrap:wrap}.compare-ref{margin-left:0}}
 .file-modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(3,6,11,.78);backdrop-filter:blur(5px)}.file-viewer{width:min(1100px,94vw);max-height:88vh;background:var(--surface);border:1px solid #3b4e6b;border-radius:16px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.55)}.file-viewer-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.file-viewer-title{font:14px ui-monospace,monospace;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-viewer-source,.file-viewer-note{color:var(--muted);font-size:11px}.file-viewer-close{flex:none;padding:8px 12px}.file-viewer-content{margin:0;max-height:calc(88vh - 110px);overflow:auto;background:#080c12;border:1px solid #1d2838;border-radius:9px;padding:16px;color:#d5deeb;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;tab-size:2}.file-viewer-note{margin:-3px 0 10px;color:var(--orange)}
 .project-wizard{margin-top:22px;max-width:760px}.wizard-step{color:var(--blue);font:11px ui-monospace,monospace}.wizard-label{display:block;margin-top:18px;margin-bottom:7px;color:var(--muted);font-size:11px;font-weight:700}.wizard-input{display:block;margin-top:0}.wizard-folders{margin-top:10px}.wizard-options{display:flex;gap:8px;margin-top:18px}.visibility-option{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:9px 14px;cursor:pointer;font-size:12px}.visibility-option.active{border-color:var(--blue);color:var(--text);background:#243555}
-.inline-label{display:inline-flex;align-items:center;margin:0 6px 0 0}
+.inline-label{display:inline-flex;align-items:center;margin:0 6px 0 0}.desktop-rail{grid-column:1;grid-row:1 / span 40;align-self:start;position:sticky;top:28px;min-height:calc(100vh - 56px);background:#0d131d;border:1px solid var(--line);border-radius:18px;padding:22px 16px;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.18)}.rail-brand{font-size:19px;font-weight:850;letter-spacing:-.04em;padding:4px 8px 28px}.rail-kicker{color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.16em;padding:0 8px 12px}.rail-nav{display:flex;flex-direction:column;gap:5px}.rail-nav-item{color:var(--muted);border-radius:9px;padding:11px 10px;font-size:13px;font-weight:700}.rail-nav-item.active{color:var(--text);background:#1d2b46;border-left:2px solid var(--blue);padding-left:8px}.rail-footer{margin-top:auto;color:var(--muted);font:10px ui-monospace,monospace;padding:14px 8px 4px;border-top:1px solid var(--line)}.app-shell{width:100%;min-width:1200px;max-width:1800px;margin:0 auto;padding:28px 42px 64px;display:grid;grid-template-columns:300px minmax(640px,1fr) 340px;gap:20px}.app-shell>.topbar,.app-shell>.shell-meta{grid-column:2 / 4;min-width:0}.app-shell>.hero,.app-shell>.repo-bar,.app-shell>.stats-grid,.app-shell>.source-grid,.app-shell>.tabs,.app-shell>.panel,.app-shell>.columns,.app-shell>.compare-shell,.app-shell>.project-wizard{grid-column:2;min-width:0}.app-shell>.desktop-detail{grid-column:3;grid-row:3 / span 40;min-width:0}.topbar{padding-bottom:24px}.shell-meta{display:grid;grid-template-columns:minmax(260px,1.8fr) repeat(3,minmax(120px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}.shell-meta-item{background:var(--surface);padding:12px 14px;min-width:0}.shell-meta-label{display:block;color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.12em;margin-bottom:6px}.shell-meta strong{display:block;color:var(--text);font:12px ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-meta strong{color:var(--blue)}.hero{padding:32px 0 22px;max-width:880px}.hero h1{font-size:56px}.stats-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.columns{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}.compare-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.repo-bar{display:block}.branch-pill{display:block}.tabs{gap:24px}.desktop-detail{align-self:start;position:sticky;top:28px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;min-height:260px}.desktop-detail.collapsed{padding:8px;min-height:52px;width:52px;justify-self:end}.detail-heading{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.14em}.detail-toggle,.detail-expand{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:7px;padding:6px 8px;cursor:pointer}.detail-placeholder{margin-top:32px;color:var(--muted);font-size:12px;line-height:1.7}.detail-placeholder strong{display:block;color:var(--text);font-size:14px;margin-bottom:8px}.app-shell{grid-template-columns:300px minmax(0,1fr) 300px;gap:16px;padding:24px 24px 56px}
 </style>
+<style>.rail-repo-toolbar{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;padding:0 8px}.rail-section-label{color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.12em}.rail-refresh{border:1px solid var(--line);background:#182235;color:var(--blue);border-radius:7px;width:28px;height:26px;cursor:pointer}.rail-refresh:hover{border-color:var(--blue);color:var(--text)}.rail-repositories{display:flex;flex-direction:column;gap:4px;max-height:310px;overflow:auto;padding-right:2px}.rail-repo{display:flex;align-items:center;gap:7px;width:100%;min-width:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);padding:9px 8px;text-align:left;cursor:pointer;font:11px ui-monospace,monospace}.rail-repo:hover{background:#182235;border-color:var(--line);color:var(--text)}.rail-repo.active{background:#1d2b46;border-color:#365274;color:var(--text)}.rail-repo-dot{flex:0 0 12px;color:var(--blue)}.rail-repo-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rail-empty{color:var(--muted);font-size:11px;line-height:1.6;padding:10px 8px 16px}.rail-current{margin-top:18px;padding:14px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}.rail-current strong{display:block;margin-top:8px;color:var(--text);font:11px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rail-github{display:block;margin-top:9px;color:var(--muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rail-github.connected{color:var(--green)}.change-summary{color:var(--muted);font-size:11px}.change-list{margin-top:14px;max-height:520px;overflow:auto}.change-group{margin-bottom:14px}.change-group-heading{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#0d131d;border:1px solid var(--line);border-radius:8px 8px 0 0;color:var(--muted);font-size:11px}.change-group-heading strong{color:var(--text);font-size:12px}.change-row{display:flex;align-items:center;gap:8px;min-width:0;padding:9px 8px;border:1px solid #202a39;border-top:0;background:#111925}.change-row:hover{background:#17243a}.change-row input{accent-color:var(--blue);flex:0 0 auto}.change-kind{display:grid;place-items:center;flex:0 0 20px;height:20px;border-radius:5px;background:#263653;color:var(--blue);font:11px ui-monospace,monospace;font-weight:800}.change-row.added .change-kind{color:var(--green)}.change-row.deleted .change-kind{color:var(--orange)}.change-row.untracked .change-kind{color:#e5c66b}.change-path{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:11px ui-monospace,monospace;text-align:left;border:0;background:transparent;cursor:pointer;padding:0}.change-status{color:var(--muted);font:10px ui-monospace,monospace}.change-action{border:1px solid var(--line);border-radius:6px;background:#24314a;color:var(--text);padding:5px 7px;font-size:10px;cursor:pointer}.change-action:hover{border-color:var(--blue)}.change-action.ghost{background:transparent;color:var(--muted)}.compare-view-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.compare-pane{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}.compare-pane.server-pane{border-top:2px solid var(--green)}.compare-pane.github-pane{border-top:2px solid var(--blue)}.compare-pane-heading{padding:10px 12px;background:#0d131d;color:var(--text);font-size:11px;font-weight:800;letter-spacing:.08em}.compare-pane-content{margin:0;min-height:360px;max-height:calc(88vh - 170px);overflow:auto;background:#080c12;padding:14px;color:#d5deeb;font:11px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;tab-size:2}.compare-pane-error{min-height:360px;padding:18px;color:var(--orange);font-size:12px}</style>
 """))
           (h "body" {}
             (str

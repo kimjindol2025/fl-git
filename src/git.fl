@@ -13,8 +13,8 @@
     (if (> (length out) 0) (print out) nil)
     (if (> (length err) 0) (print err) nil)
     (if (= code 0)
-      true
-      (println (str "fl-git: 명령 실패 (exit " code ")")))))
+      0
+      (do (println (str "fl-git: 명령 실패 (exit " code ")")) code))))
 
 (defn git-capture [command]
   (let [result (git-run command)]
@@ -32,11 +32,11 @@
 (defn git-pull [confirmation]
   (if (= confirmation "--yes")
     (git-print (git-run "git pull"))
-    (do (println "pull은 원격 변경을 통합합니다. 실행하려면: fl-git pull --yes") false)))
+    (do (println "pull은 원격 변경을 통합합니다. 실행하려면: fl-git pull --yes") 2)))
 (defn git-push [confirmation]
   (if (= confirmation "--yes")
     (git-print (git-run "git push"))
-    (do (println "push는 원격 저장소를 변경합니다. 실행하려면: fl-git push --yes") false)))
+    (do (println "push는 원격 저장소를 변경합니다. 실행하려면: fl-git push --yes") 2)))
 
 (defn git-add [paths]
   (let [target (if (> (length paths) 0)
@@ -52,19 +52,19 @@
 
 (defn git-commit [message]
   (if (= (str-trim (str message)) "")
-    (do (println "사용법: fl-git commit \"커밋 메시지\"") false)
+    (do (println "사용법: fl-git commit \"커밋 메시지\"") 2)
     (git-print (git-run (str "git commit -m " (git-shell-quote message))))))
 
 (defn git-branch-create [name]
   (if (= (str-trim (str name)) "")
-    (do (println "사용법: fl-git branch-create <이름>") false)
+    (do (println "사용법: fl-git branch-create <이름>") 2)
     (git-print (git-run (str "git switch -c " (git-shell-quote name))))))
 
 (defn git-branch-delete [name confirmation]
   (if (not (= confirmation "--yes"))
-    (do (println "branch 삭제는 로컬 branch를 제거합니다. 실행하려면: fl-git branch-delete <이름> --yes") false)
+    (do (println "branch 삭제는 로컬 branch를 제거합니다. 실행하려면: fl-git branch-delete <이름> --yes") 2)
     (if (= (str-trim (str name)) "")
-      (do (println "사용법: fl-git branch-delete <이름> --yes") false)
+      (do (println "사용법: fl-git branch-delete <이름> --yes") 2)
       (git-print (git-run (str "git branch -d " (git-shell-quote name)))))))
 
 (defn git-context []
@@ -84,7 +84,7 @@
     (print status)
     (println "## 최근 커밋")
     (print log)
-    true))
+    0))
 
 (defn git-context-json []
   (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
@@ -93,7 +93,7 @@
         status (str-trim (git-capture "git status --short --branch"))
         log (str-trim (git-capture "git --no-pager log -5 --oneline"))]
     (println (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
-    true))
+    0))
 
 (defn git-github [action argument]
   (cond
@@ -102,6 +102,6 @@
     (= action "status") (git-print (git-run "gh auth status"))
     (= action "pr-create")
       (if (= (str-trim (str argument)) "")
-        (do (println "사용법: fl-git github pr-create \"제목\"") false)
+        (do (println "사용법: fl-git github pr-create \"제목\"") 2)
         (git-print (git-run (str "gh pr create --title " (git-shell-quote argument)))))
-    true (do (println "사용법: fl-git github <repo|pr|status|pr-create> [제목]") false)))
+  true (do (println "사용법: fl-git github <repo|pr|status|pr-create> [제목]") 2)))

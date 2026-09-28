@@ -1,6 +1,9 @@
 .tmp/
 .fl-git/
 *.log
+.env
+.env.*
+!.env.example
 web/_app.fl
 web/AGENTS.md
 web/public/app.css

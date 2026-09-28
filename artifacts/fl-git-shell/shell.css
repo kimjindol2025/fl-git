@@ -1,0 +1,23 @@
+/* fl-git 1단계 데스크톱 셸. 모바일 쿼리를 두지 않는다. */
+.app-shell {
+  width: 100%;
+  min-width: 1200px;
+  max-width: 1800px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 300px;
+  gap: 16px;
+  padding: 24px 24px 56px;
+}
+
+.desktop-rail { grid-column: 1; grid-row: 1 / span 40; }
+.app-shell > .topbar,
+.app-shell > .shell-meta { grid-column: 2 / 4; }
+.app-shell > .desktop-detail {
+  grid-column: 3;
+  grid-row: 3 / span 40;
+}
+.desktop-detail.collapsed {
+  width: 52px;
+  justify-self: end;
+}

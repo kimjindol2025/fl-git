@@ -14,9 +14,11 @@
   (println "원격: pull|push --yes")
   (println "브랜치: branch-create <이름> | branch-delete <이름> --yes")
   (println "GitHub: github <repo|pr|status|pr-create> [제목]")
-  (println "TUI: tui"))
+  (println "TUI: tui")
+  0)
 
-(cond
+(define fl-git-status
+  (cond
   (= command "help") (help)
   (= command "--help") (help)
   (= command "status") (git-status)
@@ -35,6 +37,7 @@
   (= command "context") (git-context)
   (= command "context-json") (git-context-json)
   (= command "github") (git-github first-arg (or (get args 2) ""))
-  true (do (println (str "알 수 없는 명령: " command)) (help)))
+  true (do (println (str "알 수 없는 명령: " command)) (help) 2)))
 
 (println "")
+(println (str "FL_GIT_EXIT:" fl-git-status))
