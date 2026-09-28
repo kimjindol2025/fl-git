@@ -9,11 +9,15 @@
         repositories (atom [])
         new-repo-name (atom "")
         commit-message (atom "")
+        branch-name (atom "")
         commit-detail (atom nil)
         file-compare (atom nil)
         file-view (atom nil)
         compare-view (atom nil)
         selected-files (atom [])
+        context-selected (atom [])
+        context-response (atom nil)
+        conflict-files (atom [])
         right-open (atom true)
         project-parent (atom "/home/kim/kim/projects")
         project-name (atom "")
@@ -31,12 +35,16 @@
         apply-result (fn [res]
                        (if (= (get res "ok") false)
                          (reset! error (or (get res "error") "요청 실패"))
-                         (do (reset! data res) (reset! selected-files []) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice (or (get res "message") "완료")))))
+                         (do (reset! data res) (reset! conflict-files (or (get res "conflicts") [])) (reset! selected-files []) (reset! repo-input (or (get res "root") @repo-input)) (reset! error "") (reset! notice (or (get res "message") "완료")))))
         reload (fn [res]
                  (if (= (get res "ok") false)
                    (reset! error (or (get res "error") "상태를 불러오지 못했습니다"))
-                   (do (reset! data res) (reset! repo-input (or (get res "root") @repo-input)) (reset! error ""))))
+                   (do (reset! data res) (reset! conflict-files (or (get res "conflicts") [])) (reset! repo-input (or (get res "root") @repo-input)) (reset! error ""))))
         send (fn [payload] (fetch-post! "/api" payload apply-result))
+        remote-action-result (fn [res]
+                               (if (= (get res "ok") false)
+                                 (do (reset! conflict-files (or (get res "conflicts") [])) (reset! error (or (get res "error") "원격 작업에 실패했습니다")))
+                                 (do (reset! data res) (reset! conflict-files (or (get res "conflicts") [])) (reset! error "") (reset! notice (or (get res "message") "원격 작업 완료")))))
         compare-result (fn [res]
                          (if (= (get res "ok") false)
                            (reset! error (or (get res "error") "파일 비교 정보를 불러오지 못했습니다"))
@@ -102,7 +110,7 @@
         do-action (fn [action]
                     (if (or (= action "push") (= action "pull"))
                       (if (js_confirm (str action "은 원격 저장소를 변경합니다. 실행할까요?"))
-                        (do (reset! notice "실행 중…") (send {"action" action "confirm" true}))
+                        (do (reset! notice "실행 중…") (fetch-post! "/api" {"action" action "confirm" true} remote-action-result))
                         nil)
                       (do (reset! notice "실행 중…") (send {"action" action}))))
         commit (fn []
@@ -115,6 +123,12 @@
                         (if (js_confirm "커밋 후 원격 저장소로 Push할까요?")
                           (do (reset! notice "커밋 및 Push 실행 중…") (send {"action" "commit-push" "message" @commit-message "confirm" true}) (reset! commit-message ""))
                           nil)))
+        create-branch (fn []
+                        (if (= (str-trim @branch-name) "")
+                          (reset! error "생성할 branch 이름을 입력하세요.")
+                          (do (reset! notice "branch를 생성하는 중…") (send {"action" "create-branch" "name" @branch-name}) (reset! branch-name ""))))
+        switch-branch (fn [name]
+                        (do (reset! notice "branch를 전환하는 중…") (send {"action" "switch-branch" "name" name})))
         file-selected? (fn [path]
                          (> (length (filter (fn [item] (= item path)) @selected-files)) 0))
         toggle-file (fn [path]
@@ -127,6 +141,29 @@
                           (if (= (length @selected-files) 0)
                             (reset! error "먼저 파일을 선택하세요.")
                             (do (reset! notice "선택한 파일을 처리하는 중…") (send {"action" action "paths" @selected-files}))))
+        context-card-selected? (fn [key]
+                                 (> (length (filter (fn [item] (= item key)) @context-selected)) 0))
+        toggle-context-card (fn [key]
+                              (if (context-card-selected? key)
+                                (reset! context-selected (filter (fn [item] (not (= item key))) @context-selected))
+                                (reset! context-selected (concat @context-selected [key]))))
+        context-response-result (fn [res]
+                                  (if (= (get res "ok") false)
+                                    (reset! error (or (get res "error") "AI Context를 만들지 못했습니다."))
+                                    (do (reset! context-response res) (reset! error "") (reset! notice "선택한 카드를 AI 전달용으로 만들었습니다."))))
+        send-context (fn []
+                       (if (= (length @context-selected) 0)
+                         (reset! error "AI에게 전달할 카드를 먼저 선택하세요.")
+                         (do (reset! notice "AI Context를 만드는 중…")
+                             (fetch-post! "/api" {"action" "context" "keys" @context-selected} context-response-result))))
+        commit-selected (fn []
+                         (if (= (str-trim @commit-message) "")
+                           (reset! error "커밋 메시지를 입력하세요")
+                           (if (= (length @selected-files) 0)
+                             (reset! error "커밋할 파일을 먼저 선택하세요.")
+                             (do (reset! notice "선택한 파일을 커밋하는 중…")
+                                 (send {"action" "commit-selected" "message" @commit-message "paths" @selected-files})
+                                 (reset! commit-message "")))))
         select-repo (fn []
                       (if (= (str-trim @repo-input) "")
                         (reset! error "저장소 폴더 경로를 입력하세요")
@@ -185,6 +222,15 @@
                                   (if (= (length paths) 0)
                                     (h "div" {:class "empty"} "파일 없음")
                                     (arr-join (map (fn [path] (compare-file-row side path)) paths) ""))))))
+        render-context-card (fn [card]
+                              (let [key (get card "key")]
+                                (h "article" {:class (if (context-card-selected? key) "context-card selected" "context-card")}
+                                  (str (h "input" {:type "checkbox" :checked (context-card-selected? key) :on-change (fn [] (toggle-context-card key))})
+                                       (h "div" {:class "context-card-number"} (get card "number"))
+                                       (h "div" {:class "context-card-body"}
+                                         (str (h "div" {:class "context-card-heading"}
+                                                   (str (h "strong" {} (get card "title")) (h "code" {} (get card "key"))))
+                                              (h "pre" {:class "context-card-content"} (or (get card "content") ""))))))))
         render-file-view (fn []
                            (if (= @file-view nil)
                              ""
@@ -277,6 +323,32 @@
                                    (str (compare-column "1 · 서버 작업 폴더" server-files "server-column" "server")
                                         (compare-column "2 · GitHub 원격" github-files "github-column" "github")))
                                  ""))))
+        render-conflicts (fn []
+                           (if (= (length @conflict-files) 0)
+                             ""
+                             (h "section" {:class "conflict-banner"}
+                               (str (h "div" {:class "conflict-heading"}
+                                        (str (h "strong" {} "충돌 해결 필요")
+                                             (h "span" {} (str (length @conflict-files) "개 파일이 충돌 중"))))
+                                    (h "p" {:class "conflict-copy"} "Pull 결과를 반영하려면 아래 파일의 충돌을 직접 해결한 뒤 다시 Stage하세요.")
+                                    (h "div" {:class "conflict-files"}
+                                     (arr-join (map (fn [path]
+                                                       (h "button" {:class "conflict-file" :on-click (fn [] (open-file "server" path))}
+                                                         (str "⚠ " path))) @conflict-files) ""))))))
+        render-branches (fn []
+                          (h "div" {:class "branch-panel"}
+                            (str (h "div" {:class "branch-panel-heading"}
+                                     (str (h "strong" {} "Branch")
+                                          (h "span" {} (str (length (or (get @data "branches") [])) "개"))))
+                                 (h "div" {:class "branch-list"}
+                                   (arr-join (map (fn [name]
+                                                    (h "button" {:class (if (= name (get @data "branch")) "branch-item active" "branch-item")
+                                                                  :on-click (fn [] (if (= name (get @data "branch")) nil (switch-branch name)))}
+                                                      (str (if (= name (get @data "branch")) "● " "○ ") name)))
+                                                 (or (get @data "branches") [])) ""))
+                                 (h "div" {:class "branch-create"}
+                                   (str (h "input" {:type "text" :placeholder "feature/my-branch" :value @branch-name :on-input (fn [e] (reset! branch-name (.-value (.-target e))))})
+                                        (h "button" {:class "button primary" :on-click create-branch} "생성"))))))
         render-commits (fn []
                          (let [commits (or (get @data "commits") [])]
                            (if (= (length commits) 0)
@@ -335,6 +407,7 @@
                (h "div" {:class "shell-meta-item compact-meta"}
                  (str (h "span" {:class "shell-meta-label"} "SYNC")
                       (h "strong" {} (str "↑" (or (get (get @data "sync") "ahead") "—") "  ↓" (or (get (get @data "sync") "behind") "—")))))))
+        (render-conflicts)
         (h "section" {:class "hero"}
           (str (h "div" {:class "eyebrow"} "GIT WORKSPACE / WEB CONTROL")
                (h "h1" {} "코드의 흐름을 한 화면에서.")
@@ -388,9 +461,20 @@
           (str (view-tab "overview" "Overview") (view-tab "project" "새 프로젝트") (view-tab "remote" "원격 연결") (view-tab "changes" "Changes") (view-tab "compare" "파일 비교") (view-tab "context" "AI Context")))
         (if (= @tab "context")
           (h "section" {:class "panel context-panel"}
-            (str (h "div" {:class "panel-heading"} (h "h2" {} "AI에게 전달할 문맥"))
-                 (h "p" {:class "muted"} "아래 JSON을 복사해 AI 대화에 붙여 넣으면 현재 저장소 상태를 바로 공유할 수 있습니다.")
-                 (h "pre" {:class "context-output"} (or (get @data "context_json") "불러오는 중…"))))
+            (str (h "style" {} ".context-card-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}.context-card{display:grid;grid-template-columns:auto 32px 1fr;gap:9px;align-items:start;background:#0d131d;border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}.context-card.selected{border-color:var(--blue);background:#142039}.context-card input{margin-top:3px;accent-color:var(--blue)}.context-card-number{color:var(--blue);font:11px ui-monospace,monospace;font-weight:800}.context-card-body{min-width:0}.context-card-heading{display:flex;justify-content:space-between;gap:8px;align-items:center}.context-card-heading strong{font-size:12px}.context-card-heading code{color:var(--muted);font:10px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.context-card-content{max-height:130px;overflow:auto;margin:8px 0 0;color:#c6d1e1;font:11px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap}.context-response-heading{margin-top:20px;color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.08em}@media(max-width:1000px){.context-card-list{grid-template-columns:1fr}}")
+                 (h "div" {:class "panel-heading"}
+                     (str (h "h2" {} "AI Context 카드")
+                          (h "span" {:class "muted"} (str (length @context-selected) "개 선택"))))
+                 (h "p" {:class "muted"} "카드를 선택하면 선택한 정보만 API 응답으로 전달합니다.")
+                 (h "div" {:class "context-card-list"}
+                   (arr-join (map render-context-card (or (get @data "context_cards") [])) ""))
+                 (h "div" {:class "action-row"}
+                   (str (h "button" {:class "button primary" :on-click send-context} "선택 카드 전달")
+                        (h "button" {:class "button ghost" :on-click (fn [] (do (reset! context-selected []) (reset! context-response nil)))} "선택 해제")))
+                 (if (= @context-response nil)
+                   ""
+                   (str (h "div" {:class "context-response-heading"} "API 응답 · AI 전달용 Markdown")
+                        (h "pre" {:class "context-output"} (or (get @context-response "markdown") ""))))))
           (if (= @tab "project")
             (render-project-wizard)
             (if (= @tab "remote")
@@ -412,7 +496,11 @@
                             (h "div" {:class "action-row"}
                               (str (h "button" {:class "button secondary" :on-click (fn [] (selected-action "stage-files"))} "선택 Stage")
                                    (h "button" {:class "button ghost" :on-click (fn [] (selected-action "unstage-files"))} "선택 Unstage")
-                                   (h "button" {:class "button dark" :on-click (fn [] (do-action "add-all"))} "전체 Stage")))))
+                                   (h "button" {:class "button dark" :on-click (fn [] (do-action "add-all"))} "전체 Stage")))
+                            (h "div" {:class "commit-box selected-commit-box"}
+                              (str (h "label" {} (str "선택 파일 커밋 · " (length @selected-files) "개"))
+                                   (h "input" {:type "text" :placeholder "예: fix: update selected files" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
+                                   (h "button" {:class "button primary" :on-click commit-selected} "선택 파일 커밋")))))
                    (h "div" {:class "panel diff-panel"}
                      (str (h "div" {:class "panel-heading"} (h "h2" {} "Diff 미리보기"))
                           (h "pre" {:class "diff-output"} (or (get @data "diff") "변경 내용이 없습니다."))))))
@@ -427,7 +515,8 @@
                             (h "div" {:class "commit-box"}
                               (str (h "label" {} "로컬 커밋")
                                    (h "input" {:type "text" :placeholder "예: feat: update landing page" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
-                                   (h "button" {:class "button primary" :on-click commit-push} "Commit & Push")))))
+                                   (h "button" {:class "button primary" :on-click commit-push} "Commit & Push")))
+                            (render-branches)))
                    (h "div" {:class "panel"}
                      (str (h "div" {:class "panel-heading"} (h "h2" {} "최근 커밋"))
                           (h "div" {:class "commit-list"} (render-commits))
@@ -473,7 +562,7 @@
 .file-modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(3,6,11,.78);backdrop-filter:blur(5px)}.file-viewer{width:min(1100px,94vw);max-height:88vh;background:var(--surface);border:1px solid #3b4e6b;border-radius:16px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.55)}.file-viewer-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.file-viewer-title{font:14px ui-monospace,monospace;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-viewer-source,.file-viewer-note{color:var(--muted);font-size:11px}.file-viewer-close{flex:none;padding:8px 12px}.file-viewer-content{margin:0;max-height:calc(88vh - 110px);overflow:auto;background:#080c12;border:1px solid #1d2838;border-radius:9px;padding:16px;color:#d5deeb;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;tab-size:2}.file-viewer-note{margin:-3px 0 10px;color:var(--orange)}
 .project-wizard{margin-top:22px;max-width:760px}.wizard-step{color:var(--blue);font:11px ui-monospace,monospace}.wizard-label{display:block;margin-top:18px;margin-bottom:7px;color:var(--muted);font-size:11px;font-weight:700}.wizard-input{display:block;margin-top:0}.wizard-folders{margin-top:10px}.wizard-options{display:flex;gap:8px;margin-top:18px}.visibility-option{border:1px solid var(--line);border-radius:8px;background:#182235;color:var(--muted);padding:9px 14px;cursor:pointer;font-size:12px}.visibility-option.active{border-color:var(--blue);color:var(--text);background:#243555}
 .inline-label{display:inline-flex;align-items:center;margin:0 6px 0 0}.desktop-rail{grid-column:1;grid-row:1 / span 40;align-self:start;position:sticky;top:28px;min-height:calc(100vh - 56px);background:#0d131d;border:1px solid var(--line);border-radius:18px;padding:22px 16px;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.18)}.rail-brand{font-size:19px;font-weight:850;letter-spacing:-.04em;padding:4px 8px 28px}.rail-kicker{color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.16em;padding:0 8px 12px}.rail-nav{display:flex;flex-direction:column;gap:5px}.rail-nav-item{color:var(--muted);border-radius:9px;padding:11px 10px;font-size:13px;font-weight:700}.rail-nav-item.active{color:var(--text);background:#1d2b46;border-left:2px solid var(--blue);padding-left:8px}.rail-footer{margin-top:auto;color:var(--muted);font:10px ui-monospace,monospace;padding:14px 8px 4px;border-top:1px solid var(--line)}.app-shell{width:100%;min-width:1200px;max-width:1800px;margin:0 auto;padding:28px 42px 64px;display:grid;grid-template-columns:300px minmax(640px,1fr) 340px;gap:20px}.app-shell>.topbar,.app-shell>.shell-meta{grid-column:2 / 4;min-width:0}.app-shell>.hero,.app-shell>.repo-bar,.app-shell>.stats-grid,.app-shell>.source-grid,.app-shell>.tabs,.app-shell>.panel,.app-shell>.columns,.app-shell>.compare-shell,.app-shell>.project-wizard{grid-column:2;min-width:0}.app-shell>.desktop-detail{grid-column:3;grid-row:3 / span 40;min-width:0}.topbar{padding-bottom:24px}.shell-meta{display:grid;grid-template-columns:minmax(260px,1.8fr) repeat(3,minmax(120px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}.shell-meta-item{background:var(--surface);padding:12px 14px;min-width:0}.shell-meta-label{display:block;color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.12em;margin-bottom:6px}.shell-meta strong{display:block;color:var(--text);font:12px ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-meta strong{color:var(--blue)}.hero{padding:32px 0 22px;max-width:880px}.hero h1{font-size:56px}.stats-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.columns{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}.compare-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.repo-bar{display:block}.branch-pill{display:block}.tabs{gap:24px}.desktop-detail{align-self:start;position:sticky;top:28px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;min-height:260px}.desktop-detail.collapsed{padding:8px;min-height:52px;width:52px;justify-self:end}.detail-heading{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.14em}.detail-toggle,.detail-expand{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:7px;padding:6px 8px;cursor:pointer}.detail-placeholder{margin-top:32px;color:var(--muted);font-size:12px;line-height:1.7}.detail-placeholder strong{display:block;color:var(--text);font-size:14px;margin-bottom:8px}.app-shell{grid-template-columns:300px minmax(0,1fr) 300px;gap:16px;padding:24px 24px 56px}
-</style>
+<style>.conflict-banner{grid-column:2 / 4;background:#3a2026;border:1px solid #8b4650;border-radius:12px;padding:14px 16px;color:#ffd7dc}.conflict-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}.conflict-heading strong{font-size:13px}.conflict-heading span{font-size:11px;color:#ffb1b9}.conflict-copy{margin:8px 0 10px;color:#f0b8be;font-size:11px}.conflict-files{display:flex;flex-wrap:wrap;gap:7px}.conflict-file{border:1px solid #8b4650;border-radius:7px;background:#4b2830;color:#ffd7dc;padding:7px 9px;cursor:pointer;font:11px ui-monospace,monospace}.conflict-file:hover{background:#65313a}</style>
 <style>.rail-repo-toolbar{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;padding:0 8px}.rail-section-label{color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.12em}.rail-refresh{border:1px solid var(--line);background:#182235;color:var(--blue);border-radius:7px;width:28px;height:26px;cursor:pointer}.rail-refresh:hover{border-color:var(--blue);color:var(--text)}.rail-repositories{display:flex;flex-direction:column;gap:4px;max-height:310px;overflow:auto;padding-right:2px}.rail-repo{display:flex;align-items:center;gap:7px;width:100%;min-width:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);padding:9px 8px;text-align:left;cursor:pointer;font:11px ui-monospace,monospace}.rail-repo:hover{background:#182235;border-color:var(--line);color:var(--text)}.rail-repo.active{background:#1d2b46;border-color:#365274;color:var(--text)}.rail-repo-dot{flex:0 0 12px;color:var(--blue)}.rail-repo-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rail-empty{color:var(--muted);font-size:11px;line-height:1.6;padding:10px 8px 16px}.rail-current{margin-top:18px;padding:14px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}.rail-current strong{display:block;margin-top:8px;color:var(--text);font:11px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rail-github{display:block;margin-top:9px;color:var(--muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rail-github.connected{color:var(--green)}.change-summary{color:var(--muted);font-size:11px}.change-list{margin-top:14px;max-height:520px;overflow:auto}.change-group{margin-bottom:14px}.change-group-heading{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#0d131d;border:1px solid var(--line);border-radius:8px 8px 0 0;color:var(--muted);font-size:11px}.change-group-heading strong{color:var(--text);font-size:12px}.change-row{display:flex;align-items:center;gap:8px;min-width:0;padding:9px 8px;border:1px solid #202a39;border-top:0;background:#111925}.change-row:hover{background:#17243a}.change-row input{accent-color:var(--blue);flex:0 0 auto}.change-kind{display:grid;place-items:center;flex:0 0 20px;height:20px;border-radius:5px;background:#263653;color:var(--blue);font:11px ui-monospace,monospace;font-weight:800}.change-row.added .change-kind{color:var(--green)}.change-row.deleted .change-kind{color:var(--orange)}.change-row.untracked .change-kind{color:#e5c66b}.change-path{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:11px ui-monospace,monospace;text-align:left;border:0;background:transparent;cursor:pointer;padding:0}.change-status{color:var(--muted);font:10px ui-monospace,monospace}.change-action{border:1px solid var(--line);border-radius:6px;background:#24314a;color:var(--text);padding:5px 7px;font-size:10px;cursor:pointer}.change-action:hover{border-color:var(--blue)}.change-action.ghost{background:transparent;color:var(--muted)}.compare-view-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.compare-pane{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}.compare-pane.server-pane{border-top:2px solid var(--green)}.compare-pane.github-pane{border-top:2px solid var(--blue)}.compare-pane-heading{padding:10px 12px;background:#0d131d;color:var(--text);font-size:11px;font-weight:800;letter-spacing:.08em}.compare-pane-content{margin:0;min-height:360px;max-height:calc(88vh - 170px);overflow:auto;background:#080c12;padding:14px;color:#d5deeb;font:11px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;tab-size:2}.compare-pane-error{min-height:360px;padding:18px;color:var(--orange);font-size:12px}</style>
 """))
           (h "body" {}

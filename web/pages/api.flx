@@ -57,6 +57,18 @@
       {"code" 2 "stderr" "안전하지 않은 파일 경로가 포함되어 있습니다."}
       (api-command (str "git " action " -- " (str-join (map api-shell-quote safe) " "))))))
 
+(defn api-commit-selected [message paths]
+  (let [clean-message (str-trim (str message))
+        safe (filter api-safe-git-path (or paths []))]
+    (if (= clean-message "")
+      {"code" 2 "stderr" "커밋 메시지가 필요합니다."}
+      (if (or (= (length safe) 0) (not (= (length safe) (length (or paths [])))))
+        {"code" 2 "stderr" "선택 파일이 없거나 안전하지 않은 파일 경로가 포함되어 있습니다."}
+        (let [stage (api-file-command "add" safe)]
+          (if (not (= (api-code stage) 0))
+            stage
+            (api-command (str "git commit --only -m " (api-shell-quote clean-message) " -- " (str-join (map api-shell-quote safe) " ")))))))))
+
 (defn api-root-allowed [root]
   (let [candidate (api-resolve-directory root)
         configured (filter (fn [allowed] (> (length (str-trim allowed)) 0)) (regex_split fl-git-roots ":"))]
@@ -217,6 +229,27 @@
 (defn api-context-json [root branch remote status log]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
 
+(defn api-context-cards [root branch remote status diff commits github sync conflicts branches]
+  [{"number" "01" "key" "repo:root" "title" "저장소 경로" "content" root}
+   {"number" "02" "key" "repo:branch" "title" "현재 branch" "content" branch}
+   {"number" "03" "key" "repo:remote" "title" "Remote" "content" remote}
+   {"number" "04" "key" "repo:sync" "title" "Ahead / Behind" "content" (str "ahead=" (get sync "ahead") " behind=" (get sync "behind") " upstream=" (get sync "upstream"))}
+   {"number" "05" "key" "changes:files" "title" "변경 파일" "content" (str-join (map (fn [file] (str (get file "kind") " " (get file "path"))) (or (api-status-files) [])) "\n")}
+   {"number" "06" "key" "diff:current" "title" "현재 Diff" "content" diff}
+   {"number" "07" "key" "github:status" "title" "GitHub 연결" "content" (str (get github "name") " connected=" (get github "connected"))}
+   {"number" "08" "key" "commits:recent" "title" "최근 커밋" "content" (str-join (map (fn [commit] (str (get commit "hash") " " (get commit "message"))) (or commits [])) "\n")}
+   {"number" "09" "key" "remote:conflicts" "title" "충돌 파일" "content" (str-join (or conflicts []) "\n")}
+   {"number" "10" "key" "repo:branches" "title" "Branch 목록" "content" (str-join (or branches []) "\n")}])
+
+(defn api-context-markdown [cards]
+  (str-join (map (fn [card] (str "## " (get card "number") " · " (get card "title") " [" (get card "key") "]\n" (or (get card "content") ""))) (or cards [])) "\n\n"))
+
+(defn api-context-select [cards keys]
+  (filter
+    (fn [card]
+      (> (length (filter (fn [key] (= key (get card "key"))) (or keys []))) 0))
+    (or cards [])))
+
 (defn api-commit-list []
   (let [result (api-run "git --no-pager log --date=short --pretty=format:'%H~%ad~%an~%s' -12")
         rows (filter (fn [row] (> (length (str-trim row)) 0)) (regex_split (api-out result) "\\n"))]
@@ -247,6 +280,19 @@
     {"upstream" (if (= (api-code upstream) 0) (api-out upstream) "")
      "ahead" (if (= (api-code counts) 0) (or (get parts 0) "0") "—")
      "behind" (if (= (api-code counts) 0) (or (get parts 1) "0") "—")}))
+
+(defn api-conflict-files []
+  (let [result (api-run "git diff --name-only --diff-filter=U")]
+    (api-file-lines result)))
+
+(defn api-branch-valid [name]
+  (let [clean (str-trim (str name))
+        result (if (= clean "") {"code" 1} (api-run (str "git check-ref-format --branch " (api-shell-quote clean))))]
+    (and (> (length clean) 0) (= (api-code result) 0))))
+
+(defn api-branch-list []
+  (let [result (api-run "git branch --format='%(refname:short)'")]
+    (api-file-lines result)))
 
 (defn api-file-lines [result]
   (filter (fn [line] (> (length (str-trim line)) 0)) (regex_split (api-out result) "\\n")))
@@ -344,17 +390,22 @@
         log-result (api-run "git --no-pager log --oneline --decorate -12")
         commits (api-commit-list)
         files (api-status-files)
+        conflicts (api-conflict-files)
+        branches (api-branch-list)
         github (api-github-info)
         sync (api-sync-info)
         root (api-out root-result)
         branch (api-out branch-result)
         remote (api-out remote-result)
         status (api-out status-result)
-        log (api-out log-result)]
+        log (api-out log-result)
+        context-cards (api-context-cards root branch remote status (api-out diff-result) commits github sync conflicts branches)]
     {"ok" true "message" (or message "") "root" root "branch" branch
      "remote" remote "status" status "files" files "diff" (api-out diff-result) "log" log "commits" commits
-     "github" github "sync" sync
-     "context_json" (api-context-json root branch remote status log)}))
+     "github" github "sync" sync "conflicts" conflicts "branches" branches
+     "context_json" (api-context-json root branch remote status log)
+     "context_cards" context-cards
+     "context_available_keys" (map (fn [card] (get card "key")) context-cards)}))
 
 (defn render [req]
   (server-json (api-payload "")))
@@ -383,6 +434,13 @@
           (server-json (api-file-content (get body "side") (get body "path") upstream)))
       (= action "compare-file-content")
         (server-json (api-file-compare-content (get body "path")))
+      (= action "context")
+        (let [snapshot (api-payload "")
+              cards (api-context-select (get snapshot "context_cards") (get body "keys"))]
+          (server-json {"ok" true "cards" cards
+                        "available_keys" (get snapshot "context_available_keys")
+                        "markdown" (api-context-markdown cards)
+                        "ai_instruction" "선택한 카드만 기준으로 답변하세요."}))
       (= action "project-setup")
         (let [created (api-project-setup (get body "parent") (get body "name") (get body "github_name") (get body "visibility") (get body "readme") (get body "gitignore_template") (get body "initial_push"))]
           (if (= (get created "ok") true)
@@ -427,13 +485,25 @@
       (= action "unstage-files")
         (let [r (api-file-command "reset" (get body "paths"))]
           (if (= (api-code r) 0) (server-json (api-payload "선택한 파일의 Stage를 취소했습니다.")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+      (= action "create-branch")
+        (let [name (str-trim (str (get body "name")))]
+          (if (not (api-branch-valid name))
+            (server-json {"ok" false "error" "유효하지 않은 branch 이름입니다."} 400)
+            (let [r (api-command (str "git switch -c " (api-shell-quote name)))]
+              (if (= (api-code r) 0) (server-json (api-payload (str "branch를 생성하고 전환했습니다: " name))) (server-json {"ok" false "error" (or (get r "stderr") "branch 생성에 실패했습니다.")} 400)))))
+      (= action "switch-branch")
+        (let [name (str-trim (str (get body "name")))]
+          (if (not (api-branch-valid name))
+            (server-json {"ok" false "error" "유효하지 않은 branch 이름입니다."} 400)
+            (let [r (api-command (str "git switch -- " (api-shell-quote name)))]
+              (if (= (api-code r) 0) (server-json (api-payload (str "branch를 전환했습니다: " name))) (server-json {"ok" false "error" (or (get r "stderr") "branch 전환에 실패했습니다.")} 400)))))
       (= action "fetch")
         (let [r (api-command "git fetch --all --prune")]
           (if (= (api-code r) 0) (server-json (api-payload "Fetch 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
       (= action "pull")
         (if (= (get body "confirm") true)
           (let [r (api-command "git pull")]
-            (if (= (api-code r) 0) (server-json (api-payload "Pull 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+            (if (= (api-code r) 0) (server-json (api-payload "Pull 완료")) (server-json {"ok" false "error" (get r "stderr") "conflicts" (api-conflict-files)} 400)))
           (server-json {"ok" false "error" "Pull은 confirm=true가 필요합니다."} 400))
       (= action "push")
         (if (= (get body "confirm") true)
@@ -448,6 +518,11 @@
               (if (= (api-code r) 0)
                 (server-json (api-payload "커밋 완료"))
                 (server-json {"ok" false "error" (or (get r "stderr") (get r "stdout"))} 400)))))
+      (= action "commit-selected")
+        (let [r (api-commit-selected (get body "message") (get body "paths"))]
+          (if (= (api-code r) 0)
+            (server-json (api-payload "선택한 파일을 커밋했습니다."))
+            (server-json {"ok" false "error" (or (get r "stderr") (get r "stdout"))} 400)))
       (= action "commit-push")
         (if (= (get body "confirm") true)
           (let [message (str-trim (or (get body "message") ""))]
