@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+RUNNER="${FREELANG_AFJ_RUNNER:-/home/kim/kim/platform/freelang-afj/bootstrap.js}"
+TEST_ROOT="${FREELANG_TEST_ROOT:-$ROOT/tests}"
+
+if [[ ! -f "$RUNNER" ]]; then
+  echo "FREELANG_TEST=BLOCKED"
+  echo "CAUSE=AFJ runner not found: $RUNNER" >&2
+  exit 2
+fi
+
+if [[ ! -d "$TEST_ROOT" ]]; then
+  echo "FREELANG_TEST=BLOCKED"
+  echo "CAUSE=test directory not found: $TEST_ROOT" >&2
+  exit 2
+fi
+
+mapfile -t TEST_FILES < <(find "$TEST_ROOT" -type f -name '*.test.fl' -print | sort)
+
+if [[ "${#TEST_FILES[@]}" -eq 0 ]]; then
+  echo "FREELANG_TEST=NO_TESTS"
+  exit 0
+fi
+
+for test_file in "${TEST_FILES[@]}"; do
+  relative="${test_file#"$ROOT/"}"
+  echo "[fl-test] check $relative"
+  node "$RUNNER" check "$test_file"
+
+  output_file="$(mktemp)"
+  trap 'rm -f "$output_file"' EXIT
+  echo "[fl-test] run $relative"
+  if ! node "$RUNNER" run "$test_file" >"$output_file" 2>&1; then
+    cat "$output_file"
+    echo "FREELANG_TEST=FAIL"
+    exit 1
+  fi
+  cat "$output_file"
+  if ! grep -Eq '^Test Results: [0-9]+/[0-9]+ passed$' "$output_file" || grep -q 'FAILED' "$output_file"; then
+    echo "[fl-test] missing passing summary: $relative" >&2
+    echo "FREELANG_TEST=FAIL"
+    exit 1
+  fi
+done
+
+echo "FREELANG_TEST=PASS"

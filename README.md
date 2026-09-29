@@ -21,6 +21,22 @@ node /home/kim/kim/platform/freelang-afj/bootstrap.js check src/main.fl
 node /home/kim/kim/platform/freelang-afj/bootstrap.js run src/main.fl --help
 ```
 
+## 테스트
+
+FreeLang 테스트는 AFJ 공용 `deftest`/`is`/`is=`/`run-tests` 모델을 사용한다.
+`tests/*.test.fl` 파일을 자동 발견해 문법 검사와 실행을 함께 수행한다.
+
+```bash
+./scripts/fl-test
+npm test
+```
+
+기존 전체 회귀 검증은 다음 명령으로 실행한다.
+
+```bash
+./scripts/check.sh
+```
+
 ## 목표 명령
 
 ```bash

@@ -1,0 +1,7 @@
+{
+  "name": "fl-git",
+  "private": true,
+  "scripts": {
+    "test": "./scripts/fl-test"
+  }
+}
