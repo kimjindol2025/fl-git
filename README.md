@@ -42,6 +42,16 @@ fl-git branch-delete <이름> --yes
 ## 브라우저 UI
 
 ```bash
+./scripts/fl-dev
+```
+
+개발 서버는 `.flx`/호스트 경계 파일을 감시하고 변경 시 Front 빌드와 런타임을
+재시작한다. 생성되는 `public/app.css`는 감시하지 않아 자기 재빌드 루프를
+만들지 않는다. 포트는 `PORT=40860 ./scripts/fl-dev`처럼 바꿀 수 있다.
+
+운영 또는 PM2에서 사용하는 정적 실행은 다음 명령을 사용한다.
+
+```bash
 ./scripts/fl-git-web
 ```
 

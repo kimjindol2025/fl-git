@@ -4,6 +4,6 @@
   "scripts": {
     "build": "PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node fl-front-build.js",
     "start": "FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node fl-front-build.js && FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node runtime/bootstrap.js run _app.fl",
-    "dev": "FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node dev-server.js"
+    "dev": "../scripts/fl-dev"
   }
 }
