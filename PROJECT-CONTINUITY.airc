@@ -1,0 +1,195 @@
+{
+  "$": "airc-spec",
+  "version": "0.1.0",
+  "project": "fl-git-project-continuity",
+  "date": "2026-09-29",
+  "cmd": "python3 -m json.tool PROJECT-CONTINUITY.airc",
+
+  "identity": {
+    "what": "여러 FreeLang 프로젝트의 계승 맥락을 보존하고 새 프로젝트에 안전하게 전달하는 운영 규칙",
+    "why": "프로젝트를 이어갈 때마다 목적·상태·결정·금지사항을 다시 설명하는 비용을 없애기 위해",
+    "for": "여러 프로젝트를 병행하고 기존 프로젝트를 연장하는 사용자와 다음 Codex 세션",
+    "not": "모든 세션 로그를 저장하는 기록 저장소, 사용자 승인 없이 프로젝트 방향을 바꾸는 자동 관리자"
+  },
+
+  "hot": "task-004",
+
+  "constitution": {
+    "1": "프로젝트 목적·범위·현재 상태·금지사항은 다음 세션이 먼저 읽을 수 있어야 한다",
+    "2": "기존 프로젝트의 계승과 새 프로젝트의 분기를 문서에서 명시적으로 구분한다",
+    "3": "사용자 의도는 원문 quote로 보존하고 요약을 원문 대신 사용하지 않는다",
+    "4": "결정에는 why와 provenance를 남긴다",
+    "5": "문서는 현재 사실과 검증 전 가정을 구분한다",
+    "6": "기존 변경분과 기존 결정을 임의로 덮어쓰거나 되돌리지 않는다",
+    "7": "프로젝트 정체성 변경은 사용자 협의 후에만 확정한다"
+  },
+
+  "nodes": {
+    "u-001": {
+      "t": "user_intent",
+      "v": "프로젝트 계승 맥락을 반복 설명해야 하는 불편함을 해결하고 싶다",
+      "quote": "미안 .. 우선 이건 접고. 내가 다양한 프로젝트를 하는중인데. 이걸 매번설명해되는 불편함이 있잖아? 기존 프로젝트 계승 부분 새로시작할 프로젝트인데 기존프로젝트 연장. 같은 부분은어떻게 처리해야되? 궁금해서 묻는거야",
+      "source": "user-conversation",
+      "immutable": true,
+      "lifecycle": {"state": "active", "since": "2026-09-29"}
+    },
+
+    "d-001": {
+      "t": "decision",
+      "v": "프로젝트별 정본 문서와 공통 계승 규칙을 결합한 프로젝트 맥락 운영체제를 사용한다",
+      "why": [
+        "프로젝트마다 목적·규칙·실행 명령이 다르므로 프로젝트별 정본이 필요하다",
+        "기존 프로젝트를 연장할 때는 결정·실패·현재 상태를 계승해야 한다",
+        "새 프로젝트로 분기할 때는 계승한 것과 새로 결정할 것을 구분해야 한다",
+        "다음 Codex 세션은 문서를 읽고 즉시 현재 작업을 파악해야 한다"
+      ],
+      "verified": true,
+      "lock": true,
+      "provenance": {"from": ["u-001"], "session": "2026-09-29"},
+      "lifecycle": {"state": "frozen", "since": "2026-09-29"}
+    },
+
+    "d-002": {
+      "t": "decision",
+      "v": "계승 문서는 identity, constitution, nodes, lock, graveyard, handoff를 제공한다",
+      "why": [
+        "identity는 이 프로젝트가 무엇인지 고정한다",
+        "constitution은 반복해서 지켜야 할 운영 규칙을 고정한다",
+        "nodes는 의도·결정·사실·가정·오류·작업의 근거를 연결한다",
+        "handoff는 다음 세션의 첫 행동을 결정한다"
+      ],
+      "verified": true,
+      "lock": true,
+      "provenance": {"from": ["d-001"], "session": "2026-09-29"},
+      "lifecycle": {"state": "frozen", "since": "2026-09-29"}
+    },
+
+    "f-001": {
+      "t": "fact",
+      "v": "fl-git는 기존 프로젝트를 화면에서 선택하고 Git 작업을 수행하는 FreeLang 기반 제품이다",
+      "verified": true,
+      "proof": ["AGENTS.md", "docs/PROJECT.md"],
+      "lifecycle": {"state": "active", "since": "2026-09-29"}
+    },
+
+    "f-002": {
+      "t": "fact",
+      "v": "POST /api action=ai-context는 AIRC 정본, hot 작업, lock, handoff, 변경 위험도와 읽기 전용 경계를 반환한다",
+      "verified": true,
+      "proof": ["web/pages/api.flx", "web/pages/index.flx", "POST /api action=ai-context HTTP 200 검증"],
+      "lifecycle": {"state": "active", "since": "2026-09-29"}
+    },
+
+    "f-003": {
+      "t": "fact",
+      "v": "POST /api action=ai-search는 files, history, continuity, all 범위의 읽기 전용 검색을 제공한다",
+      "verified": true,
+      "proof": ["web/pages/api.flx", "docs/AI-CONTEXT.md", "files/history/continuity POST 검증"],
+      "lifecycle": {"state": "active", "since": "2026-09-29"}
+    },
+
+    "f-004": {
+      "t": "fact",
+      "v": "remote_info는 origin host를 기준으로 github, forgejo, gitlab, unknown, none Provider를 판별하고 AI Context에 포함한다",
+      "verified": true,
+      "proof": ["web/pages/api.flx", "web/pages/index.flx", "docs/AI-CONTEXT.md"],
+      "lifecycle": {"state": "active", "since": "2026-09-29"}
+    },
+
+    "f-005": {
+      "t": "fact",
+      "v": "connect-remote는 confirm=true와 허용된 Provider URL을 요구하고, 기존 origin을 덮어쓰지 않으며, 임시 프로젝트 하위 저장소에서 Forgejo origin만 추가하고 Push하지 않는다",
+      "verified": true,
+      "proof": ["web/pages/api.flx", "web/pages/index.flx", "POST /api connect-remote confirm guard 검증", "임시 저장소 Forgejo 연결 검증"],
+      "lifecycle": {"state": "active", "since": "2026-09-29"}
+    },
+
+    "f-006": {
+      "t": "fact",
+      "v": "provider-repos는 GitHub와 Forgejo의 레포 목록을 서로 다른 읽기 전용 CLI로 조회하며, provider별 화면에서 독립 목록을 보여준다",
+      "verified": true,
+      "proof": ["web/pages/api.flx", "web/pages/index.flx", "POST /api provider-repos forgejo 50개 검증", "POST /api provider-repos github 50개 검증"],
+      "lifecycle": {"state": "active", "since": "2026-09-30"}
+    },
+
+    "task-001": {
+      "t": "task",
+      "v": "다음 세션 시작 시 PROJECT-CONTINUITY.airc의 identity·hot·lock·handoff를 먼저 읽는다",
+      "entry": ["PROJECT-CONTINUITY.airc"],
+      "check": ["python3 -m json.tool PROJECT-CONTINUITY.airc"],
+      "verified": true,
+      "next": ["task-002"]
+    },
+
+    "task-002": {
+      "t": "task",
+      "v": "기존 프로젝트를 계승할 때 계승 범위와 새로 결정할 범위를 기록한다",
+      "entry": ["docs/PROJECT.md", "docs/STATUS.md", "PROJECT-CONTINUITY.airc"],
+      "check": ["git diff -- PROJECT-CONTINUITY.airc docs/PROJECT.md docs/STATUS.md"],
+      "verified": false,
+      "next": ["task-003"]
+    },
+
+    "task-003": {
+      "t": "task",
+      "v": "새 프로젝트를 시작할 때 원 프로젝트와의 relation, 계승 사실, 분기 결정을 기록한다",
+      "entry": ["PROJECT-CONTINUITY.airc"],
+      "check": ["python3 -m json.tool PROJECT-CONTINUITY.airc"],
+      "verified": false,
+      "next": ["task-004"]
+    },
+
+    "task-004": {
+      "t": "task",
+      "v": "Chrome 실제 화면에서 AIRC 상태·변경 위험도·AI Context 카드·읽기 전용 API 안내를 검증한다",
+      "entry": ["web/pages/index.flx", "web/pages/api.flx", "PROJECT-CONTINUITY.airc"],
+      "check": ["Chrome에서 http://127.0.0.1:40850/ 접속", "AI Context 메뉴 전환", "카드 선택 및 선택 카드 전달 확인"],
+      "verified": false,
+      "blocked_reason": "Chrome 제어 초기화가 ‘Browser use requires a trusted Node REPL browser service’로 중단됨",
+      "next": []
+    }
+  },
+
+  "lock": [
+    {
+      "rule": "다음 세션이 프로젝트 목적과 현재 상태를 추측하게 만들지 않는다",
+      "why": "반복 설명 비용과 잘못된 계승을 줄이기 위해",
+      "source": "d-001",
+      "severity": 9
+    },
+    {
+      "rule": "기존 프로젝트의 결정·변경·실패를 새 프로젝트에 무조건 복사하지 않는다",
+      "why": "계승과 분기를 구분하지 않으면 낡은 전제가 새 프로젝트를 오염시키기 때문에",
+      "source": "d-001",
+      "severity": 9
+    },
+    {
+      "rule": "사용자 협의 없이 identity 또는 lock을 변경하지 않는다",
+      "why": "프로젝트 방향은 구현자가 단독으로 바꿀 수 없는 제품 결정이기 때문에",
+      "source": "d-001",
+      "severity": 10
+    }
+  ],
+
+  "graveyard": [
+    {
+      "idea": "모든 프로젝트를 하나의 전역 문서에만 기록한다",
+      "why": ["프로젝트 경계가 흐려짐", "현재 작업과 무관한 맥락이 섞임", "변경 영향 추적이 어려움"],
+      "final": true
+    },
+    {
+      "idea": "매 세션 전체 대화 로그를 그대로 계승한다",
+      "why": ["오래된 잡음이 누적됨", "현재 목적을 찾는 비용이 증가함", "민감한 정보가 불필요하게 전파될 수 있음"],
+      "final": true
+    }
+  ],
+
+  "handoff": {
+    "step1": "PROJECT-CONTINUITY.airc를 읽고 identity·constitution·hot을 확인한다",
+    "step2": "기존 프로젝트의 AGENTS.md, docs/PROJECT.md, docs/STATUS.md를 읽는다",
+    "step3": "이번 작업이 기존 프로젝트 연장인지 새 프로젝트 분기인지 판정한다",
+    "step4": "계승할 결정·사실·금지사항과 새로 정할 내용을 각각 기록한다",
+    "step5": "문서의 check 명령을 실행하고 검증되지 않은 내용은 assumption으로 남긴다",
+    "step6": "identity 또는 lock 변경이 필요하면 사용자와 먼저 협의한다"
+  }
+}

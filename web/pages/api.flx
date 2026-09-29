@@ -127,6 +127,37 @@
       {"ok" true "roots" roots "repositories" repos}
       {"ok" false "error" "FL_GIT_ROOTS에 *를 사용할 수 없습니다."})))
 
+(defn api-provider-repos [provider]
+  (let [kind (str-to-lower (str-trim (str provider)))
+        result (if (= kind "github")
+                 (api-run "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")
+                 (if (= kind "forgejo")
+                   (api-run "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated")
+                   {"code" 2 "stderr" "지원하지 않는 Git provider입니다."}))
+        parsed (if (= (api-code result) 0) (json_parse (api-out result)) [])
+        repos (map (fn [item]
+                     (if (= kind "github")
+                       {"provider" "github"
+                        "repository" (or (get item "nameWithOwner") "")
+                        "name" (or (get item "nameWithOwner") "")
+                        "remote" (or (get item "url") "")
+                        "url" (or (get item "url") "")
+                        "description" (or (get item "description") "")
+                        "private" (or (get item "isPrivate") false)
+                        "updated" (or (get item "updatedAt") "")}
+                       {"provider" "forgejo"
+                        "repository" (str (or (get item "owner") "") "/" (or (get item "name") ""))
+                        "name" (or (get item "name") "")
+                        "remote" (or (get item "ssh") (get item "url") "")
+                        "url" (or (get item "url") "")
+                        "description" (or (get item "description") "")
+                        "private" false
+                        "updated" (or (get item "updated") "")}))
+                   parsed)]
+    (if (= (api-code result) 0)
+      {"ok" true "provider" kind "repositories" repos}
+      {"ok" false "provider" kind "error" (or (get result "stderr") "provider 레포 목록을 불러오지 못했습니다.")})))
+
 (defn api-create-repo [parent name]
   (let [base (str-trim (str parent))
         repo-name (str-trim (str name))
@@ -226,20 +257,122 @@
                   {"ok" false "error" (or (get pushed "stderr") "GitHub 연결은 완료했지만 첫 Push에 실패했습니다.")}
                   (api-payload (if (= initial-push true) "현재 저장소를 GitHub에 연결하고 Push했습니다." "현재 저장소를 GitHub에 연결했습니다.")))))))))))
 
-(defn api-context-json [root branch remote status log]
-  (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
+(defn api-remote-url-valid [remote]
+  (let [clean (str-trim (str remote))
+        lower (str-to-lower clean)]
+    (and (> (length clean) 0)
+         (not (str-includes clean " "))
+         (not (str-includes clean "\n"))
+         (not (str-includes clean ";"))
+         (not (str-includes clean "|"))
+         (not (str-includes clean "&&"))
+         (or (str-starts-with lower "https://github.com/")
+             (str-starts-with lower "git@github.com:")
+             (str-starts-with lower "https://fg.dclub.kr/")
+             (str-starts-with lower "ssh://git@fg.dclub.kr/")
+             (str-starts-with lower "ssh://git@fg.dclub.kr:")
+             (str-starts-with lower "forgejo-dclub:")
+             (str-starts-with lower "https://gitlab.com/")
+             (str-starts-with lower "git@gitlab.com:")))))
 
-(defn api-context-cards [root branch remote status diff commits github sync conflicts branches]
-  [{"number" "01" "key" "repo:root" "title" "저장소 경로" "content" root}
-   {"number" "02" "key" "repo:branch" "title" "현재 branch" "content" branch}
-   {"number" "03" "key" "repo:remote" "title" "Remote" "content" remote}
-   {"number" "04" "key" "repo:sync" "title" "Ahead / Behind" "content" (str "ahead=" (get sync "ahead") " behind=" (get sync "behind") " upstream=" (get sync "upstream"))}
-   {"number" "05" "key" "changes:files" "title" "변경 파일" "content" (str-join (map (fn [file] (str (get file "kind") " " (get file "path"))) (or (api-status-files) [])) "\n")}
-   {"number" "06" "key" "diff:current" "title" "현재 Diff" "content" diff}
-   {"number" "07" "key" "github:status" "title" "GitHub 연결" "content" (str (get github "name") " connected=" (get github "connected"))}
-   {"number" "08" "key" "commits:recent" "title" "최근 커밋" "content" (str-join (map (fn [commit] (str (get commit "hash") " " (get commit "message"))) (or commits [])) "\n")}
-   {"number" "09" "key" "remote:conflicts" "title" "충돌 파일" "content" (str-join (or conflicts []) "\n")}
-   {"number" "10" "key" "repo:branches" "title" "Branch 목록" "content" (str-join (or branches []) "\n")}])
+(defn api-connect-remote [remote-url expected-provider]
+  (let [ref (str-trim (str remote-url))
+        expected (str-to-lower (str-trim (str expected-provider)))
+        detected (api-remote-provider ref)
+        root-result (api-run "git rev-parse --show-toplevel")
+        root (api-out root-result)
+        origin-result (api-run "git remote get-url origin")]
+    (if (not (api-remote-url-valid ref))
+      {"ok" false "error" "GitHub, Forgejo, GitLab의 저장소 URL 또는 SSH alias만 허용합니다."}
+      (if (and (not (= expected "")) (not (= expected detected)))
+        {"ok" false "error" (str "현재 페이지는 " expected " 전용입니다. 입력한 Remote는 " detected " 형식입니다.")}
+        (if (not (= (api-code root-result) 0))
+        {"ok" false "error" "현재 선택된 폴더가 Git 저장소가 아닙니다."}
+        (if (not (api-root-allowed root))
+          {"ok" false "error" "허용된 폴더 밖의 저장소입니다."}
+          (if (= (api-code origin-result) 0)
+            {"ok" false "error" (str "이미 origin이 연결되어 있습니다: " (api-out origin-result))}
+            (let [linked (api-run (str "git remote add origin " (api-shell-quote ref)))]
+              (if (= (api-code linked) 0)
+                (api-payload (str "Remote 연결 완료: " (api-remote-provider ref) "; Push는 실행하지 않았습니다."))
+                {"ok" false "error" (or (get linked "stderr") "Remote 연결에 실패했습니다.")})))))))))
+
+(defn api-continuity []
+  (let [result (api-run "if test -f PROJECT-CONTINUITY.airc; then cat -- PROJECT-CONTINUITY.airc; else printf '{}'; fi")
+        raw (api-out result)
+        document (json_parse raw)
+        identity (or (get document "identity") {})
+        nodes (or (get document "nodes") {})
+        hot (or (get document "hot") "")
+        hot-node (or (get nodes hot) {})
+        constitution (or (get document "constitution") {})
+        handoff (or (get document "handoff") {})
+        locks (or (get document "lock") [])]
+    {"available" (> (length (or (get identity "what") "")) 0)
+     "source" "PROJECT-CONTINUITY.airc"
+     "identity" identity
+     "constitution" constitution
+     "hot" hot
+     "hot_node" hot-node
+     "locks" locks
+     "handoff" handoff}))
+
+(defn api-airc-documents []
+  (map
+    (fn [path]
+      (let [result (api-command (str "cat -- " (api-shell-quote path)))
+            content (api-out result)]
+        {"path" path
+         "available" (> (length content) 0)
+         "content" content}))
+    ["PROJECT-CONTINUITY.airc" "SPEC.airc"]))
+
+(defn api-ai-search [query scope]
+  (let [clean (str-trim (str query))
+        requested (str-trim (str scope))
+        selected (if (= requested "files") "files"
+                   (if (= requested "history") "history"
+                     (if (= requested "continuity") "continuity" "all")))]
+    (if (= clean "")
+      {"ok" false "error" "검색어가 필요합니다."}
+      (let [file-result (if (or (= selected "files") (= selected "all"))
+                          (api-command (str "git grep -n -I -F -- " (api-shell-quote clean) " -- . | head -n 80"))
+                          {"code" 0 "stdout" "" "stderr" ""})
+            history-result (if (or (= selected "history") (= selected "all"))
+                             (api-command (str "git log --all --oneline --regexp-ignore-case --grep=" (api-shell-quote clean) " -n 40"))
+                             {"code" 0 "stdout" "" "stderr" ""})
+            continuity-result (if (or (= selected "continuity") (= selected "all"))
+                               (api-command (str "if test -f PROJECT-CONTINUITY.airc; then grep -n -F -- " (api-shell-quote clean) " PROJECT-CONTINUITY.airc | head -n 80; fi"))
+                               {"code" 0 "stdout" "" "stderr" ""})]
+        {"ok" true
+         "mode" "read-only"
+         "query" clean
+         "scope" selected
+         "files" (api-out file-result)
+         "history" (api-out history-result)
+         "continuity" (api-out continuity-result)
+         "ai_instruction" "검색 결과는 참고 자료입니다. 변경·커밋·Push·Pull은 이 검색 API에서 실행되지 않습니다."}))))
+
+(defn api-context-json [root branch remote status log continuity risk remote-info]
+  (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log
+                   "continuity" continuity "change_risk" risk "remote_info" remote-info}))
+
+(defn api-context-cards [root branch remote status diff commits github sync conflicts branches continuity risk remote-info]
+  [{"number" "01" "key" "continuity:identity" "title" "프로젝트 정체성" "content" (if (= (get continuity "available") true) (str (get (get continuity "identity") "what") "\n이유: " (get (get continuity "identity") "why")) "AIRC 정본 없음")}
+   {"number" "02" "key" "continuity:hot" "title" "현재 Hot 작업" "content" (if (= (get continuity "available") true) (str "hot=" (get continuity "hot") "\n" (get (get continuity "hot_node") "v") "\n검증: " (str-join (or (get (get continuity "hot_node") "check") []) "\n")) "AIRC 정본 없음")}
+   {"number" "03" "key" "continuity:locks" "title" "계승 Lock" "content" (if (= (get continuity "available") true) (str-join (map (fn [item] (str "[" (get item "severity") "] " (get item "rule") " — " (get item "why"))) (or (get continuity "locks") [])) "\n") "AIRC 정본 없음")}
+   {"number" "04" "key" "continuity:handoff" "title" "AI 인수인계" "content" (if (= (get continuity "available") true) (str-join [(get (get continuity "handoff") "step1") (get (get continuity "handoff") "step2") (get (get continuity "handoff") "step3") (get (get continuity "handoff") "step4") (get (get continuity "handoff") "step5") (get (get continuity "handoff") "step6")] "\n") "AIRC 정본 없음")}
+   {"number" "05" "key" "ai:change-risk" "title" "변경 위험도" "content" (str "level=" (get risk "level") "\n" (get risk "reason") "\n변경 파일=" (get risk "file_count") " 민감 파일=" (get risk "sensitive_count") " 충돌=" (get risk "conflict_count"))}
+   {"number" "06" "key" "repo:root" "title" "저장소 경로" "content" root}
+   {"number" "07" "key" "repo:branch" "title" "현재 branch" "content" branch}
+   {"number" "08" "key" "repo:remote" "title" "Remote" "content" (str (get remote-info "provider") " · " (get remote-info "repository") "\n" remote)}
+   {"number" "09" "key" "repo:sync" "title" "Ahead / Behind" "content" (str "ahead=" (get sync "ahead") " behind=" (get sync "behind") " upstream=" (get sync "upstream"))}
+   {"number" "10" "key" "changes:files" "title" "변경 파일" "content" (str-join (map (fn [file] (str (get file "kind") " " (get file "path"))) (or (api-status-files) [])) "\n")}
+   {"number" "11" "key" "diff:current" "title" "현재 Diff" "content" diff}
+   {"number" "12" "key" "remote:status" "title" "Remote Provider" "content" (str "provider=" (get remote-info "provider") " host=" (get remote-info "host") " configured=" (get remote-info "configured"))}
+   {"number" "13" "key" "commits:recent" "title" "최근 커밋" "content" (str-join (map (fn [commit] (str (get commit "hash") " " (get commit "message"))) (or commits [])) "\n")}
+   {"number" "14" "key" "remote:conflicts" "title" "충돌 파일" "content" (str-join (or conflicts []) "\n")}
+   {"number" "15" "key" "repo:branches" "title" "Branch 목록" "content" (str-join (or branches []) "\n")}])
 
 (defn api-context-markdown [cards]
   (str-join (map (fn [card] (str "## " (get card "number") " · " (get card "title") " [" (get card "key") "]\n" (or (get card "content") ""))) (or cards [])) "\n\n"))
@@ -258,7 +391,35 @@
              {"hash" (or (get parts 0) "")
               "date" (or (get parts 1) "")
               "author" (or (get parts 2) "")
-              "message" (or (get parts 3) "")})) rows)))
+             "message" (or (get parts 3) "")})) rows)))
+
+(defn api-remote-provider [remote]
+  (let [value (str-to-lower (str-trim (str remote)))]
+    (if (= value "") "none"
+      (if (or (str-includes value "github.com") (str-includes value "github:")) "github"
+        (if (or (str-includes value "fg.dclub.kr") (str-includes value "forgejo-dclub:")) "forgejo"
+          (if (str-includes value "gitlab.com") "gitlab" "unknown"))))))
+
+(defn api-remote-info [remote branch sync]
+  (let [clean (str-trim (str remote))
+        provider (api-remote-provider clean)
+        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split clean "[/:]"))
+        repo-part (if (> (length parts) 0) (last parts) "")
+        repo-name (str-replace-in repo-part ".git" "")
+        owner (if (> (length parts) 1) (get parts (- (length parts) 2)) "")
+        repository (if (> (length owner) 0) (str owner "/" repo-name) repo-name)
+        host (if (= provider "forgejo") "fg.dclub.kr"
+               (if (= provider "github") "github.com"
+                 (if (= provider "gitlab") "gitlab.com" "")))]
+    {"provider" provider
+     "host" host
+     "remote" clean
+     "repository" repository
+     "branch" branch
+     "upstream" (get sync "upstream")
+     "ahead" (get sync "ahead")
+     "behind" (get sync "behind")
+     "configured" (> (length clean) 0)}))
 
 (defn api-github-info []
   (let [result (api-run "gh repo view --json nameWithOwner,isPrivate,defaultBranchRef,url,description")
@@ -276,7 +437,7 @@
 (defn api-sync-info []
   (let [upstream (api-run "git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")
         counts (api-run "git rev-list --left-right --count HEAD...@{upstream}")
-        parts (regex_split (api-out counts) " ")]
+        parts (regex_split (api-out counts) "[ \\t]+")]
     {"upstream" (if (= (api-code upstream) 0) (api-out upstream) "")
      "ahead" (if (= (api-code counts) 0) (or (get parts 0) "0") "—")
      "behind" (if (= (api-code counts) 0) (or (get parts 1) "0") "—")}))
@@ -342,6 +503,23 @@
          (not (str-includes clean "\\\\"))
          (not (api-sensitive-file clean)))))
 
+(defn api-change-risk [files conflicts]
+  (let [items (or files [])
+        conflict-items (or conflicts [])
+        sensitive (filter (fn [file] (api-sensitive-file (get file "path"))) items)
+        file-count (length items)
+        sensitive-count (length sensitive)
+        conflict-count (length conflict-items)]
+    {"level" (if (> conflict-count 0) "high"
+               (if (> sensitive-count 0) "high"
+                 (if (> file-count 0) "medium" "low")))
+     "reason" (if (> conflict-count 0) "충돌 파일이 있어 먼저 충돌을 해결해야 합니다."
+                 (if (> sensitive-count 0) "민감 파일 변경이 포함되어 내용을 확인한 뒤 승인해야 합니다."
+                   (if (> file-count 0) "미커밋 변경이 있어 Diff 확인 후 작업해야 합니다." "작업 트리가 깨끗합니다.")))
+     "file_count" file-count
+     "sensitive_count" sensitive-count
+     "conflict_count" conflict-count}))
+
 (defn api-file-content [side path upstream]
   (let [clean (str-trim (str path))]
     (if (not (api-safe-file-path clean))
@@ -384,7 +562,7 @@
 (defn api-payload [message]
   (let [root-result (api-run "git rev-parse --show-toplevel")
         branch-result (api-run "git branch --show-current")
-        remote-result (api-run "git remote -v")
+        remote-result (api-run "git remote get-url origin")
         status-result (api-run "git status --short --branch")
         diff-result (api-run "git --no-pager diff --stat && git --no-pager diff")
         log-result (api-run "git --no-pager log --oneline --decorate -12")
@@ -394,16 +572,21 @@
         branches (api-branch-list)
         github (api-github-info)
         sync (api-sync-info)
+        continuity (api-continuity)
+        airc-documents (api-airc-documents)
+        risk (api-change-risk files conflicts)
         root (api-out root-result)
         branch (api-out branch-result)
         remote (api-out remote-result)
         status (api-out status-result)
         log (api-out log-result)
-        context-cards (api-context-cards root branch remote status (api-out diff-result) commits github sync conflicts branches)]
+        remote-info (api-remote-info remote branch sync)
+        context-cards (api-context-cards root branch remote status (api-out diff-result) commits github sync conflicts branches continuity risk remote-info)]
     {"ok" true "message" (or message "") "root" root "branch" branch
      "remote" remote "status" status "files" files "diff" (api-out diff-result) "log" log "commits" commits
      "github" github "sync" sync "conflicts" conflicts "branches" branches
-     "context_json" (api-context-json root branch remote status log)
+     "continuity" continuity "airc_documents" airc-documents "change_risk" risk "remote_info" remote-info
+     "context_json" (api-context-json root branch remote status log continuity risk remote-info)
      "context_cards" context-cards
      "context_available_keys" (map (fn [card] (get card "key")) context-cards)}))
 
@@ -418,6 +601,11 @@
         (server-json (api-list-folders (get body "path")))
       (= action "list-repos")
         (server-json (api-list-repos))
+      (= action "provider-repos")
+        (let [listed (api-provider-repos (get body "provider"))]
+          (if (= (get listed "ok") true)
+            (server-json listed)
+            (server-json listed 400)))
       (= action "commit-detail")
         (let [hash (str-trim (str (get body "hash")))
               result (api-command (str "git --no-pager show --no-ext-diff --format=fuller --stat --patch " (api-shell-quote hash)))]
@@ -441,6 +629,24 @@
                         "available_keys" (get snapshot "context_available_keys")
                         "markdown" (api-context-markdown cards)
                         "ai_instruction" "선택한 카드만 기준으로 답변하세요."}))
+      (= action "ai-context")
+        (let [snapshot (api-payload "")
+              cards (get snapshot "context_cards")]
+          (server-json {"ok" true
+                        "mode" "read-only"
+                        "source" "fl-git"
+                        "continuity" (get snapshot "continuity")
+                        "change_risk" (get snapshot "change_risk")
+                        "remote_info" (get snapshot "remote_info")
+                        "available_keys" (get snapshot "context_available_keys")
+                        "cards" cards
+                        "markdown" (api-context-markdown cards)
+                        "ai_instruction" "이 응답은 현재 저장소와 AIRC 정본의 읽기 전용 상태입니다. 변경 작업은 사용자 승인과 별도 UI 작업을 거친 뒤에만 실행하세요."}))
+      (= action "ai-search")
+        (let [result (api-ai-search (get body "query") (get body "scope"))]
+          (if (= (get result "ok") true)
+            (server-json result)
+            (server-json result 400)))
       (= action "project-setup")
         (let [created (api-project-setup (get body "parent") (get body "name") (get body "github_name") (get body "visibility") (get body "readme") (get body "gitignore_template") (get body "initial_push"))]
           (if (= (get created "ok") true)
@@ -451,6 +657,13 @@
           (if (= (get connected "ok") true)
             (server-json connected)
             (server-json connected 400)))
+      (= action "connect-remote")
+        (if (= (get body "confirm") true)
+          (let [connected (api-connect-remote (get body "remote_url") (get body "provider"))]
+            (if (= (get connected "ok") true)
+              (server-json connected)
+              (server-json connected 400)))
+          (server-json {"ok" false "error" "Remote 연결은 confirm=true가 필요합니다."} 400))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
