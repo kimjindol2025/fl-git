@@ -1,0 +1,58 @@
+; AI Context sync / commits fixture (네트워크 없음)
+(load "../src/provider-context.fl")
+
+(define sync-match (provider-sync-build "abc" "abc" "origin/main" "0" "0"))
+(define sync-miss (provider-sync-build "abc" "def" "origin/main" "1" "0"))
+(define sync-empty (provider-sync-build "abc" "" "origin/main" "" ""))
+(define commits (provider-recent-commits-from-delimited "aaa~2026-10-01~kim~feat one\nbbb~2026-09-30~kim~test two\n"))
+(define onelines (provider-recent-commits-from-oneline "9700439 feat: add adapters\ndd5f145 test: runner\n"))
+(define fields (provider-context-fields
+                {"provider" "github" "host" "github.com" "owner" "a" "repository" "b" "remote" "https://github.com/a/b.git" "branch" "main" "upstream" "origin/main" "auth" "unknown" "name" "origin"}
+                [{"provider" "forgejo" "host" "fg.dclub.kr" "owner" "kim" "repository" "x" "remote" "forgejo-dclub:kim/x.git" "branch" "master" "upstream" "forgejo/master" "auth" "unknown" "name" "forgejo"}
+                 {"provider" "github" "host" "github.com" "owner" "a" "repository" "x" "remote" "https://github.com/a/x.git" "branch" "master" "upstream" "github/master" "auth" "unknown" "name" "github"}]
+                sync-match
+                commits))
+
+(deftest "sync match true"
+  (is= true (get sync-match "match")))
+
+(deftest "sync mismatch false"
+  (is= false (get sync-miss "match")))
+
+(deftest "sync empty remote false"
+  (is= false (get sync-empty "match")))
+
+(deftest "sync heads preserved"
+  (do
+    (is= "abc" (get sync-match "local_head"))
+    (is= "abc" (get sync-match "remote_head"))
+    (is= "origin/main" (get sync-match "upstream"))))
+
+(deftest "delimited commits"
+  (do
+    (is= 2 (length commits))
+    (is= "aaa" (get (get commits 0) "hash"))
+    (is= "feat one" (get (get commits 0) "message"))
+    (is= "kim" (get (get commits 0) "author"))))
+
+(deftest "oneline commits"
+  (do
+    (is= 2 (length onelines))
+    (is= "9700439" (get (get onelines 0) "hash"))
+    (is= "feat: add adapters" (get (get onelines 0) "message"))))
+
+(deftest "context fields include stage4 keys"
+  (do
+    (is (> (length (get fields "remote_info")) 0))
+    (is= 2 (length (get fields "remotes")))
+    (is= true (get (get fields "sync") "match"))
+    (is= 2 (length (get fields "recent_commits")))))
+
+(deftest "providers stay separated in remotes"
+  (do
+    (is= "forgejo" (get (get (get fields "remotes") 0) "provider"))
+    (is= "github" (get (get (get fields "remotes") 1) "provider"))
+    (is (not (= (get (get (get fields "remotes") 0) "provider")
+                (get (get (get fields "remotes") 1) "provider"))))))
+
+(run-tests)

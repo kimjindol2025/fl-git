@@ -20,10 +20,28 @@ Content-Type: application/json
 - `continuity.locks`: 계승하면 안 되는 금지·보호 규칙
 - `continuity.handoff`: 다음 세션 인수인계 절차
 - `remote_info`: Provider 공통 모델 (`provider`, `host`, `owner`, `repository`, `remote`, `branch`, `upstream`, `auth`) — 정본 [`PROVIDER-MODEL.md`](PROVIDER-MODEL.md)
+- `remotes`: 로컬 remote를 provider별로 분리한 배열 (GitHub와 Forgejo를 섞지 않음)
+- `sync`: `local_head` · `remote_head` · `match` · `upstream` · `ahead` · `behind`
+- `recent_commits`: `{hash,date,author,message}` 배열
 - `change_risk`: 변경 파일·민감 파일·충돌 기반 위험도
 - `cards`: 저장소 상태와 AIRC를 분리한 참고 카드
 - `markdown`: AI 프롬프트에 바로 붙일 수 있는 읽기용 문맥
 - `ai_instruction`: 읽기 전용 및 승인 경계
+
+CLI도 같은 핵심 필드를 제공한다.
+
+```bash
+fl-git context-json
+```
+
+```json
+{
+  "remote_info": {"provider": "github", "host": "github.com", "owner": "...", "repository": "..."},
+  "remotes": [{"provider": "github", "...": "..."}],
+  "sync": {"local_head": "...", "remote_head": "...", "match": true},
+  "recent_commits": [{"hash": "...", "message": "..."}]
+}
+```
 
 ## 저장소 검색
 

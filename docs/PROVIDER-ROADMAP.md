@@ -122,6 +122,9 @@ POST /api {"action":"provider-repos","provider":"forgejo"}
 
 ## 4단계 — AI Context 확장
 
+상태: **구현 완료**  
+정본: `src/provider-context.fl` · CLI `context-json` · Web `ai-context`
+
 기존 AI Context에 원격 정보를 **provider 분리**로 포함한다.
 
 ```json

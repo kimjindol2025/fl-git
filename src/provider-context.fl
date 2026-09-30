@@ -1,0 +1,64 @@
+;; AI Context 공통 조각 (4단계)
+;; remote_info / remotes / sync / recent_commits
+(load "./provider.fl")
+
+(defn provider-sync-build [local-head remote-head upstream ahead behind]
+  (let [local (str-trim (str local-head))
+        remote (str-trim (str remote-head))]
+    {"local_head" local
+     "remote_head" remote
+     "upstream" (str-trim (str (or upstream "")))
+     "ahead" (str (or ahead ""))
+     "behind" (str (or behind ""))
+     "match" (and (> (length local) 0)
+                  (> (length remote) 0)
+                  (= local remote))}))
+
+(defn provider-commit-from-delimited [row]
+  (let [parts (regex_split (str row) "~")]
+    {"hash" (or (get parts 0) "")
+     "date" (or (get parts 1) "")
+     "author" (or (get parts 2) "")
+     "message" (or (get parts 3) "")}))
+
+(defn provider-recent-commits-from-delimited [log-text]
+  (map provider-commit-from-delimited
+       (filter (fn [row] (> (length (str-trim row)) 0))
+               (regex_split (str log-text) "\\n"))))
+
+(defn provider-commit-from-oneline [row]
+  (let [trimmed (str-trim (str row))
+        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split trimmed "[ \\t]+"))
+        hash (if (> (length parts) 0) (str (get parts 0)) "")
+        message (if (<= (length parts) 1)
+                  ""
+                  (str-trim (substring trimmed (+ (length hash) 1) (length trimmed))))]
+    {"hash" hash
+     "date" ""
+     "author" ""
+     "message" message}))
+
+(defn provider-recent-commits-from-oneline [log-text]
+  (map provider-commit-from-oneline
+       (filter (fn [row] (> (length (str-trim row)) 0))
+               (regex_split (str log-text) "\\n"))))
+
+(defn provider-context-fields [remote-info remotes sync recent-commits]
+  {"remote_info" (or remote-info (provider-empty-model))
+   "remotes" (or remotes [])
+   "sync" (or sync (provider-sync-build "" "" "" "" ""))
+   "recent_commits" (or recent-commits [])})
+
+(defn provider-context-providers-separated? [remotes]
+  (let [items (or remotes [])
+        kinds (map (fn [item] (str (or (get item "provider") ""))) items)
+        unique (reduce (fn [acc kind]
+                         (if (or (= kind "")
+                                 (> (length (filter (fn [x] (= x kind)) acc)) 0))
+                           acc
+                           (concat acc [kind])))
+                       []
+                       kinds)]
+    ;; 서로 다른 provider가 섞여 있어도 각각 별도 항목이면 분리된 것으로 본다.
+    ;; 같은 provider 중복은 허용. 빈 provider만 실패.
+    (= (length (filter (fn [kind] (= kind "")) kinds)) 0)))

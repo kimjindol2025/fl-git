@@ -1,5 +1,6 @@
 ;; Git 업무 계층 — 모든 명령은 결과와 exit를 보존한다.
 (load "./provider-adapter.fl")
+(load "./provider-context.fl")
 
 (defn git-shell-quote [value]
   (str "'" (str-replace-all (str value) "'" "'\\''") "'"))
@@ -74,32 +75,31 @@
       (str-trim (or (get result "stdout") ""))
       "")))
 
-(defn git-context []
-  (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
-        branch (str-trim (git-capture "git branch --show-current"))
-        remote (git-capture "git remote -v")
-        upstream (git-upstream)
-        primary (provider-primary-model remote branch upstream)
-        status (git-capture "git status --short --branch")
-        log (git-capture "git --no-pager log -5 --oneline")]
-    (println "# fl-git 프로젝트 문맥")
-    (println "")
-    (println (str "- 브랜치: " branch))
-    (println (str "- 저장소 루트: " root))
-    (println (str "- provider: " (get primary "provider")))
-    (println (str "- host: " (get primary "host")))
-    (println (str "- repository: " (provider-full-name primary)))
-    (println (str "- upstream: " upstream))
-    (println "")
-    (println "## 원격")
-    (print remote)
-    (println "## 상태")
-    (print status)
-    (println "## 최근 커밋")
-    (print log)
-    0))
+(defn git-rev-parse [ref]
+  (let [result (git-run (str "git rev-parse " (git-shell-quote ref)))]
+    (if (= (or (get result "exit") -1) 0)
+      (str-trim (or (get result "stdout") ""))
+      "")))
 
-(defn git-context-json []
+(defn git-sync-info []
+  (let [upstream (git-upstream)
+        local-head (git-rev-parse "HEAD")
+        remote-head (if (= upstream "") "" (git-rev-parse upstream))
+        counts (git-run "git rev-list --left-right --count HEAD...@{upstream}")
+        parts (if (= (or (get counts "exit") -1) 0)
+                (regex_split (str-trim (or (get counts "stdout") "")) "[ \\t]+")
+                [])
+        ahead (if (> (length parts) 0) (str (get parts 0)) "")
+        behind (if (> (length parts) 1) (str (get parts 1)) "")]
+    (provider-sync-build local-head remote-head upstream ahead behind)))
+
+(defn git-recent-commits []
+  (let [result (git-run "git --no-pager log --date=short --pretty=format:'%H~%ad~%an~%s' -12")]
+    (if (= (or (get result "exit") -1) 0)
+      (provider-recent-commits-from-delimited (or (get result "stdout") ""))
+      [])))
+
+(defn git-ai-context-packet []
   (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
         branch (str-trim (git-capture "git branch --show-current"))
         remote (str-trim (git-capture "git remote -v"))
@@ -107,15 +107,44 @@
         remotes (provider-models-from-remote-v remote branch upstream)
         remote-info (provider-primary-model remote branch upstream)
         status (str-trim (git-capture "git status --short --branch"))
-        log (str-trim (git-capture "git --no-pager log -5 --oneline"))]
-    (println (json-stringify {"root" root
-                              "branch" branch
-                              "remote" remote
-                              "status" status
-                              "recent_log" log
-                              "remote_info" remote-info
-                              "remotes" remotes}))
+        sync (git-sync-info)
+        recent-commits (git-recent-commits)
+        recent-log (str-trim (git-capture "git --no-pager log -5 --oneline"))
+        fields (provider-context-fields remote-info remotes sync recent-commits)]
+    (obj-merge {"root" root
+                "branch" branch
+                "remote" remote
+                "status" status
+                "recent_log" recent-log}
+               fields)))
+
+(defn git-context []
+  (let [packet (git-ai-context-packet)
+        primary (get packet "remote_info")
+        sync (get packet "sync")]
+    (println "# fl-git 프로젝트 문맥")
+    (println "")
+    (println (str "- 브랜치: " (get packet "branch")))
+    (println (str "- 저장소 루트: " (get packet "root")))
+    (println (str "- provider: " (get primary "provider")))
+    (println (str "- host: " (get primary "host")))
+    (println (str "- repository: " (provider-full-name primary)))
+    (println (str "- upstream: " (get sync "upstream")))
+    (println (str "- local_head: " (get sync "local_head")))
+    (println (str "- remote_head: " (get sync "remote_head")))
+    (println (str "- head_match: " (get sync "match")))
+    (println "")
+    (println "## 원격 (provider 분리)")
+    (print (get packet "remote"))
+    (println "## 상태")
+    (print (get packet "status"))
+    (println "## 최근 커밋")
+    (print (get packet "recent_log"))
     0))
+
+(defn git-context-json []
+  (println (json-stringify (git-ai-context-packet)))
+  0)
 
 (defn git-provider-model []
   (let [branch (str-trim (git-capture "git branch --show-current"))
