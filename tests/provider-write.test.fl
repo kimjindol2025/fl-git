@@ -1,0 +1,91 @@
+; Provider write gate fixture (네트워크 없음)
+(load "../src/provider-write.fl")
+
+(define gh-model {"provider" "github"
+                  "host" "github.com"
+                  "owner" "kimjindol2025"
+                  "repository" "fl-git"
+                  "remote" "https://github.com/kimjindol2025/fl-git.git"
+                  "branch" "main"
+                  "upstream" "origin/main"
+                  "auth" "unknown"
+                  "name" "origin"})
+
+(define fg-model {"provider" "forgejo"
+                  "host" "fg.dclub.kr"
+                  "owner" "kim"
+                  "repository" "freelang-aia"
+                  "remote" "forgejo-dclub:kim/freelang-aia.git"
+                  "branch" "master"
+                  "upstream" "forgejo/master"
+                  "auth" "unknown"
+                  "name" "forgejo"})
+
+(define empty-model (provider-empty-model))
+
+(define pull-target (provider-write-target-from-model gh-model "pull"))
+(define connect-target (provider-write-target-from-url "https://fg.dclub.kr/kim/x.git" "main" "connect"))
+(define preview-gate (provider-write-gate pull-target "" false))
+(define ready-gate (provider-write-gate pull-target "github" true))
+(define mismatch-gate (provider-write-gate pull-target "forgejo" true))
+(define none-gate (provider-write-gate (provider-write-target-from-model empty-model "push") "" true))
+(define unknown-op (provider-write-gate (provider-write-target-from-model gh-model "delete") "" true))
+(define ok-result (provider-write-result ready-gate true "Pull 완료" ""))
+
+(deftest "target shows provider repo branch"
+  (do
+    (is= "pull" (get pull-target "op"))
+    (is= "github" (get pull-target "provider"))
+    (is= "kimjindol2025/fl-git" (get pull-target "repository"))
+    (is= "main" (get pull-target "branch"))))
+
+(deftest "connect target from url"
+  (do
+    (is= "connect" (get connect-target "op"))
+    (is= "forgejo" (get connect-target "provider"))
+    (is= "kim/x" (get connect-target "repository"))
+    (is= "main" (get connect-target "branch"))))
+
+(deftest "confirm required without yes"
+  (do
+    (is= false (get preview-gate "ok"))
+    (is= "REMOTE_WRITE_CONFIRM_REQUIRED" (get preview-gate "code"))
+    (is= true (get preview-gate "preview"))
+    (is= "github" (get (get preview-gate "display") "provider"))
+    (is= "kimjindol2025/fl-git" (get (get preview-gate "display") "repository"))
+    (is= "main" (get (get preview-gate "display") "branch"))))
+
+(deftest "ready after confirm"
+  (do
+    (is= true (get ready-gate "ok"))
+    (is= "REMOTE_WRITE_READY" (get ready-gate "code"))))
+
+(deftest "cross provider mismatch denied"
+  (do
+    (is= false (get mismatch-gate "ok"))
+    (is= "REMOTE_WRITE_MISMATCH" (get mismatch-gate "code"))))
+
+(deftest "no provider denied"
+  (do
+    (is= false (get none-gate "ok"))
+    (is= "REMOTE_WRITE_NO_PROVIDER" (get none-gate "code"))))
+
+(deftest "unknown op denied"
+  (do
+    (is= false (get unknown-op "ok"))
+    (is= "REMOTE_WRITE_UNKNOWN_OP" (get unknown-op "code"))))
+
+(deftest "result keeps display trio"
+  (do
+    (is= true (get ok-result "ok"))
+    (is= "REMOTE_WRITE_OK" (get ok-result "code"))
+    (is= "github" (get (get ok-result "display") "provider"))
+    (is= "kimjindol2025/fl-git" (get (get ok-result "display") "repository"))
+    (is= "main" (get (get ok-result "display") "branch"))))
+
+(deftest "forgejo target separate"
+  (do
+    (is= "forgejo" (get (provider-write-target-from-model fg-model "push") "provider"))
+    (is= "kim/freelang-aia" (get (provider-write-target-from-model fg-model "push") "repository"))))
+
+(run-tests)

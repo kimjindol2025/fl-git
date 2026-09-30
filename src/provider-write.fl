@@ -1,0 +1,96 @@
+;; Provider 공통 쓰기 게이트 (6단계)
+;; 대상 표시: provider → repository → branch → confirm → 결과
+;; 순수 판정만 담당. 실제 git 실행은 git.fl / api.flx.
+(load "./provider.fl")
+
+(defn provider-write-op? [op]
+  (let [kind (str-to-lower (str-trim (str op)))]
+    (or (= kind "connect")
+        (= kind "fetch")
+        (= kind "pull")
+        (= kind "push"))))
+
+(defn provider-write-target-from-model [model op]
+  (let [info (or model (provider-empty-model))
+        full (provider-full-name info)
+        full-name (if (> (length (str-trim (str (or (get info "full_name") "")))) 0)
+                    (str (get info "full_name"))
+                    full)]
+    {"op" (str-to-lower (str-trim (str op)))
+     "provider" (str (or (get info "provider") "none"))
+     "host" (str (or (get info "host") ""))
+     "owner" (str (or (get info "owner") ""))
+     "repository" full-name
+     "branch" (str (or (get info "branch") ""))
+     "upstream" (str (or (get info "upstream") ""))
+     "remote" (str (or (get info "remote") ""))
+     "name" (str (or (get info "name") ""))}))
+
+(defn provider-write-target-from-url [remote-url branch op]
+  (provider-write-target-from-model
+    (provider-model remote-url {"branch" (str (or branch "")) "auth" "unknown"})
+    op))
+
+(defn provider-write-confirm-message [target]
+  (str (or (get target "op") "write") " 대상\n"
+       "provider: " (or (get target "provider") "none") "\n"
+       "repository: " (or (get target "repository") "") "\n"
+       "branch: " (or (get target "branch") "") "\n"
+       "실행하려면 confirm/--yes 가 필요합니다."))
+
+(defn provider-write-display [target]
+  {"provider" (or (get target "provider") "none")
+   "repository" (or (get target "repository") "")
+   "branch" (or (get target "branch") "")
+   "upstream" (or (get target "upstream") "")
+   "remote" (or (get target "remote") "")
+   "op" (or (get target "op") "")})
+
+(defn provider-write-gate [target expected-provider confirmed]
+  (let [expected (str-to-lower (str-trim (str (or expected-provider ""))))
+        provider (str-to-lower (str-trim (str (or (get target "provider") ""))))
+        op (str-to-lower (str-trim (str (or (get target "op") ""))))
+        display (provider-write-display target)]
+    (cond
+      (not (provider-write-op? op))
+        {"ok" false
+         "code" "REMOTE_WRITE_UNKNOWN_OP"
+         "target" target
+         "display" display
+         "error" (str "지원하지 않는 쓰기 작업입니다: " op)}
+      (or (= provider "") (= provider "none"))
+        {"ok" false
+         "code" "REMOTE_WRITE_NO_PROVIDER"
+         "target" target
+         "display" display
+         "error" "연결된 provider remote가 없습니다."}
+      (and (> (length expected) 0) (not (= expected provider)))
+        {"ok" false
+         "code" "REMOTE_WRITE_MISMATCH"
+         "target" target
+         "display" display
+         "error" (str "현재 화면/요청은 " expected " 전용입니다. 대상 provider는 " provider " 입니다.")}
+      (not (= confirmed true))
+        {"ok" false
+         "code" "REMOTE_WRITE_CONFIRM_REQUIRED"
+         "target" target
+         "display" display
+         "preview" true
+         "error" (provider-write-confirm-message target)}
+      true
+        {"ok" true
+         "code" "REMOTE_WRITE_READY"
+         "target" target
+         "display" display})))
+
+(defn provider-write-result [gate ok message detail]
+  (let [base (or gate {})
+        target (or (get base "target") {})
+        display (or (get base "display") (provider-write-display target))]
+    {"ok" (= ok true)
+     "code" (if (= ok true) "REMOTE_WRITE_OK" (or (get base "code") "REMOTE_WRITE_FAIL"))
+     "target" target
+     "display" display
+     "message" (str (or message ""))
+     "detail" (str (or detail ""))
+     "error" (if (= ok true) "" (str (or (get base "error") message "")))}))

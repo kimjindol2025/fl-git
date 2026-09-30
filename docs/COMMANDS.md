@@ -21,6 +21,10 @@
 | `provider model` | Provider 공통 모델 JSON 출력 | 읽기 |
 | `provider status [github\|forgejo]` | Provider 인증 프로브 (`AUTH_OK` / `AUTH_BLOCKED` / `UNKNOWN`) | 읽기 |
 | `provider repos <github\|forgejo>` | Provider별 레포 목록 (인증 필요, 쓰기 없음) | 읽기 |
+| `provider fetch [provider] --yes` | 대상 provider/repo/branch 표시 후 fetch | 확인 필요 |
+| `provider pull [provider] --yes` | 대상 표시 후 pull | 확인 필요 |
+| `provider push [provider] --yes` | 대상 표시 후 push | 확인 필요 |
+| `provider connect <url> [provider] --yes` | 대상 표시 후 origin 연결 (Push 없음) | 확인 필요 |
 | `branch-delete <이름> --yes` | 로컬 branch 삭제 | 확인 필요 |
 | `github repo` | 현재 GitHub 저장소 정보 | 읽기 |
 | `github pr` | 열려 있는 PR 목록 | 읽기 |
@@ -31,6 +35,10 @@
 
 `pull`과 `push`는 실수로 실행되지 않도록 `--yes`를 명시해야 한다. TUI에서는
 사용자가 해당 키를 누른 것이 확인으로 취급된다.
+
+`provider fetch|pull|push|connect`는 실행 전에 provider → repository → branch를
+표시하고, `--yes`가 없으면 `REMOTE_WRITE_CONFIRM_REQUIRED`로 거부한다.
+요청 provider와 대상 provider가 다르면 `REMOTE_WRITE_MISMATCH`다.
 
 GitHub 명령은 `gh` CLI의 기존 인증 세션을 사용하며 토큰을 읽거나 저장하지
 않는다.

@@ -100,11 +100,18 @@
                                 (if (= (get res "ok") false)
                                   (reset! error (or (get res "error") "Remote 연결에 실패했습니다"))
                                   (do (reset! connect-remote-ref "") (apply-result res))))
+        write-target-label (fn [op provider]
+                             (let [info (or (get @data "remote_info") {})
+                                   repo (or (get info "full_name") (get info "repository") @provider-selected-repo "—")
+                                   branch (or (get @data "branch") (get info "branch") "—")
+                                   kind (if (> (length (str-trim (str provider))) 0) provider (or (get info "provider") @remote-provider "none"))]
+                               (str op " 대상 · provider: " kind " · repository: " repo " · branch: " branch " · 실행할까요?")))
         connect-remote (fn []
                         (if (= (str-trim @connect-remote-ref) "")
-                          (reset! error "GitHub·Forgejo·GitLab 저장소 URL 또는 SSH alias를 입력하세요")
-                          (if (js_confirm "현재 저장소에 이 Remote를 연결할까요? Push는 실행하지 않습니다.")
-                            (do (reset! notice "Remote 연결 중…") (fetch-post! "/api" {"action" "connect-remote" "remote_url" @connect-remote-ref "provider" @remote-provider "confirm" true} connect-remote-result))
+                          (reset! error "현재 Provider 전용 Remote URL 또는 SSH alias를 입력하세요")
+                          (if (js_confirm (str "connect 대상 · provider: " @remote-provider " · repository: " (if (= @provider-selected-repo "") @connect-remote-ref @provider-selected-repo) " · branch: " (or (get @data "branch") "—") " · Push 없이 origin만 연결합니다. 실행할까요?"))
+                            (do (reset! notice (str @remote-provider " Remote 연결 중…"))
+                                (fetch-post! "/api" {"action" "connect-remote" "remote_url" @connect-remote-ref "provider" @remote-provider "confirm" true} connect-remote-result))
                             nil)))
         commit-detail-result (fn [res]
                                (if (= (get res "ok") false)
@@ -126,17 +133,36 @@
                                   (reset! error (str (or (get res "code") "ERROR") ": " (or (get res "error") "provider 레포 목록을 불러오지 못했습니다")))
                                   (do (reset! provider-repos-provider (get res "provider")) (reset! provider-repos (or (get res "repositories") [])) (reset! error "") (reset! notice (str (get res "provider") " 레포 목록 · auth=" (or (get res "auth") "unknown"))))))
         load-provider-repos (fn [provider]
-                              (do (reset! remote-provider provider) (reset! provider-repos-provider provider) (reset! provider-repos-loading true) (fetch-post! "/api" {"action" "provider-repos" "provider" provider} provider-repos-result)))
+                              (do (reset! remote-provider provider)
+                                  (reset! provider-repos-provider provider)
+                                  (reset! provider-repos [])
+                                  (reset! provider-selected-repo "")
+                                  (reset! connect-remote-ref "")
+                                  (reset! provider-repos-loading true)
+                                  (fetch-post! "/api" {"action" "provider-repos" "provider" provider} provider-repos-result)))
         open-provider-page (fn [provider]
-                             (do (reset! tab provider) (load-provider-repos provider)))
+                             (do (reset! tab provider)
+                                 (reset! provider-selected-repo "")
+                                 (reset! connect-remote-ref "")
+                                 (if (or (= provider "github") (= provider "forgejo"))
+                                   (load-provider-repos provider)
+                                   (do (reset! remote-provider provider)
+                                       (reset! provider-repos-provider provider)
+                                       (reset! provider-repos [])
+                                       (reset! provider-repos-loading false)))))
         create-repo (fn []
                       (if (= (str-trim @new-repo-name) "")
                         (reset! error "새 저장소 이름을 입력하세요")
                         (do (reset! notice "저장소 생성 중…") (fetch-post! "/api" {"action" "create-repo" "parent" @repo-input "name" @new-repo-name} apply-result) (reset! new-repo-name ""))))
+        do-provider-write (fn [op provider]
+                            (if (js_confirm (write-target-label op provider))
+                              (do (reset! notice (str op " 실행 중…"))
+                                  (fetch-post! "/api" {"action" "provider-write" "op" op "provider" provider "confirm" true} remote-action-result))
+                              nil))
         do-action (fn [action]
-                    (if (or (= action "push") (= action "pull"))
-                      (if (js_confirm (str action "은 원격 저장소를 변경합니다. 실행할까요?"))
-                        (do (reset! notice "실행 중…") (fetch-post! "/api" {"action" action "confirm" true} remote-action-result))
+                    (if (or (= action "push") (= action "pull") (= action "fetch"))
+                      (if (js_confirm (write-target-label action (or (get (get @data "remote_info") "provider") @remote-provider)))
+                        (do (reset! notice "실행 중…") (fetch-post! "/api" {"action" action "confirm" true "provider" (or (get (get @data "remote_info") "provider") "")} remote-action-result))
                         nil)
                       (do (reset! notice "실행 중…") (send {"action" action}))))
         commit (fn []
@@ -199,7 +225,7 @@
                         (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 상세 정보를 불러오는 중…") (fetch-post! "/api" {"action" "commit-detail" "hash" (get commit "hash")} commit-detail-result)))
         rail-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "rail-nav-item active" "rail-nav-item")
-                                 :on-click (if (= name "compare") open-compare (if (or (= name "github") (= name "forgejo")) (fn [] (open-provider-page name)) (fn [] (reset! tab name))))} label))
+                                 :on-click (if (= name "compare") open-compare (if (or (= name "github") (= name "forgejo") (= name "other")) (fn [] (open-provider-page name)) (fn [] (reset! tab name))))} label))
         view-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (if (= name "compare") open-compare (fn [] (reset! tab name)))} label))
         status-card (fn [label value tone]
@@ -328,45 +354,156 @@
                                               (h "button" {:class (if (= @project-gitignore "python") "visibility-option active" "visibility-option") :on-click (fn [] (reset! project-gitignore "python"))} "Python")))
                                        (h "div" {:class "action-row"}
                                          (h "button" {:class "button primary" :on-click setup-project} "프로젝트 만들고 연결")))))
-        render-provider-repo (fn [repo]
-                              (h "button" {:class "provider-repo-row" :on-click (fn [] (do (reset! provider-selected-repo (or (get repo "full_name") (get repo "repository") "")) (reset! connect-remote-ref (or (get repo "remote") "")) (reset! notice (str (or (get repo "full_name") (get repo "repository")) " 선택됨 · 아래 연결 버튼으로 진행하세요."))))}
-                                (str (h "div" {:class "provider-repo-main"}
-                                         (str (h "strong" {} (or (get repo "full_name") (get repo "repository") "—"))
-                                              (h "span" {} (or (get repo "description") "설명 없음"))))
-                                     (h "span" {:class "provider-repo-meta"} (str (if (= (get repo "private") true) "PRIVATE" "PUBLIC") " · 선택하여 연결")))))
+        provider-remotes-for (fn [provider]
+                               (filter (fn [item] (= (get item "provider") provider))
+                                       (or (get @data "remotes") [])))
+        provider-current-for (fn [provider]
+                               (let [items (provider-remotes-for provider)]
+                                 (if (> (length items) 0)
+                                   (first items)
+                                   nil)))
+        provider-active? (fn [provider]
+                           (= (or (get (get @data "remote_info") "provider") "") provider))
+        provider-url-guess (fn [provider value]
+                             (let [v (str value)
+                                   github? (or (str-contains v "github.com")
+                                               (str-contains v "GitHub.com")
+                                               (str-contains v "github:")
+                                               (str-contains v "GitHub:"))
+                                   forgejo? (or (str-contains v "fg.dclub.kr")
+                                                (str-contains v "fg.dclub.jp")
+                                                (str-contains v "forgejo-dclub:"))]
+                               (if (= provider "github")
+                                 github?
+                                 (if (= provider "forgejo")
+                                   forgejo?
+                                   (if (= provider "other")
+                                     (and (not github?) (not forgejo?))
+                                     true)))))
+        render-provider-remote-row (fn [item]
+                                     (h "div" {:class "provider-linked-row"}
+                                       (str (h "strong" {} (or (get item "full_name") (str (get item "owner") "/" (get item "repository")) "—"))
+                                            (h "span" {} (str (or (get item "name") "remote") " · " (or (get item "remote") ""))))))
+        render-provider-commit-row (fn [commit]
+                                     (h "div" {:class "provider-commit-row"}
+                                       (str (h "code" {} (or (get commit "hash") "—"))
+                                            (h "span" {} (or (get commit "message") "")))))
+        render-provider-repo (fn [provider]
+                               (fn [repo]
+                                 (h "button" {:class "provider-repo-row"
+                                               :on-click (fn []
+                                                           (if (and (get repo "provider") (not (= (get repo "provider") provider)))
+                                                             (reset! error (str "이 목록은 " provider " 전용입니다. 다른 provider 레포는 연결할 수 없습니다."))
+                                                             (do (reset! error "")
+                                                                 (reset! provider-selected-repo (or (get repo "full_name") (get repo "repository") ""))
+                                                                 (reset! connect-remote-ref (or (get repo "remote") ""))
+                                                                 (reset! notice (str provider " · " (or (get repo "full_name") (get repo "repository")) " 선택됨")))))}
+                                   (str (h "div" {:class "provider-repo-main"}
+                                            (str (h "strong" {} (or (get repo "full_name") (get repo "repository") "—"))
+                                                 (h "span" {} (or (get repo "description") "설명 없음"))))
+                                        (h "span" {:class "provider-repo-meta"} (str (if (= (get repo "private") true) "PRIVATE" "PUBLIC") " · " provider))))))
         render-provider-panel (fn [provider title host placeholder]
-                                (h "section" {:class "panel project-wizard provider-panel"}
-                                  (str (h "style" {} ".provider-repo-list{display:grid;gap:7px;margin:14px 0;max-height:330px;overflow:auto}.provider-repo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#0d131d;border:1px solid var(--line);border-radius:9px;color:var(--text);padding:11px;cursor:pointer}.provider-repo-row:hover{border-color:var(--blue);background:#17243a}.provider-repo-main{min-width:0}.provider-repo-main strong{display:block;font:12px ui-monospace,monospace}.provider-repo-main span{display:block;margin-top:5px;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.provider-repo-meta{flex:none;color:var(--muted);font:9px ui-monospace,monospace}.provider-selection{margin:14px 0;padding:12px;background:#142039;border:1px solid #365274;border-radius:9px}.provider-selection span{display:block;color:var(--muted);font:10px ui-monospace,monospace}.provider-selection strong{display:block;margin-top:6px;color:var(--text);font:12px ui-monospace,monospace}.provider-selection p{margin:7px 0 0;color:var(--muted);font-size:11px}")
-                                       (h "div" {:class "panel-heading"}
-                                           (str (h "div" {} (h "h2" {} title))
-                                                (h "span" {:class "wizard-step"} "기존 폴더 연결")))
-                                       (h "p" {:class "muted"} (str host " 전용 연결 화면입니다. origin만 연결하고 Push하지 않습니다."))
-                                       (h "div" {:class "panel-heading"}
-                                         (str (h "h3" {} (str title " 레포지토리"))
-                                              (h "button" {:class "button ghost" :on-click (fn [] (load-provider-repos provider))} "새로고침")))
-                                       (if (= @provider-repos-loading true)
-                                         (h "div" {:class "empty"} (str title " 레포 목록을 불러오는 중…"))
-                                         (if (not (= @provider-repos-provider provider))
-                                           (h "div" {:class "empty"} (str title " 레포 목록을 불러오세요."))
-                                           (if (= (length @provider-repos) 0)
-                                             (h "div" {:class "empty"} (str title " 레포가 없거나 목록을 읽지 못했습니다."))
-                                             (h "div" {:class "provider-repo-list"} (arr-join (map render-provider-repo @provider-repos) "")))))
-                                       (h "div" {:class "provider-selection"}
-                                         (str (h "span" {} "선택한 원격 레포")
-                                              (h "strong" {} (if (= @provider-selected-repo "") "레포 목록에서 먼저 선택하세요." @provider-selected-repo))
-                                              (h "p" {} "아래 연결은 현재 선택된 로컬 저장소에만 적용됩니다. 기존 origin은 덮어쓰지 않습니다.")))
-                                       (h "div" {:class "provider-facts"}
-                                         (str (h "div" {:class "provider-fact"} (h "span" {} "PROVIDER") (h "strong" {} title))
-                                              (h "div" {:class "provider-fact"} (h "span" {} "HOST") (h "strong" {} host))
-                                              (h "div" {:class "provider-fact"} (h "span" {} "CURRENT") (h "strong" {} (or (get (get @data "remote_info") "full_name") (get (get @data "remote_info") "repository") "연결 정보 없음")))))
-                                       (h "div" {:class "selected-folder"} (str "현재 저장소: " (or (get @data "root") "—")))
-                                       (h "label" {:class "wizard-label"} (str title " 연결 대상 Remote"))
-                                       (h "input" {:class "repo-input wizard-input" :type "text" :value @connect-remote-ref :placeholder placeholder :on-input (fn [e] (reset! connect-remote-ref (.-value (.-target e))))})
-                                       (h "div" {:class "action-row"}
-                                         (h "button" {:class "button primary" :on-click connect-remote} (str "현재 로컬 저장소에 " title " origin 연결"))))))
+                                (let [linked (if (= provider "other")
+                                               (filter (fn [item]
+                                                         (and (not (= (get item "provider") "github"))
+                                                              (not (= (get item "provider") "forgejo"))))
+                                                       (or (get @data "remotes") []))
+                                               (provider-remotes-for provider))
+                                      current (if (> (length linked) 0) (first linked) nil)
+                                      active (provider-active? provider)
+                                      sync (get @data "sync")
+                                      commits (or (get @data "recent_commits") (get @data "commits") [])
+                                      branch (or (get @data "branch") "—")
+                                      upstream (or (get sync "upstream") "—")
+                                      repo-rows (if (and (= @provider-repos-provider provider) (not (= provider "other")))
+                                                  (filter (fn [repo]
+                                                            (or (not (get repo "provider"))
+                                                                (= (get repo "provider") provider)))
+                                                          @provider-repos)
+                                                  [])]
+                                  (h "section" {:class "panel project-wizard provider-panel"}
+                                    (str (h "style" {} ".provider-repo-list{display:grid;gap:7px;margin:14px 0;max-height:260px;overflow:auto}.provider-repo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#0d131d;border:1px solid var(--line);border-radius:9px;color:var(--text);padding:11px;cursor:pointer}.provider-repo-row:hover{border-color:var(--blue);background:#17243a}.provider-repo-main{min-width:0}.provider-repo-main strong{display:block;font:12px ui-monospace,monospace}.provider-repo-main span{display:block;margin-top:5px;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.provider-repo-meta{flex:none;color:var(--muted);font:9px ui-monospace,monospace}.provider-selection{margin:14px 0;padding:12px;background:#142039;border:1px solid #365274;border-radius:9px}.provider-selection span{display:block;color:var(--muted);font:10px ui-monospace,monospace}.provider-selection strong{display:block;margin-top:6px;color:var(--text);font:12px ui-monospace,monospace}.provider-selection p{margin:7px 0 0;color:var(--muted);font-size:11px}.provider-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.provider-section h3{margin:0 0 10px;font-size:13px}.provider-linked-list,.provider-commit-list{display:grid;gap:7px;max-height:260px;overflow:auto}.provider-linked-row,.provider-commit-row{background:#0d131d;border:1px solid var(--line);border-radius:8px;padding:10px}.provider-linked-row strong,.provider-commit-row code{display:block;font:11px ui-monospace,monospace}.provider-linked-row span,.provider-commit-row span{display:block;margin-top:5px;color:var(--muted);font:11px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.provider-sync-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.provider-note{margin:8px 0 0;color:var(--muted);font-size:11px}@media(max-width:760px){.provider-sync-grid{grid-template-columns:1fr}}")
+                                         (h "div" {:class "panel-heading"}
+                                             (str (h "div" {} (h "h2" {} title))
+                                                  (h "span" {:class "wizard-step"} (str host " 전용"))))
+                                         (h "p" {:class "muted"} (str title " 화면에서는 이 provider의 레포·remote·동기화만 다룹니다. 다른 provider remote/branch를 섞지 않습니다."))
+                                         (h "div" {:class "provider-facts"}
+                                           (str (h "div" {:class "provider-fact"} (h "span" {} "PROVIDER") (h "strong" {} title))
+                                                (h "div" {:class "provider-fact"} (h "span" {} "HOST") (h "strong" {} host))
+                                                (h "div" {:class "provider-fact"} (h "span" {} "LOCAL BRANCH") (h "strong" {} branch))
+                                                (h "div" {:class "provider-fact"} (h "span" {} "LINKED") (h "strong" {} (if (= current nil) "이 provider 미연결" (or (get current "full_name") (get current "repository") "연결됨"))))))
+                                         (h "div" {:class "provider-section"}
+                                           (str (h "h3" {} (str title " 연결 remote"))
+                                                (if (= (length linked) 0)
+                                                  (h "div" {:class "empty"} (str "로컬에 " title " remote가 없습니다."))
+                                                  (h "div" {:class "provider-linked-list"} (arr-join (map render-provider-remote-row linked) "")))))
+                                         (h "div" {:class "provider-section"}
+                                           (str (h "h3" {} "동기화 상태")
+                                                (if (= active true)
+                                                  (h "div" {:class "provider-sync-grid"}
+                                                    (str (h "div" {:class "provider-fact"} (h "span" {} "UPSTREAM") (h "strong" {} upstream))
+                                                         (h "div" {:class "provider-fact"} (h "span" {} "MATCH") (h "strong" {} (str (get sync "match"))))
+                                                         (h "div" {:class "provider-fact"} (h "span" {} "LOCAL HEAD") (h "strong" {} (or (get sync "local_head") "—")))
+                                                         (h "div" {:class "provider-fact"} (h "span" {} "REMOTE HEAD") (h "strong" {} (or (get sync "remote_head") "—")))))
+                                                  (h "div" {:class "empty"} (str "현재 upstream이 " title "가 아니므로 이 패널에서는 sync를 표시하지 않습니다.")))))
+                                         (if (= provider "other")
+                                           ""
+                                           (h "div" {:class "provider-section"}
+                                             (str (h "h3" {} "쓰기 작업")
+                                                  (h "p" {:class "provider-note"} "confirm 전에 provider → repository → branch를 표시합니다. 이 패널의 provider와 대상이 다르면 서버가 거부합니다.")
+                                                  (h "div" {:class "provider-facts"}
+                                                    (str (h "div" {:class "provider-fact"} (h "span" {} "WRITE PROVIDER") (h "strong" {} title))
+                                                         (h "div" {:class "provider-fact"} (h "span" {} "WRITE REPO") (h "strong" {} (if (= current nil) "미연결" (or (get current "full_name") (get current "repository") "—"))))
+                                                         (h "div" {:class "provider-fact"} (h "span" {} "WRITE BRANCH") (h "strong" {} branch))
+                                                         (h "div" {:class "provider-fact"} (h "span" {} "ACTIVE") (h "strong" {} (if (= active true) "yes" "no")))))
+                                                  (if (= active true)
+                                                    (h "div" {:class "action-row"}
+                                                      (str (h "button" {:class "button secondary" :on-click (fn [] (do-provider-write "fetch" provider))} "Fetch")
+                                                           (h "button" {:class "button secondary" :on-click (fn [] (do-provider-write "pull" provider))} "Pull")
+                                                           (h "button" {:class "button primary" :on-click (fn [] (do-provider-write "push" provider))} "Push")))
+                                                    (h "p" {:class "provider-note"} (str "현재 활성 provider가 " title "가 아니므로 Fetch/Pull/Push를 이 패널에서 실행하지 않습니다."))))))
+                                         (h "div" {:class "provider-section"}
+                                           (str (h "h3" {} "최근 커밋 (로컬)")
+                                                (h "p" {:class "provider-note"} "로컬 작업 트리 이력입니다. 다른 provider branch 목록과 섞지 않습니다.")
+                                                (if (= (length commits) 0)
+                                                  (h "div" {:class "empty"} "커밋이 없습니다.")
+                                                  (h "div" {:class "provider-commit-list"} (arr-join (map render-provider-commit-row commits) "")))))
+                                         (if (= provider "other")
+                                           (h "p" {:class "provider-note"} "기타 Provider는 읽기 전용 요약입니다. 목록 연동 adapter는 GitHub/Forgejo만 제공합니다.")
+                                           (str (h "div" {:class "panel-heading"}
+                                                  (str (h "h3" {} (str title " 레포지토리"))
+                                                       (h "button" {:class "button ghost" :on-click (fn [] (load-provider-repos provider))} "새로고침")))
+                                                (if (= @provider-repos-loading true)
+                                                  (h "div" {:class "empty"} (str title " 레포 목록을 불러오는 중…"))
+                                                  (if (not (= @provider-repos-provider provider))
+                                                    (h "div" {:class "empty"} (str title " 레포 목록을 불러오세요."))
+                                                    (if (= (length repo-rows) 0)
+                                                      (h "div" {:class "empty"} (str title " 레포가 없거나 목록을 읽지 못했습니다."))
+                                                      (h "div" {:class "provider-repo-list"} (arr-join (map (render-provider-repo provider) repo-rows) "")))))
+                                                (h "div" {:class "provider-selection"}
+                                                  (str (h "span" {} (str title "에서 선택한 원격 레포"))
+                                                       (h "strong" {} (if (= @provider-selected-repo "") "레포 목록에서 먼저 선택하세요." @provider-selected-repo))
+                                                       (h "p" {} "다른 provider 화면의 remote는 여기 입력란에 넣지 마세요. 서버도 provider 불일치를 거부합니다.")))
+                                                (h "div" {:class "selected-folder"} (str "현재 저장소: " (or (get @data "root") "—")))
+                                                (h "label" {:class "wizard-label"} (str title " 연결 대상 Remote"))
+                                                (h "input" {:class "repo-input wizard-input" :type "text" :value @connect-remote-ref :placeholder placeholder
+                                                             :on-input (fn [e]
+                                                                         (let [value (.-value (.-target e))]
+                                                                           (do (reset! connect-remote-ref value)
+                                                                               (if (and (> (length (str-trim value)) 0)
+                                                                                        (not (provider-url-guess provider value)))
+                                                                                 (reset! error (str "이 입력은 " title " 형식이 아닙니다."))
+                                                                                 (reset! error "")))))})
+                                                (h "div" {:class "action-row"}
+                                                  (h "button" {:class "button primary"
+                                                                :on-click (fn []
+                                                                            (if (not (provider-url-guess provider @connect-remote-ref))
+                                                                              (reset! error (str "현재 페이지는 " title " 전용입니다. 다른 provider Remote는 연결할 수 없습니다."))
+                                                                              (connect-remote)))}
+                                                    (str title " origin 연결 (Push 없음)")))))))))
         render-connect-panel (fn []
                                (str
-                                 (h "style" {} ".provider-switch{margin-top:22px;background:#0d131d;border:1px solid var(--line);border-radius:16px;padding:16px}.provider-switch-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}.provider-switch-buttons{display:flex;gap:8px;margin-top:14px}.provider-switch-button{flex:1;border:1px solid var(--line);border-radius:9px;background:#182235;color:var(--muted);padding:11px 14px;font-weight:800;cursor:pointer}.provider-switch-button.active{border-color:var(--blue);background:#1d2b46;color:var(--text)}.provider-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}.provider-fact{background:#0d131d;border:1px solid var(--line);border-radius:8px;padding:10px}.provider-fact span{display:block;color:var(--muted);font:9px ui-monospace,monospace;letter-spacing:.1em}.provider-fact strong{display:block;margin-top:6px;color:var(--text);font:11px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:760px){.provider-facts{grid-template-columns:1fr}}")
+                                 (h "style" {} ".provider-switch{margin-top:22px;background:#0d131d;border:1px solid var(--line);border-radius:16px;padding:16px}.provider-switch-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}.provider-switch-buttons{display:flex;gap:8px;margin-top:14px}.provider-switch-button{flex:1;border:1px solid var(--line);border-radius:9px;background:#182235;color:var(--muted);padding:11px 14px;font-weight:800;cursor:pointer}.provider-switch-button.active{border-color:var(--blue);background:#1d2b46;color:var(--text)}.provider-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}.provider-fact{background:#0d131d;border:1px solid var(--line);border-radius:8px;padding:10px}.provider-fact span{display:block;color:var(--muted);font:9px ui-monospace,monospace;letter-spacing:.1em}.provider-fact strong{display:block;margin-top:6px;color:var(--text);font:11px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:760px){.provider-facts{grid-template-columns:1fr}}")
                                  (h "section" {:class "provider-switch"}
                                    (str
                                      (h "div" {:class "provider-switch-heading"}
@@ -374,10 +511,13 @@
                                             (h "span" {:class "muted"} "원격 화면을 provider별로 분리")))
                                      (h "div" {:class "provider-switch-buttons"}
                                        (str (h "button" {:class (if (= @remote-provider "github") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "github"))} "GitHub")
-                                            (h "button" {:class (if (= @remote-provider "forgejo") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "forgejo"))} "Forgejo (fg)"))))))
+                                            (h "button" {:class (if (= @remote-provider "forgejo") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "forgejo"))} "Forgejo (fg)")
+                                            (h "button" {:class (if (= @remote-provider "other") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "other"))} "기타"))))))
                                  (if (= @remote-provider "forgejo")
                                    (render-provider-panel "forgejo" "Forgejo (fg)" "fg.dclub.kr" "forgejo-dclub:owner/repo.git 또는 https://fg.dclub.kr/owner/repo.git")
-                                   (render-provider-panel "github" "GitHub" "github.com" "owner/repo 또는 https://github.com/owner/repo.git")))
+                                   (if (= @remote-provider "other")
+                                     (render-provider-panel "other" "기타 Provider" "unknown" "지원 adapter 없음 · 읽기 전용")
+                                     (render-provider-panel "github" "GitHub" "github.com" "owner/repo 또는 https://github.com/owner/repo.git"))))
         render-compare (fn []
                         (let [server-files (or (get @file-compare "server_files") [])
                               github-files (or (get @file-compare "github_files") [])]
@@ -489,12 +629,17 @@
                       (h "div" {:class "rail-nav-group"}
                         (str (h "span" {:class "rail-nav-label"} "GIT PROVIDERS")
                              (rail-tab "github" "GitHub")
-                             (rail-tab "forgejo" "Forgejo (fg)")))))
+                             (rail-tab "forgejo" "Forgejo (fg)")
+                             (rail-tab "other" "기타 Provider")))))
                (h "div" {:class "rail-footer"}
                  (str (h "span" {:class "online-dot"} "●") " DESKTOP MODE"))))
         (h "header" {:class "topbar"}
           (str (h "div" {:class "brand"} (h "span" {:class "brand-dot"} "●") "fl-git")
                (h "div" {:class "connection"} (h "span" {:class "online-dot"} "●") "LOCAL REPOSITORY")))
+        (if (> (length @error) 0) (h "div" {:class "toast error"} @error) "")
+        (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) "")
+        (render-file-view)
+        (render-compare-view)
         (h "section" {:class "shell-meta"}
           (str (h "div" {:class "shell-meta-item root-meta"}
                    (str (h "span" {:class "shell-meta-label"} "ROOT")
@@ -554,11 +699,19 @@
                                  " · ↑" (or (get (get @data "sync") "ahead") "—")
                                  " ↓" (or (get (get @data "sync") "behind") "—"))))))))
             (h "section" {:class "provider-directory"}
-              (str (h "style" {} ".provider-directory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.provider-directory-card{display:block;width:100%;text-align:left;background:#111925;border:1px solid var(--line);border-radius:14px;color:var(--text);padding:16px;cursor:pointer}.provider-directory-card:hover{border-color:var(--blue);background:#17243a}.provider-directory-card strong{display:block;font-size:14px}.provider-directory-card span{display:block;margin-top:7px;color:var(--muted);font:11px ui-monospace,monospace}@media(max-width:760px){.provider-directory{grid-template-columns:1fr}}")
+              (str (h "style" {} ".provider-directory{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}.provider-directory-card{display:block;width:100%;text-align:left;background:#111925;border:1px solid var(--line);border-radius:14px;color:var(--text);padding:16px;cursor:pointer}.provider-directory-card:hover{border-color:var(--blue);background:#17243a}.provider-directory-card strong{display:block;font-size:14px}.provider-directory-card span{display:block;margin-top:7px;color:var(--muted);font:11px ui-monospace,monospace}@media(max-width:1000px){.provider-directory{grid-template-columns:1fr}}")
                    (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "github"))}
                      (str (h "strong" {} "GitHub") (h "span" {} "github.com · GitHub 저장소 관리 화면 열기 →")))
                    (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "forgejo"))}
-                     (str (h "strong" {} "Forgejo (fg)") (h "span" {} "fg.dclub.kr · 우리 Forgejo 저장소 관리 화면 열기 →")))))
+                     (str (h "strong" {} "Forgejo (fg)") (h "span" {} "fg.dclub.kr · 우리 Forgejo 저장소 관리 화면 열기 →")))
+                   (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "other"))}
+                     (str (h "strong" {} "기타 Provider") (h "span" {} "GitLab/unknown · 읽기 전용 요약 →"))))
+                 (h "section" {:class "panel create-panel"}
+                   (str (h "div" {:class "panel-heading"} (h "h2" {} "새 저장소 만들기"))
+                        (h "p" {:class "muted"} "현재 폴더에 새 로컬 Git 저장소를 생성합니다.")
+                        (h "div" {:class "picker-row"}
+                          (h "input" {:class "repo-input" :type "text" :value @new-repo-name :placeholder "예: my-new-repo" :on-input (fn [e] (reset! new-repo-name (.-value (.-target e))))})
+                          (h "button" {:class "button primary picker-button" :on-click create-repo} "저장소 생성")))))
           "")
         (h "aside" {:class (if (= @right-open true) "desktop-detail" "desktop-detail collapsed")}
           (if (= @right-open true)
@@ -600,66 +753,57 @@
               (render-provider-panel "github" "GitHub" "github.com" "owner/repo 또는 https://github.com/owner/repo.git")
               (if (= @tab "forgejo")
                 (render-provider-panel "forgejo" "Forgejo (fg)" "fg.dclub.kr" "forgejo-dclub:owner/repo.git 또는 https://fg.dclub.kr/owner/repo.git")
-                (if (= @tab "remote")
-                  (render-connect-panel)
-                  (if (= @tab "compare")
-            (if (= @file-compare nil)
-              (h "section" {:class "panel compare-loading"} "파일 비교 정보를 불러오는 중…")
-              (render-compare))
-            (if (= @tab "changes")
-            (h "section" {:class "columns"}
-              (str (h "div" {:class "panel"}
-                       (str (h "div" {:class "panel-heading"} (h "h2" {} "변경 파일"))
-                            (h "div" {:class "change-summary"} (str "선택 " (length @selected-files) "개 · 전체 " (length (or (get @data "files") [])) "개"))
-                            (h "div" {:class "change-list"}
-                              (str (change-group "Modified" "modified")
-                                   (change-group "Added" "added")
-                                   (change-group "Deleted" "deleted")
-                                   (change-group "Untracked" "untracked")))
-                            (h "div" {:class "action-row"}
-                              (str (h "button" {:class "button secondary" :on-click (fn [] (selected-action "stage-files"))} "선택 Stage")
-                                   (h "button" {:class "button ghost" :on-click (fn [] (selected-action "unstage-files"))} "선택 Unstage")
-                                   (h "button" {:class "button dark" :on-click (fn [] (do-action "add-all"))} "전체 Stage")))
-                            (h "div" {:class "commit-box selected-commit-box"}
-                              (str (h "label" {} (str "선택 파일 커밋 · " (length @selected-files) "개"))
-                                   (h "input" {:type "text" :placeholder "예: fix: update selected files" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
-                                   (h "button" {:class "button primary" :on-click commit-selected} "선택 파일 커밋")))))
-                   (h "div" {:class "panel diff-panel"}
-                     (str (h "div" {:class "panel-heading"} (h "h2" {} "Diff 미리보기"))
-                          (h "pre" {:class "diff-output"} (or (get @data "diff") "변경 내용이 없습니다."))))))
-            (h "section" {:class "columns"}
-              (str (h "div" {:class "panel"}
-                       (str (h "div" {:class "panel-heading"} (h "h2" {} "빠른 작업"))
-                            (h "p" {:class "muted"} "원격 작업은 서버에서 확인 후 실행됩니다.")
-                            (h "div" {:class "action-grid"}
-                              (str (h "button" {:class "button secondary" :on-click (fn [] (do-action "fetch"))} "Fetch")
-                                   (h "button" {:class "button secondary" :on-click (fn [] (do-action "pull"))} "Pull")
-                                   (h "button" {:class "button primary" :on-click (fn [] (do-action "push"))} "Push")))
-                            (h "div" {:class "commit-box"}
-                              (str (h "label" {} "로컬 커밋")
-                                   (h "input" {:type "text" :placeholder "예: feat: update landing page" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
-                                   (h "button" {:class "button primary" :on-click commit-push} "Commit & Push")))
-                            (render-branches)))
-                   (h "div" {:class "panel"}
-                     (str (h "div" {:class "panel-heading"} (h "h2" {} "최근 커밋"))
-                          (h "div" {:class "commit-list"} (render-commits))
-                          (if (= @commit-detail nil)
-                            ""
-                            (h "div" {:class "commit-detail"}
-                              (str (h "div" {:class "commit-detail-heading"} "커밋 상세 · 클릭한 커밋의 변경 내용")
-                                   (h "pre" {:class "commit-detail-output"} (get @commit-detail "detail"))))))))))))))
-        (if (= @tab "overview")
-          (h "section" {:class "panel create-panel"}
-            (str (h "div" {:class "panel-heading"} (h "h2" {} "새 저장소 만들기"))
-                 (h "p" {:class "muted"} "현재 폴더에 새 로컬 Git 저장소를 생성합니다.")
-                 (h "div" {:class "picker-row"}
-                   (h "input" {:class "repo-input" :type "text" :value @new-repo-name :placeholder "예: my-new-repo" :on-input (fn [e] (reset! new-repo-name (.-value (.-target e))))})
-                   (h "button" {:class "button primary picker-button" :on-click create-repo} "저장소 생성"))))
-          "")
-        (if (> (length @error) 0) (h "div" {:class "toast error"} @error) "")
-        (if (> (length @notice) 0) (h "div" {:class "toast"} @notice) "")
-        (render-file-view)
-        (render-compare-view)))))))
+                (if (= @tab "other")
+                  (render-provider-panel "other" "기타 Provider" "unknown" "지원 adapter 없음 · 읽기 전용")
+                  (if (= @tab "remote")
+                    (render-connect-panel)
+                    (if (= @tab "compare")
+                      (if (= @file-compare nil)
+                        (h "section" {:class "panel compare-loading"} "파일 비교 정보를 불러오는 중…")
+                        (render-compare))
+                      (if (= @tab "changes")
+                        (h "section" {:class "columns"}
+                          (str (h "div" {:class "panel"}
+                                   (str (h "div" {:class "panel-heading"} (h "h2" {} "변경 파일"))
+                                        (h "div" {:class "change-summary"} (str "선택 " (length @selected-files) "개 · 전체 " (length (or (get @data "files") [])) "개"))
+                                        (h "div" {:class "change-list"}
+                                          (str (change-group "Modified" "modified")
+                                               (change-group "Added" "added")
+                                               (change-group "Deleted" "deleted")
+                                               (change-group "Untracked" "untracked")))
+                                        (h "div" {:class "action-row"}
+                                          (str (h "button" {:class "button secondary" :on-click (fn [] (selected-action "stage-files"))} "선택 Stage")
+                                               (h "button" {:class "button ghost" :on-click (fn [] (selected-action "unstage-files"))} "선택 Unstage")
+                                               (h "button" {:class "button dark" :on-click (fn [] (do-action "add-all"))} "전체 Stage")))
+                                        (h "div" {:class "commit-box selected-commit-box"}
+                                          (str (h "label" {} (str "선택 파일 커밋 · " (length @selected-files) "개"))
+                                               (h "input" {:type "text" :placeholder "예: fix: update selected files" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
+                                               (h "button" {:class "button primary" :on-click commit-selected} "선택 파일 커밋")))))
+                               (h "div" {:class "panel diff-panel"}
+                                 (str (h "div" {:class "panel-heading"} (h "h2" {} "Diff 미리보기"))
+                                      (h "pre" {:class "diff-output"} (or (get @data "diff") "변경 내용이 없습니다."))))))
+                        (h "section" {:class "columns"}
+                          (str (h "div" {:class "panel"}
+                                   (str (h "div" {:class "panel-heading"} (h "h2" {} "빠른 작업"))
+                                        (h "p" {:class "muted"} "원격 작업은 서버에서 확인 후 실행됩니다.")
+                                        (h "div" {:class "action-grid"}
+                                          (str (h "button" {:class "button secondary" :on-click (fn [] (do-action "fetch"))} "Fetch")
+                                               (h "button" {:class "button secondary" :on-click (fn [] (do-action "pull"))} "Pull")
+                                               (h "button" {:class "button primary" :on-click (fn [] (do-action "push"))} "Push")))
+                                        (h "div" {:class "commit-box"}
+                                          (str (h "label" {} "로컬 커밋")
+                                               (h "input" {:type "text" :placeholder "예: feat: update landing page" :value @commit-message :on-input (fn [e] (reset! commit-message (.-value (.-target e))))})
+                                               (h "button" {:class "button primary" :on-click commit-push} "Commit & Push")))
+                                        (render-branches)))
+                               (h "div" {:class "panel"}
+                                 (str (h "div" {:class "panel-heading"} (h "h2" {} "최근 커밋"))
+                                      (h "div" {:class "commit-list"} (render-commits))
+                                      (if (= @commit-detail nil)
+                                        ""
+                                        (h "div" {:class "commit-detail"}
+                                          (str (h "div" {:class "commit-detail-heading"} "커밋 상세 · 클릭한 커밋의 변경 내용")
+                                               (h "pre" {:class "commit-detail-output"} (get @commit-detail "detail")))))))))))))))
+))))))
 
 (defn render [req]
   (server_header

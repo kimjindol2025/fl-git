@@ -153,6 +153,9 @@ CLI `context` / `context-json`과 Web `ai-context`가 같은 스키마를 공유
 
 ## 5단계 — UI 분리
 
+상태: **구현 완료**  
+정본: `web/pages/index.flx` (Island) · `web/pages/api.flx` `connect-remote` 교차 거부
+
 ```text
 Remote & Commits
 ├─ GitHub
@@ -167,9 +170,20 @@ Remote & Commits
 
 Provider별로 레포 목록 · branch · remote URL · 최근 커밋 · 동기화 상태를 따로 보여준다.
 
+구현 요지:
+
+- 레일·개요·Remote 스위치에 GitHub / Forgejo / 기타 탭 분리
+- 패널은 해당 provider remote만 나열. sync는 upstream이 그 provider일 때만 표시
+- 기타는 읽기 전용 요약 (목록 adapter 없음)
+- 클라이언트 URL 형식 검사 + 서버 `expected != detected` 거부로 교차 연결 차단
+- Front 빌드 errors=0, pm2 `fl-git:40850`, Playwright로 패널·토스트 교차 거부 확인
+
 ---
 
 ## 6단계 — 연결과 쓰기 작업
+
+상태: **구현 완료**  
+정본: `src/provider-write.fl` · CLI `fl-git provider fetch|pull|push|connect` · Web `provider-write` / `fetch|pull|push|connect-remote` · UI 패널 쓰기 섹션
 
 읽기 기능이 안정화된 뒤에만:
 
@@ -189,6 +203,14 @@ push
 3. branch 표시
 4. 사용자 confirm
 5. 실행 결과
+
+구현 요지:
+
+- 공통 게이트: `provider-write-gate` — 대상 표시 → confirm/`--yes` 없으면 `REMOTE_WRITE_CONFIRM_REQUIRED`, 교차 provider는 `REMOTE_WRITE_MISMATCH`
+- CLI: `fl-git provider fetch|pull|push [github|forgejo] [--yes]`, `fl-git provider connect <url> [provider] [--yes]`
+- Web: `action=provider-write` 및 기존 `fetch`/`pull`/`push`/`connect-remote`가 동일 게이트 사용 (fetch도 confirm 필수)
+- UI: provider 패널에 WRITE PROVIDER/REPO/BRANCH 표시 + active일 때만 Fetch/Pull/Push; confirm 문구에 대상 trio 포함
+- fixture: `tests/provider-write.test.fl` 9/9 PASS; Front errors=0; Playwright confirm·Forgejo inactive 게이트 확인
 
 ---
 
@@ -236,12 +258,12 @@ Forgejo(`fg.dclub.kr`)는 단순 백업이 아니라, 프로젝트·문서·커�
 ## 구현 순서 요약
 
 ```text
-1 기준선 문서  ✅
-2 Provider 모델 스키마
-3 읽기 adapter (CLI + Web 정렬)
-4 AI Context 스키마 통일
-5 UI provider 분리 점검·보강
-6 쓰기(connect/fetch/pull/push) + confirm
+1 기준선 문서              ✅
+2 Provider 모델 스키마      ✅
+3 읽기 adapter (CLI+Web)    ✅
+4 AI Context 스키마 통일    ✅
+5 UI provider 분리          ✅
+6 쓰기(connect/fetch/pull/push) + confirm ✅
 7 fixture 검증 게이트
 ```
 

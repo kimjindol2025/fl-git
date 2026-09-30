@@ -1,6 +1,7 @@
 ;; Git 업무 계층 — 모든 명령은 결과와 exit를 보존한다.
 (load "./provider-adapter.fl")
 (load "./provider-context.fl")
+(load "./provider-write.fl")
 
 (defn git-shell-quote [value]
   (str "'" (str-replace-all (str value) "'" "'\\''") "'"))
@@ -184,19 +185,106 @@
           (= code "AUTH_BLOCKED") (do (println "PROVIDER_REPOS=AUTH_BLOCKED") 2)
           true (do (println "PROVIDER_REPOS=UNKNOWN") 2))))))
 
-(defn git-provider [action argument]
-  (cond
-    (= action "model") (git-provider-model)
-    (= action "status") (git-provider-status argument)
-    (= action "repos") (git-provider-repos argument)
-    (= action "help") (do (println "사용법:")
-                          (println "  fl-git provider model")
-                          (println "  fl-git provider status [github|forgejo]")
-                          (println "  fl-git provider repos <github|forgejo>")
-                          (println "읽기 전용. push/create는 제공하지 않는다.")
-                          0)
-    true (do (println "사용법: fl-git provider <model|status|repos> [provider]")
-             2)))
+(defn git-provider-args-has-yes? [items]
+  (> (length (filter (fn [item] (= (str item) "--yes")) (or items []))) 0))
+
+(defn git-provider-args-without-yes [items]
+  (filter (fn [item] (not (= (str item) "--yes"))) (or items [])))
+
+(defn git-provider-current-model []
+  (let [branch (str-trim (git-capture "git branch --show-current"))
+        remote (str-trim (git-capture "git remote -v"))
+        upstream (git-upstream)]
+    (provider-primary-model remote branch upstream)))
+
+(defn git-provider-print-gate [gate]
+  (println (json-stringify gate))
+  (let [display (or (get gate "display") {})]
+    (println (str "provider: " (or (get display "provider") "")))
+    (println (str "repository: " (or (get display "repository") "")))
+    (println (str "branch: " (or (get display "branch") "")))
+    (if (= (get gate "ok") true)
+      nil
+      (println (or (get gate "error") "")))))
+
+(defn git-provider-write-op [op expected confirmed]
+  (let [model (git-provider-current-model)
+        target (provider-write-target-from-model model op)
+        gate (provider-write-gate target expected confirmed)]
+    (git-provider-print-gate gate)
+    (if (not (= (get gate "ok") true))
+      (do (println (str "REMOTE_WRITE=" (get gate "code"))) 2)
+      (let [result (cond
+                     (= op "fetch") (git-run "git fetch --all --prune")
+                     (= op "pull") (git-run "git pull")
+                     (= op "push") (git-run "git push")
+                     true {"exit" 1 "stderr" (str "unknown write op: " op)})
+            code (or (get result "exit") -1)
+            payload (provider-write-result gate (= code 0)
+                                           (if (= code 0) (str op " 완료") (str op " 실패"))
+                                           (or (get result "stderr") (get result "stdout") ""))]
+        (println (json-stringify payload))
+        (git-print result)
+        (if (= code 0)
+          (do (println "REMOTE_WRITE=PASS") 0)
+          (do (println "REMOTE_WRITE=FAIL") code))))))
+
+(defn git-provider-connect [url expected confirmed]
+  (let [ref (str-trim (str url))
+        branch (str-trim (git-capture "git branch --show-current"))
+        target (provider-write-target-from-url ref branch "connect")
+        gate (provider-write-gate target expected confirmed)]
+    (git-provider-print-gate gate)
+    (if (= ref "")
+      (do (println "사용법: fl-git provider connect <url> [github|forgejo] [--yes]")
+          (println "REMOTE_WRITE=UNKNOWN")
+          2)
+      (if (not (= (get gate "ok") true))
+        (do (println (str "REMOTE_WRITE=" (get gate "code"))) 2)
+        (let [origin (git-run "git remote get-url origin")]
+          (if (= (or (get origin "exit") -1) 0)
+            (do (println (json-stringify (provider-write-result gate false
+                                          "이미 origin이 연결되어 있습니다."
+                                          (str-trim (or (get origin "stdout") "")))))
+                (println "REMOTE_WRITE=FAIL")
+                2)
+            (let [linked (git-run (str "git remote add origin " (git-shell-quote ref)))
+                  code (or (get linked "exit") -1)
+                  payload (provider-write-result gate (= code 0)
+                                                 (if (= code 0)
+                                                   (str "Remote 연결 완료: " (get target "provider") "; Push는 실행하지 않았습니다.")
+                                                   "Remote 연결 실패")
+                                                 (or (get linked "stderr") (get linked "stdout") ""))]
+              (println (json-stringify payload))
+              (git-print linked)
+              (if (= code 0)
+                (do (println "REMOTE_WRITE=PASS") 0)
+                (do (println "REMOTE_WRITE=FAIL") code)))))))))
+
+(defn git-provider [provider-args]
+  (let [action (or (get provider-args 0) "help")
+        rest-args (rest (or provider-args []))
+        yes? (git-provider-args-has-yes? rest-args)
+        clean (git-provider-args-without-yes rest-args)
+        argument (or (get clean 0) "")]
+    (cond
+      (= action "model") (git-provider-model)
+      (= action "status") (git-provider-status argument)
+      (= action "repos") (git-provider-repos argument)
+      (= action "fetch") (git-provider-write-op "fetch" argument yes?)
+      (= action "pull") (git-provider-write-op "pull" argument yes?)
+      (= action "push") (git-provider-write-op "push" argument yes?)
+      (= action "connect") (git-provider-connect argument (or (get clean 1) "") yes?)
+      (= action "help") (do (println "사용법:")
+                            (println "  fl-git provider model")
+                            (println "  fl-git provider status [github|forgejo]")
+                            (println "  fl-git provider repos <github|forgejo>")
+                            (println "  fl-git provider fetch|pull|push [github|forgejo] [--yes]")
+                            (println "  fl-git provider connect <url> [github|forgejo] [--yes]")
+                            (println "쓰기 작업은 provider → repository → branch 표시 후 --yes 확인이 필요합니다.")
+                            0)
+      true (do (println "사용법: fl-git provider <model|status|repos|fetch|pull|push|connect> …")
+               2))))
 
 (defn git-github [action argument]
   (cond

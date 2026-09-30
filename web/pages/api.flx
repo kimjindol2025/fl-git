@@ -380,6 +380,119 @@
                 (api-payload (str "Remote 연결 완료: " (api-remote-provider ref) "; Push는 실행하지 않았습니다."))
                 {"ok" false "error" (or (get linked "stderr") "Remote 연결에 실패했습니다.")})))))))))
 
+(defn api-provider-write-op? [op]
+  (let [kind (str-to-lower (str-trim (str op)))]
+    (or (= kind "connect") (= kind "fetch") (= kind "pull") (= kind "push"))))
+
+(defn api-provider-write-target-from-info [info op]
+  (let [full (or (get info "full_name")
+                 (api-provider-full-name (or (get info "owner") "") (or (get info "repository") "")))]
+    {"op" (str-to-lower (str-trim (str op)))
+     "provider" (str (or (get info "provider") "none"))
+     "host" (str (or (get info "host") ""))
+     "owner" (str (or (get info "owner") ""))
+     "repository" (str full)
+     "branch" (str (or (get info "branch") ""))
+     "upstream" (str (or (get info "upstream") ""))
+     "remote" (str (or (get info "remote") ""))
+     "name" (str (or (get info "name") ""))}))
+
+(defn api-provider-write-display [target]
+  {"provider" (or (get target "provider") "none")
+   "repository" (or (get target "repository") "")
+   "branch" (or (get target "branch") "")
+   "upstream" (or (get target "upstream") "")
+   "remote" (or (get target "remote") "")
+   "op" (or (get target "op") "")})
+
+(defn api-provider-write-confirm-message [target]
+  (str (or (get target "op") "write") " 대상\n"
+       "provider: " (or (get target "provider") "none") "\n"
+       "repository: " (or (get target "repository") "") "\n"
+       "branch: " (or (get target "branch") "") "\n"
+       "실행하려면 confirm=true 가 필요합니다."))
+
+(defn api-provider-write-gate [target expected-provider confirmed]
+  (let [expected (str-to-lower (str-trim (str (or expected-provider ""))))
+        provider (str-to-lower (str-trim (str (or (get target "provider") ""))))
+        op (str-to-lower (str-trim (str (or (get target "op") ""))))
+        display (api-provider-write-display target)]
+    (cond
+      (not (api-provider-write-op? op))
+        {"ok" false "code" "REMOTE_WRITE_UNKNOWN_OP" "target" target "display" display
+         "error" (str "지원하지 않는 쓰기 작업입니다: " op)}
+      (or (= provider "") (= provider "none"))
+        {"ok" false "code" "REMOTE_WRITE_NO_PROVIDER" "target" target "display" display
+         "error" "연결된 provider remote가 없습니다."}
+      (and (> (length expected) 0) (not (= expected provider)))
+        {"ok" false "code" "REMOTE_WRITE_MISMATCH" "target" target "display" display
+         "error" (str "현재 요청은 " expected " 전용입니다. 대상 provider는 " provider " 입니다.")}
+      (not (= confirmed true))
+        {"ok" false "code" "REMOTE_WRITE_CONFIRM_REQUIRED" "target" target "display" display
+         "preview" true "error" (api-provider-write-confirm-message target)}
+      true
+        {"ok" true "code" "REMOTE_WRITE_READY" "target" target "display" display})))
+
+(defn api-provider-write-current-target [op]
+  (let [branch-result (api-run "git branch --show-current")
+        remote-v-result (api-run "git remote -v")
+        sync (api-sync-info)
+        branch (api-out branch-result)
+        remotes (api-remotes-from-remote-v (api-out remote-v-result) branch sync)
+        info (if (> (length remotes) 0) (first remotes) (api-remote-info "" branch sync))]
+    (api-provider-write-target-from-info info op)))
+
+(defn api-provider-write-connect-target [remote-url branch]
+  (let [info (api-remote-info remote-url branch {"upstream" "" "ahead" "" "behind" ""})]
+    (api-provider-write-target-from-info info "connect")))
+
+(defn api-provider-write-merge [payload gate message]
+  (obj-merge payload
+             {"write_code" (or (get gate "code") "")
+              "target" (or (get gate "target") {})
+              "display" (or (get gate "display") {})
+              "message" (if (> (length (str-trim (str (or message "")))) 0)
+                          message
+                          (or (get payload "message") ""))}))
+
+(defn api-provider-write [op expected-provider confirmed remote-url]
+  (let [kind (str-to-lower (str-trim (str op)))
+        expected (str-to-lower (str-trim (str (or expected-provider ""))))
+        branch (api-out (api-run "git branch --show-current"))
+        target (if (= kind "connect")
+                 (api-provider-write-connect-target remote-url branch)
+                 (api-provider-write-current-target kind))
+        gate (api-provider-write-gate target expected confirmed)]
+    (if (not (= (get gate "ok") true))
+      gate
+      (cond
+        (= kind "connect")
+          (let [connected (api-connect-remote remote-url expected)]
+            (if (= (get connected "ok") true)
+              (api-provider-write-merge connected gate (get connected "message"))
+              (obj-merge connected {"code" "REMOTE_WRITE_FAIL" "target" target "display" (get gate "display")})))
+        (= kind "fetch")
+          (let [r (api-command "git fetch --all --prune")]
+            (if (= (api-code r) 0)
+              (api-provider-write-merge (api-payload "Fetch 완료") gate "Fetch 완료")
+              {"ok" false "code" "REMOTE_WRITE_FAIL" "target" target "display" (get gate "display")
+               "error" (or (get r "stderr") "Fetch 실패")}))
+        (= kind "pull")
+          (let [r (api-command "git pull")]
+            (if (= (api-code r) 0)
+              (api-provider-write-merge (api-payload "Pull 완료") gate "Pull 완료")
+              {"ok" false "code" "REMOTE_WRITE_FAIL" "target" target "display" (get gate "display")
+               "error" (or (get r "stderr") "Pull 실패") "conflicts" (api-conflict-files)}))
+        (= kind "push")
+          (let [r (api-command "git push")]
+            (if (= (api-code r) 0)
+              (api-provider-write-merge (api-payload "Push 완료") gate "Push 완료")
+              {"ok" false "code" "REMOTE_WRITE_FAIL" "target" target "display" (get gate "display")
+               "error" (or (get r "stderr") "Push 실패")}))
+        true
+          {"ok" false "code" "REMOTE_WRITE_UNKNOWN_OP" "error" (str "지원하지 않는 쓰기 작업: " kind)
+           "target" target "display" (get gate "display")}))))
+
 (defn api-continuity []
   (let [result (api-run "if test -f PROJECT-CONTINUITY.airc; then cat -- PROJECT-CONTINUITY.airc; else printf '{}'; fi")
         raw (api-out result)
@@ -819,13 +932,16 @@
           (if (= (get connected "ok") true)
             (server-json connected)
             (server-json connected 400)))
+      (= action "provider-write")
+        (let [written (api-provider-write (get body "op") (get body "provider") (get body "confirm") (get body "remote_url"))]
+          (if (= (get written "ok") true)
+            (server-json written)
+            (server-json written 400)))
       (= action "connect-remote")
-        (if (= (get body "confirm") true)
-          (let [connected (api-connect-remote (get body "remote_url") (get body "provider"))]
-            (if (= (get connected "ok") true)
-              (server-json connected)
-              (server-json connected 400)))
-          (server-json {"ok" false "error" "Remote 연결은 confirm=true가 필요합니다."} 400))
+        (let [written (api-provider-write "connect" (get body "provider") (get body "confirm") (get body "remote_url"))]
+          (if (= (get written "ok") true)
+            (server-json written)
+            (server-json written 400)))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
@@ -873,18 +989,20 @@
             (let [r (api-command (str "git switch -- " (api-shell-quote name)))]
               (if (= (api-code r) 0) (server-json (api-payload (str "branch를 전환했습니다: " name))) (server-json {"ok" false "error" (or (get r "stderr") "branch 전환에 실패했습니다.")} 400)))))
       (= action "fetch")
-        (let [r (api-command "git fetch --all --prune")]
-          (if (= (api-code r) 0) (server-json (api-payload "Fetch 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
+        (let [written (api-provider-write "fetch" (get body "provider") (get body "confirm") "")]
+          (if (= (get written "ok") true)
+            (server-json written)
+            (server-json written 400)))
       (= action "pull")
-        (if (= (get body "confirm") true)
-          (let [r (api-command "git pull")]
-            (if (= (api-code r) 0) (server-json (api-payload "Pull 완료")) (server-json {"ok" false "error" (get r "stderr") "conflicts" (api-conflict-files)} 400)))
-          (server-json {"ok" false "error" "Pull은 confirm=true가 필요합니다."} 400))
+        (let [written (api-provider-write "pull" (get body "provider") (get body "confirm") "")]
+          (if (= (get written "ok") true)
+            (server-json written)
+            (server-json written 400)))
       (= action "push")
-        (if (= (get body "confirm") true)
-          (let [r (api-command "git push")]
-            (if (= (api-code r) 0) (server-json (api-payload "Push 완료")) (server-json {"ok" false "error" (get r "stderr")} 400)))
-          (server-json {"ok" false "error" "Push는 confirm=true가 필요합니다."} 400))
+        (let [written (api-provider-write "push" (get body "provider") (get body "confirm") "")]
+          (if (= (get written "ok") true)
+            (server-json written)
+            (server-json written 400)))
       (= action "commit")
         (let [message (str-trim (or (get body "message") ""))]
           (if (= message "")
