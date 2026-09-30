@@ -123,8 +123,8 @@
         provider-repos-result (fn [res]
                                 (reset! provider-repos-loading false)
                                 (if (= (get res "ok") false)
-                                  (reset! error (or (get res "error") "provider 레포 목록을 불러오지 못했습니다"))
-                                  (do (reset! provider-repos-provider (get res "provider")) (reset! provider-repos (or (get res "repositories") [])) (reset! error "") (reset! notice (str (get res "provider") " 레포 목록을 불러왔습니다.")))))
+                                  (reset! error (str (or (get res "code") "ERROR") ": " (or (get res "error") "provider 레포 목록을 불러오지 못했습니다")))
+                                  (do (reset! provider-repos-provider (get res "provider")) (reset! provider-repos (or (get res "repositories") [])) (reset! error "") (reset! notice (str (get res "provider") " 레포 목록 · auth=" (or (get res "auth") "unknown"))))))
         load-provider-repos (fn [provider]
                               (do (reset! remote-provider provider) (reset! provider-repos-provider provider) (reset! provider-repos-loading true) (fetch-post! "/api" {"action" "provider-repos" "provider" provider} provider-repos-result)))
         open-provider-page (fn [provider]
@@ -329,9 +329,9 @@
                                        (h "div" {:class "action-row"}
                                          (h "button" {:class "button primary" :on-click setup-project} "프로젝트 만들고 연결")))))
         render-provider-repo (fn [repo]
-                              (h "button" {:class "provider-repo-row" :on-click (fn [] (do (reset! provider-selected-repo (or (get repo "repository") "")) (reset! connect-remote-ref (or (get repo "remote") "")) (reset! notice (str (get repo "repository") " 선택됨 · 아래 연결 버튼으로 진행하세요."))))}
+                              (h "button" {:class "provider-repo-row" :on-click (fn [] (do (reset! provider-selected-repo (or (get repo "full_name") (get repo "repository") "")) (reset! connect-remote-ref (or (get repo "remote") "")) (reset! notice (str (or (get repo "full_name") (get repo "repository")) " 선택됨 · 아래 연결 버튼으로 진행하세요."))))}
                                 (str (h "div" {:class "provider-repo-main"}
-                                         (str (h "strong" {} (or (get repo "repository") "—"))
+                                         (str (h "strong" {} (or (get repo "full_name") (get repo "repository") "—"))
                                               (h "span" {} (or (get repo "description") "설명 없음"))))
                                      (h "span" {:class "provider-repo-meta"} (str (if (= (get repo "private") true) "PRIVATE" "PUBLIC") " · 선택하여 연결")))))
         render-provider-panel (fn [provider title host placeholder]
@@ -358,7 +358,7 @@
                                        (h "div" {:class "provider-facts"}
                                          (str (h "div" {:class "provider-fact"} (h "span" {} "PROVIDER") (h "strong" {} title))
                                               (h "div" {:class "provider-fact"} (h "span" {} "HOST") (h "strong" {} host))
-                                              (h "div" {:class "provider-fact"} (h "span" {} "CURRENT") (h "strong" {} (or (get (get @data "remote_info") "repository") "연결 정보 없음")))))
+                                              (h "div" {:class "provider-fact"} (h "span" {} "CURRENT") (h "strong" {} (or (get (get @data "remote_info") "full_name") (get (get @data "remote_info") "repository") "연결 정보 없음")))))
                                        (h "div" {:class "selected-folder"} (str "현재 저장소: " (or (get @data "root") "—")))
                                        (h "label" {:class "wizard-label"} (str title " 연결 대상 Remote"))
                                        (h "input" {:class "repo-input wizard-input" :type "text" :value @connect-remote-ref :placeholder placeholder :on-input (fn [e] (reset! connect-remote-ref (.-value (.-target e))))})
@@ -471,7 +471,7 @@
                       (h "strong" {} (or (get @data "root") "선택된 저장소 없음"))
                       (h "span" {:class (if (= (get (get @data "remote_info") "configured") true) "rail-github connected" "rail-github")}
                         (if (= (get (get @data "remote_info") "configured") true)
-                          (str "● " (get (get @data "remote_info") "provider") " · " (or (get (get @data "remote_info") "repository") "연결됨"))
+                          (str "● " (get (get @data "remote_info") "provider") " · " (or (get (get @data "remote_info") "full_name") (get (get @data "remote_info") "repository") "연결됨"))
                           "○ Remote 미연결"))))
                (h "nav" {:class "rail-nav"}
                  (str (h "style" {} ".rail-nav-item{appearance:none;width:100%;border:0;background:transparent;text-align:left;cursor:pointer;font:inherit}.rail-nav-group{margin-bottom:18px}.rail-nav-label{display:block;color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.14em;padding:0 10px 7px}")
@@ -545,10 +545,11 @@
                             (h "div" {:class "source-meta"} (str "branch " (or (get @data "branch") "—")))))
                    (h "div" {:class "source-card remote-source"}
                      (str (h "div" {:class "source-label"} "REMOTE")
-                          (h "strong" {} (if (= (get (get @data "remote_info") "configured") true) (get (get @data "remote_info") "repository") "연결 정보 없음"))
+                          (h "strong" {} (if (= (get (get @data "remote_info") "configured") true) (or (get (get @data "remote_info") "full_name") (get (get @data "remote_info") "repository")) "연결 정보 없음"))
                           (h "div" {:class "source-meta"}
                             (str "provider " (or (get (get @data "remote_info") "provider") "none")
                                  " · host " (or (get (get @data "remote_info") "host") "—")
+                                 " · auth " (or (get (get @data "remote_info") "auth") "—")
                                  " · branch " (or (get (get @data "remote_info") "branch") "—")
                                  " · ↑" (or (get (get @data "sync") "ahead") "—")
                                  " ↓" (or (get (get @data "sync") "behind") "—"))))))))

@@ -1,0 +1,184 @@
+;; Provider 읽기 전용 adapter (3단계)
+;; - auth 프로브
+;; - provider-repos 목록
+;; 쓰기(push/create/connect)는 이 파일에 두지 않는다.
+;; 토큰 원문은 반환·출력하지 않는다.
+
+(load "./provider.fl")
+
+(defn provider-redact [text]
+  (let [step1 (regex-replace (str text) "Token: \\S+" "Token: [redacted]")
+        step2 (regex-replace step1 "GH_TOKEN=\\S+" "GH_TOKEN=[redacted]")
+        step3 (regex-replace step2 "GITHUB_TOKEN=\\S+" "GITHUB_TOKEN=[redacted]")
+        step4 (regex-replace step3 "gho_\\S+" "gho_[redacted]")
+        step5 (regex-replace step4 "ghp_\\S+" "ghp_[redacted]")
+        step6 (regex-replace step5 "glpat-\\S+" "glpat-[redacted]")]
+    step6))
+
+(defn provider-shell [command]
+  (let [result (shell-exec-result command)]
+    {"exit" (or (get result "exit") -1)
+     "stdout" (provider-redact (or (get result "stdout") ""))
+     "stderr" (provider-redact (or (get result "stderr") ""))
+     "ok" (= (or (get result "exit") -1) 0)}))
+
+(defn provider-tool-available? [name]
+  (let [result (provider-shell (str "command -v " name " >/dev/null 2>&1"))]
+    (= (get result "ok") true)))
+
+(defn provider-normalize-kind [provider]
+  (str-to-lower (str-trim (str provider))))
+
+(defn provider-supported? [kind]
+  (or (= kind "github") (= kind "forgejo")))
+
+(defn provider-auth-result [provider auth account code detail]
+  {"provider" (provider-normalize-kind provider)
+   "host" (provider-host (provider-normalize-kind provider))
+   "auth" auth
+   "account" (str (or account ""))
+   "code" code
+   "detail" (provider-redact (str (or detail "")))})
+
+(defn provider-auth-github []
+  (if (not (provider-tool-available? "gh"))
+    (provider-auth-result "github" "blocked" "" "AUTH_BLOCKED" "gh CLI not found")
+    (let [result (provider-shell "gh api user --jq .login")
+          account (str-trim (or (get result "stdout") ""))]
+      (if (and (= (get result "ok") true) (> (length account) 0))
+        (provider-auth-result "github" "configured" account "AUTH_OK" "")
+        (provider-auth-result "github" "blocked" "" "AUTH_BLOCKED"
+                              (or (get result "stderr") (get result "stdout") "GitHub authentication missing"))))))
+
+(defn provider-as-items [value]
+  (if (= value nil) [] value))
+
+(defn provider-tea-login-match? [item]
+  (let [url (str (or (get item "url") ""))
+        ssh (str (or (get item "ssh_host") ""))]
+    (or (provider-forgejo-host? url) (provider-forgejo-host? ssh))))
+
+(defn provider-tea-login-configured? [logins]
+  (> (length (filter provider-tea-login-match? (provider-as-items logins))) 0))
+
+(defn provider-tea-login-account [logins]
+  (let [matched (filter provider-tea-login-match? (provider-as-items logins))]
+    (if (= (length matched) 0)
+      ""
+      (str (or (get (first matched) "user") "")))))
+
+(defn provider-auth-forgejo-from-logins [logins]
+  (if (provider-tea-login-configured? logins)
+    (provider-auth-result "forgejo" "configured" (provider-tea-login-account logins) "AUTH_OK" "")
+    (provider-auth-result "forgejo" "blocked" "" "AUTH_BLOCKED" "Forgejo tea login for fg.dclub.kr missing")))
+
+(defn provider-auth-forgejo []
+  (if (not (provider-tool-available? "tea"))
+    (provider-auth-result "forgejo" "blocked" "" "AUTH_BLOCKED" "tea CLI not found")
+    (let [result (provider-shell "tea login list --output json")
+          raw (str-trim (or (get result "stdout") ""))]
+      (if (not (= (get result "ok") true))
+        (provider-auth-result "forgejo" "blocked" "" "AUTH_BLOCKED"
+                              (or (get result "stderr") "tea login list failed"))
+        (if (= raw "")
+          (provider-auth-forgejo-from-logins [])
+          (provider-auth-forgejo-from-logins (json-parse raw)))))))
+
+(defn provider-auth-probe [provider]
+  (let [kind (provider-normalize-kind provider)]
+    (cond
+      (= kind "") (provider-auth-result "none" "missing" "" "UNKNOWN" "provider required")
+      (= kind "github") (provider-auth-github)
+      (= kind "forgejo") (provider-auth-forgejo)
+      true (provider-auth-result kind "blocked" "" "UNKNOWN" "unsupported provider"))))
+
+(defn provider-auth-status-all []
+  {"ok" true
+   "providers" [(provider-auth-probe "github") (provider-auth-probe "forgejo")]})
+
+(defn provider-repo-item-github [item]
+  (let [full (str (or (get item "nameWithOwner") ""))
+        parts (regex_split full "/")
+        owner (if (> (length parts) 0) (str (get parts 0)) "")
+        name (if (> (length parts) 1) (str (get parts 1)) full)]
+    {"provider" "github"
+     "owner" owner
+     "repository" name
+     "full_name" full
+     "name" full
+     "remote" (or (get item "url") "")
+     "url" (or (get item "url") "")
+     "description" (or (get item "description") "")
+     "private" (or (get item "isPrivate") false)
+     "updated" (or (get item "updatedAt") "")}))
+
+(defn provider-repo-item-forgejo [item]
+  (let [owner (str (or (get item "owner") ""))
+        name (str (or (get item "name") ""))
+        full (if (or (= owner "") (= name "")) name (str owner "/" name))]
+    {"provider" "forgejo"
+     "owner" owner
+     "repository" name
+     "full_name" full
+     "name" name
+     "remote" (or (get item "ssh") (get item "url") "")
+     "url" (or (get item "url") "")
+     "description" (or (get item "description") "")
+     "private" false
+     "updated" (or (get item "updated") "")}))
+
+(defn provider-repos-from-github-json [raw]
+  (map provider-repo-item-github (provider-as-items (json-parse raw))))
+
+(defn provider-repos-from-forgejo-json [raw]
+  (map provider-repo-item-forgejo (provider-as-items (json-parse raw))))
+(defn provider-repos-blocked [kind auth-info]
+  {"ok" false
+   "provider" kind
+   "auth" (or (get auth-info "auth") "blocked")
+   "code" "AUTH_BLOCKED"
+   "account" (or (get auth-info "account") "")
+   "error" (or (get auth-info "detail") "authentication required")
+   "repositories" []})
+
+(defn provider-repos-unknown [kind detail]
+  {"ok" false
+   "provider" kind
+   "auth" "blocked"
+   "code" "UNKNOWN"
+   "account" ""
+   "error" detail
+   "repositories" []})
+
+(defn provider-repos-list [provider]
+  (let [kind (provider-normalize-kind provider)]
+    (cond
+      (not (provider-supported? kind))
+        (provider-repos-unknown kind "unsupported provider")
+      true
+        (let [auth-info (provider-auth-probe kind)]
+          (if (not (= (get auth-info "auth") "configured"))
+            (provider-repos-blocked kind auth-info)
+            (if (= kind "github")
+              (let [result (provider-shell "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")]
+                (if (= (get result "ok") true)
+                  {"ok" true
+                   "provider" "github"
+                   "auth" "configured"
+                   "code" "PROVIDER_REPOS_OK"
+                   "account" (get auth-info "account")
+                   "repositories" (provider-repos-from-github-json (get result "stdout"))}
+                  (provider-repos-blocked "github"
+                    (provider-auth-result "github" "blocked" "" "AUTH_BLOCKED"
+                                          (or (get result "stderr") "gh repo list failed")))))
+              (let [result (provider-shell "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated")]
+                (if (= (get result "ok") true)
+                  {"ok" true
+                   "provider" "forgejo"
+                   "auth" "configured"
+                   "code" "PROVIDER_REPOS_OK"
+                   "account" (get auth-info "account")
+                   "repositories" (provider-repos-from-forgejo-json (get result "stdout"))}
+                  (provider-repos-blocked "forgejo"
+                    (provider-auth-result "forgejo" "blocked" "" "AUTH_BLOCKED"
+                                          (or (get result "stderr") "tea repos list failed")))))))))))

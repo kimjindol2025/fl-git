@@ -127,36 +127,119 @@
       {"ok" true "roots" roots "repositories" repos}
       {"ok" false "error" "FL_GIT_ROOTS에 *를 사용할 수 없습니다."})))
 
+(defn api-provider-redact [text]
+  (let [step1 (regex-replace (str text) "Token: \\S+" "Token: [redacted]")
+        step2 (regex-replace step1 "GH_TOKEN=\\S+" "GH_TOKEN=[redacted]")
+        step3 (regex-replace step2 "GITHUB_TOKEN=\\S+" "GITHUB_TOKEN=[redacted]")]
+    step3))
+
+(defn api-provider-tool? [name]
+  (= (api-code (api-run (str "command -v " name " >/dev/null 2>&1"))) 0))
+
+(defn api-provider-auth-github []
+  (if (not (api-provider-tool? "gh"))
+    {"provider" "github" "host" "github.com" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED" "detail" "gh CLI not found"}
+    (let [result (api-run "gh api user --jq .login")
+          account (str-trim (api-out result))]
+      (if (and (= (api-code result) 0) (> (length account) 0))
+        {"provider" "github" "host" "github.com" "auth" "configured" "account" account "code" "AUTH_OK" "detail" ""}
+        {"provider" "github" "host" "github.com" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED"
+         "detail" (api-provider-redact (or (get result "stderr") (api-out result) "GitHub authentication missing"))}))))
+
+(defn api-provider-tea-configured? [logins]
+  (> (length
+       (filter (fn [item]
+                 (let [url (str-to-lower (str (or (get item "url") "")))
+                       ssh (str-to-lower (str (or (get item "ssh_host") "")))]
+                   (or (str-includes url "fg.dclub.kr") (str-includes url "fg.dclub.jp") (str-includes ssh "fg.dclub.kr") (str-includes ssh "fg.dclub.jp"))))
+               (or logins [])))
+     0))
+
+(defn api-provider-tea-account [logins]
+  (let [matched (filter (fn [item]
+                          (let [url (str-to-lower (str (or (get item "url") "")))
+                                ssh (str-to-lower (str (or (get item "ssh_host") "")))]
+                            (or (str-includes url "fg.dclub.kr") (str-includes url "fg.dclub.jp") (str-includes ssh "fg.dclub.kr") (str-includes ssh "fg.dclub.jp"))))
+                        (or logins []))]
+    (if (= (length matched) 0) "" (str (or (get (first matched) "user") "")))))
+
+(defn api-provider-auth-forgejo []
+  (if (not (api-provider-tool? "tea"))
+    {"provider" "forgejo" "host" "fg.dclub.kr" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED" "detail" "tea CLI not found"}
+    (let [result (api-run "tea login list --output json")
+          raw (str-trim (api-out result))]
+      (if (not (= (api-code result) 0))
+        {"provider" "forgejo" "host" "fg.dclub.kr" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED"
+         "detail" (api-provider-redact (or (get result "stderr") "tea login list failed"))}
+        (let [logins (if (= raw "") [] (json_parse raw))]
+          (if (api-provider-tea-configured? logins)
+            {"provider" "forgejo" "host" "fg.dclub.kr" "auth" "configured"
+             "account" (api-provider-tea-account logins) "code" "AUTH_OK" "detail" ""}
+            {"provider" "forgejo" "host" "fg.dclub.kr" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED"
+             "detail" "Forgejo tea login for fg.dclub.kr missing"}))))))
+
+(defn api-provider-auth [provider]
+  (let [kind (str-to-lower (str-trim (str provider)))]
+    (cond
+      (= kind "github") (api-provider-auth-github)
+      (= kind "forgejo") (api-provider-auth-forgejo)
+      true {"provider" kind "host" "" "auth" "blocked" "account" "" "code" "UNKNOWN" "detail" "unsupported provider"})))
+
+(defn api-provider-status [provider]
+  (let [kind (str-to-lower (str-trim (str provider)))]
+    (if (= kind "")
+      {"ok" true "providers" [(api-provider-auth "github") (api-provider-auth "forgejo")]}
+      {"ok" true "providers" [(api-provider-auth kind)]})))
+
 (defn api-provider-repos [provider]
-  (let [kind (str-to-lower (str-trim (str provider)))
-        result (if (= kind "github")
-                 (api-run "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")
-                 (if (= kind "forgejo")
-                   (api-run "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated")
-                   {"code" 2 "stderr" "지원하지 않는 Git provider입니다."}))
-        parsed (if (= (api-code result) 0) (json_parse (api-out result)) [])
-        repos (map (fn [item]
-                     (if (= kind "github")
-                       {"provider" "github"
-                        "repository" (or (get item "nameWithOwner") "")
-                        "name" (or (get item "nameWithOwner") "")
-                        "remote" (or (get item "url") "")
-                        "url" (or (get item "url") "")
-                        "description" (or (get item "description") "")
-                        "private" (or (get item "isPrivate") false)
-                        "updated" (or (get item "updatedAt") "")}
-                       {"provider" "forgejo"
-                        "repository" (str (or (get item "owner") "") "/" (or (get item "name") ""))
-                        "name" (or (get item "name") "")
-                        "remote" (or (get item "ssh") (get item "url") "")
-                        "url" (or (get item "url") "")
-                        "description" (or (get item "description") "")
-                        "private" false
-                        "updated" (or (get item "updated") "")}))
-                   parsed)]
-    (if (= (api-code result) 0)
-      {"ok" true "provider" kind "repositories" repos}
-      {"ok" false "provider" kind "error" (or (get result "stderr") "provider 레포 목록을 불러오지 못했습니다.")})))
+  (let [kind (str-to-lower (str-trim (str provider)))]
+    (if (not (or (= kind "github") (= kind "forgejo")))
+      {"ok" false "provider" kind "auth" "blocked" "code" "UNKNOWN" "repositories" []
+       "error" "지원하지 않는 Git provider입니다."}
+      (let [auth-info (api-provider-auth kind)]
+        (if (not (= (get auth-info "auth") "configured"))
+          {"ok" false "provider" kind "auth" (get auth-info "auth") "code" "AUTH_BLOCKED"
+           "account" (get auth-info "account") "repositories" []
+           "error" (or (get auth-info "detail") "AUTH_BLOCKED")}
+          (let [result (if (= kind "github")
+                         (api-run "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")
+                         (api-run "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated"))]
+            (if (not (= (api-code result) 0))
+              {"ok" false "provider" kind "auth" "blocked" "code" "AUTH_BLOCKED" "repositories" []
+               "error" (api-provider-redact (or (get result "stderr") "provider 레포 목록을 불러오지 못했습니다."))}
+              (let [parsed (json_parse (api-out result))
+                    repos (map (fn [item]
+                                 (if (= kind "github")
+                                   (let [full (or (get item "nameWithOwner") "")
+                                         parts (regex_split full "/")
+                                         owner (if (> (length parts) 0) (get parts 0) "")
+                                         name (if (> (length parts) 1) (get parts 1) full)]
+                                     {"provider" "github"
+                                      "owner" owner
+                                      "repository" name
+                                      "full_name" full
+                                      "name" full
+                                      "remote" (or (get item "url") "")
+                                      "url" (or (get item "url") "")
+                                      "description" (or (get item "description") "")
+                                      "private" (or (get item "isPrivate") false)
+                                      "updated" (or (get item "updatedAt") "")})
+                                   (let [owner (or (get item "owner") "")
+                                         name (or (get item "name") "")
+                                         full (if (or (= owner "") (= name "")) name (str owner "/" name))]
+                                     {"provider" "forgejo"
+                                      "owner" owner
+                                      "repository" name
+                                      "full_name" full
+                                      "name" name
+                                      "remote" (or (get item "ssh") (get item "url") "")
+                                      "url" (or (get item "url") "")
+                                      "description" (or (get item "description") "")
+                                      "private" false
+                                      "updated" (or (get item "updated") "")})))
+                               parsed)]
+                {"ok" true "provider" kind "auth" "configured" "code" "PROVIDER_REPOS_OK"
+                 "account" (get auth-info "account") "repositories" repos}))))))))
 
 (defn api-create-repo [parent name]
   (let [base (str-trim (str parent))
@@ -365,11 +448,11 @@
    {"number" "05" "key" "ai:change-risk" "title" "변경 위험도" "content" (str "level=" (get risk "level") "\n" (get risk "reason") "\n변경 파일=" (get risk "file_count") " 민감 파일=" (get risk "sensitive_count") " 충돌=" (get risk "conflict_count"))}
    {"number" "06" "key" "repo:root" "title" "저장소 경로" "content" root}
    {"number" "07" "key" "repo:branch" "title" "현재 branch" "content" branch}
-   {"number" "08" "key" "repo:remote" "title" "Remote" "content" (str (get remote-info "provider") " · " (get remote-info "repository") "\n" remote)}
+   {"number" "08" "key" "repo:remote" "title" "Remote" "content" (str (get remote-info "provider") " · " (or (get remote-info "full_name") (get remote-info "repository")) "\n" remote)}
    {"number" "09" "key" "repo:sync" "title" "Ahead / Behind" "content" (str "ahead=" (get sync "ahead") " behind=" (get sync "behind") " upstream=" (get sync "upstream"))}
    {"number" "10" "key" "changes:files" "title" "변경 파일" "content" (str-join (map (fn [file] (str (get file "kind") " " (get file "path"))) (or (api-status-files) [])) "\n")}
    {"number" "11" "key" "diff:current" "title" "현재 Diff" "content" diff}
-   {"number" "12" "key" "remote:status" "title" "Remote Provider" "content" (str "provider=" (get remote-info "provider") " host=" (get remote-info "host") " configured=" (get remote-info "configured"))}
+   {"number" "12" "key" "remote:status" "title" "Remote Provider" "content" (str "provider=" (get remote-info "provider") " host=" (get remote-info "host") " auth=" (get remote-info "auth") " owner=" (get remote-info "owner") " repository=" (get remote-info "repository"))}
    {"number" "13" "key" "commits:recent" "title" "최근 커밋" "content" (str-join (map (fn [commit] (str (get commit "hash") " " (get commit "message"))) (or commits [])) "\n")}
    {"number" "14" "key" "remote:conflicts" "title" "충돌 파일" "content" (str-join (or conflicts []) "\n")}
    {"number" "15" "key" "repo:branches" "title" "Branch 목록" "content" (str-join (or branches []) "\n")}])
@@ -395,31 +478,77 @@
 
 (defn api-remote-provider [remote]
   (let [value (str-to-lower (str-trim (str remote)))]
-    (if (= value "") "none"
-      (if (or (str-includes value "github.com") (str-includes value "github:")) "github"
-        (if (or (str-includes value "fg.dclub.kr") (str-includes value "forgejo-dclub:")) "forgejo"
-          (if (str-includes value "gitlab.com") "gitlab" "unknown"))))))
+    (cond
+      (= value "") "none"
+      (or (str-includes value "github.com") (str-starts-with value "github:")) "github"
+      (or (str-includes value "fg.dclub.kr") (str-includes value "fg.dclub.jp") (str-starts-with value "forgejo-dclub:")) "forgejo"
+      (or (str-includes value "gitlab.com") (str-starts-with value "gitlab:")) "gitlab"
+      true "unknown")))
+
+(defn api-provider-host [provider]
+  (cond
+    (= provider "github") "github.com"
+    (= provider "forgejo") "fg.dclub.kr"
+    (= provider "gitlab") "gitlab.com"
+    true ""))
+
+(defn api-provider-strip-git [name]
+  (let [value (str-trim (str name))]
+    (if (and (str-ends-with value ".git") (> (length value) 4))
+      (substring value 0 (- (length value) 4))
+      value)))
+
+(defn api-provider-owner-token? [owner]
+  (let [value (str-to-lower (str-trim (str owner)))]
+    (and (> (length value) 0)
+         (not (str-includes value "@"))
+         (not (= value "https"))
+         (not (= value "http"))
+         (not (= value "ssh"))
+         (not (= value "git"))
+         (not (= value "github.com"))
+         (not (= value "gitlab.com"))
+         (not (= value "fg.dclub.kr"))
+         (not (= value "fg.dclub.jp"))
+         (not (= value "forgejo-dclub")))))
+
+(defn api-provider-parse-owner-repo [remote]
+  (let [clean (str-trim (str remote))
+        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split clean "[/:]"))
+        n (length parts)
+        repo-raw (if (> n 0) (get parts (- n 1)) "")
+        owner-raw (if (> n 1) (get parts (- n 2)) "")
+        owner (str-trim (str owner-raw))]
+    {"owner" (if (api-provider-owner-token? owner) owner "")
+     "repository" (api-provider-strip-git repo-raw)}))
+
+(defn api-provider-full-name [owner repository]
+  (let [o (str-trim (str owner))
+        r (str-trim (str repository))]
+    (if (= o "")
+      r
+      (if (= r "") o (str o "/" r)))))
 
 (defn api-remote-info [remote branch sync]
   (let [clean (str-trim (str remote))
         provider (api-remote-provider clean)
-        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split clean "[/:]"))
-        repo-part (if (> (length parts) 0) (last parts) "")
-        repo-name (str-replace-in repo-part ".git" "")
-        owner (if (> (length parts) 1) (get parts (- (length parts) 2)) "")
-        repository (if (> (length owner) 0) (str owner "/" repo-name) repo-name)
-        host (if (= provider "forgejo") "fg.dclub.kr"
-               (if (= provider "github") "github.com"
-                 (if (= provider "gitlab") "gitlab.com" "")))]
+        parsed (api-provider-parse-owner-repo clean)
+        owner (or (get parsed "owner") "")
+        repository (or (get parsed "repository") "")
+        auth (if (= clean "") "missing" "unknown")]
     {"provider" provider
-     "host" host
-     "remote" clean
+     "host" (api-provider-host provider)
+     "owner" owner
      "repository" repository
+     "remote" clean
      "branch" branch
-     "upstream" (get sync "upstream")
+     "upstream" (or (get sync "upstream") "")
+     "auth" auth
+     "name" ""
      "ahead" (get sync "ahead")
      "behind" (get sync "behind")
-     "configured" (> (length clean) 0)}))
+     "configured" (> (length clean) 0)
+     "full_name" (api-provider-full-name owner repository)}))
 
 (defn api-github-info []
   (let [result (api-run "gh repo view --json nameWithOwner,isPrivate,defaultBranchRef,url,description")
@@ -601,6 +730,8 @@
         (server-json (api-list-folders (get body "path")))
       (= action "list-repos")
         (server-json (api-list-repos))
+      (= action "provider-status")
+        (server-json (api-provider-status (get body "provider")))
       (= action "provider-repos")
         (let [listed (api-provider-repos (get body "provider"))]
           (if (= (get listed "ok") true)

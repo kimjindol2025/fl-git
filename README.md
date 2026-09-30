@@ -37,6 +37,18 @@ npm test
 ./scripts/check.sh
 ```
 
+## FreeLang Tools
+
+자주 쓰는 개발 명령은 공용 CLI로도 실행할 수 있다.
+
+```bash
+fl-tools test
+fl-tools check
+fl-tools dev
+fl-tools server
+fl-tools git status
+```
+
 ## 목표 명령
 
 ```bash
@@ -70,6 +82,17 @@ fl-git branch-delete <이름> --yes
 ```bash
 ./scripts/fl-git-web
 ```
+
+공통 workflow 배포 계약은 `.freelang/`에 있다.
+
+```bash
+fl-tools review .
+fl-tools deploy .
+```
+
+배포는 `fl-git` PM2 프로세스를 대상으로 Front 빌드 후 재시작하고,
+`http://127.0.0.1:40850/` smoke를 확인한다. Git worktree가 dirty하면
+공통 도구가 기본 차단한다.
 
 브라우저에서 [http://127.0.0.1:40850](http://127.0.0.1:40850)을 열면 저장소
 대시보드가 표시된다. 화면에서 허용된 폴더를 탐색해 선택하거나 경로를 입력할 수

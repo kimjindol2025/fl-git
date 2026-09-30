@@ -5,14 +5,17 @@
 ## 제품 방향
 
 `fl-git`는 서버에서 VS Code Source Control에 해당하는 화면을 제공하는
-FreeLang 기반 Git 작업공간이다. 웹 UI가 본체이며, CLI/TUI는 같은 동작을
-터미널에서 실행하기 위한 보조 경로다.
+FreeLang 기반 **Git Provider 공통 작업공간**이다. 웹 UI가 본체이며, CLI/TUI는
+같은 동작을 터미널에서 실행하기 위한 보조 경로다.
+
+목표는 GitHub 전용 앱이 아니라 Provider 추상화 위에 GitHub·Forgejo·(확장) GitLab을
+꽂는 것이다. 스키마 정본: `docs/PROVIDER-MODEL.md`.
 
 핵심 흐름은 다음 순서를 따른다.
 
 ```text
 폴더 선택 → 이 폴더 Git 상태 → 파일 선택/Stage → Commit
-→ GitHub 연결·branch 확인 → Pull/Push
+→ Provider 확인(GitHub/Forgejo 분리) → Pull/Push
 ```
 
 AI context는 부가 기능이다. 제품의 중심은 저장소를 화면으로 선택하고

@@ -9,6 +9,8 @@
 - 제품 범위·계획·명령·TTY 계약 문서 작성 완료
 - 기존 `fl-split-term`과 소스 분리 완료
 - 브라우저 UI·CLI·TUI·GitHub·AI 문맥 기능 구현 완료
+- Provider 모델 2단계: `src/provider.fl`, `fl-git provider model`, `remote_info` 스키마 정렬, fixture 15/15 PASS
+- Provider adapter 3단계: `src/provider-adapter.fl`, `provider status` / `provider repos` 읽기 전용, AUTH_BLOCKED/UNKNOWN 판정
 
 ## 검증 상태
 

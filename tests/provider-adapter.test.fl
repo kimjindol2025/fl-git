@@ -1,0 +1,81 @@
+; Provider adapter fixture — 순수 파싱/판정만 (네트워크 없음)
+(load "../src/provider-adapter.fl")
+
+(define gh-item (provider-repo-item-github
+                 {"nameWithOwner" "kimjindol2025/freelang-tools"
+                  "url" "https://github.com/kimjindol2025/freelang-tools"
+                  "description" "tools"
+                  "isPrivate" true
+                  "updatedAt" "2026-09-30T00:00:00Z"}))
+
+(define fg-item (provider-repo-item-forgejo
+                 {"owner" "kim"
+                  "name" "freelang-aia"
+                  "ssh" "forgejo-dclub:kim/freelang-aia.git"
+                  "url" "https://fg.dclub.jp/kim/freelang-aia"
+                  "description" "aia"
+                  "updated" "2026-09-30T00:00:00Z"}))
+
+(define tea-ok [{"name" "dclub" "url" "https://fg.dclub.kr" "ssh_host" "fg.dclub.kr" "user" "kim" "default" "false"}])
+(define tea-empty [])
+(define tea-other [{"name" "other" "url" "https://example.com" "ssh_host" "example.com" "user" "x"}])
+
+(deftest "redact token line"
+  (is (str-includes (provider-redact "Token: gho_secret value") "[redacted]")))
+
+(deftest "redact gh token env"
+  (is (str-includes (provider-redact "GH_TOKEN=abc123") "[redacted]")))
+
+(deftest "github repo item split"
+  (do
+    (is= "github" (get gh-item "provider"))
+    (is= "kimjindol2025" (get gh-item "owner"))
+    (is= "freelang-tools" (get gh-item "repository"))
+    (is= "kimjindol2025/freelang-tools" (get gh-item "full_name"))))
+
+(deftest "forgejo repo item split"
+  (do
+    (is= "forgejo" (get fg-item "provider"))
+    (is= "kim" (get fg-item "owner"))
+    (is= "freelang-aia" (get fg-item "repository"))
+    (is= "kim/freelang-aia" (get fg-item "full_name"))
+    (is= "forgejo-dclub:kim/freelang-aia.git" (get fg-item "remote"))))
+
+(deftest "tea login configured"
+  (is (provider-tea-login-configured? tea-ok)))
+
+(deftest "tea login empty blocked"
+  (is (not (provider-tea-login-configured? tea-empty))))
+
+(deftest "tea login other host blocked"
+  (is (not (provider-tea-login-configured? tea-other))))
+
+(deftest "tea account"
+  (is= "kim" (provider-tea-login-account tea-ok)))
+
+(deftest "forgejo auth from logins ok"
+  (is= "configured" (get (provider-auth-forgejo-from-logins tea-ok) "auth")))
+
+(deftest "forgejo auth from logins blocked"
+  (is= "AUTH_BLOCKED" (get (provider-auth-forgejo-from-logins tea-empty) "code")))
+
+(deftest "unsupported provider unknown"
+  (do
+    (is= "UNKNOWN" (get (provider-auth-probe "gitlab") "code"))
+    (is= "UNKNOWN" (get (provider-repos-list "gitlab") "code"))))
+
+(deftest "github json list parse"
+  (let [repos (provider-repos-from-github-json "[{\"nameWithOwner\":\"a/b\",\"url\":\"https://github.com/a/b\",\"description\":\"\",\"isPrivate\":false,\"updatedAt\":\"t\"}]")]
+    (do
+      (is= 1 (length repos))
+      (is= "a" (get (get repos 0) "owner"))
+      (is= "b" (get (get repos 0) "repository")))))
+
+(deftest "forgejo json list parse"
+  (let [repos (provider-repos-from-forgejo-json "[{\"owner\":\"kim\",\"name\":\"x\",\"ssh\":\"forgejo-dclub:kim/x.git\",\"url\":\"u\",\"description\":\"\",\"updated\":\"t\"}]")]
+    (do
+      (is= 1 (length repos))
+      (is= "kim" (get (get repos 0) "owner"))
+      (is= "x" (get (get repos 0) "repository")))))
+
+(run-tests)

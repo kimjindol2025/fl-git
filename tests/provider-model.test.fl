@@ -1,0 +1,93 @@
+; Provider 모델 fixture — URL 파싱만 검증 (네트워크/인증 없음)
+(load "../src/provider.fl")
+
+(define gh (provider-model "https://github.com/kimjindol2025/freelang-tools.git"
+                           {"name" "origin" "branch" "main" "upstream" "origin/main"}))
+(define gh-ssh (provider-model "git@github.com:kimjindol2025/fl-git.git" {}))
+(define fg (provider-model "forgejo-dclub:kim/freelang-aia.git"
+                           {"name" "forgejo" "branch" "master" "upstream" "forgejo/master" "auth" "configured"}))
+(define fg-https (provider-model "https://fg.dclub.kr/kim/freelang-aia.git" {}))
+(define gl (provider-model "https://gitlab.com/group/proj.git" {}))
+(define none-model (provider-model "" {}))
+(define unknown-model (provider-model "https://example.com/org/repo.git" {}))
+(define multi (provider-models-from-remote-v
+               "forgejo\tforgejo-dclub:kim/freelang-aia.git (fetch)\nforgejo\tforgejo-dclub:kim/freelang-aia.git (push)\ngithub\thttps://github.com/kimjindol2025/freelang-aia.git (fetch)\ngithub\thttps://github.com/kimjindol2025/freelang-aia.git (push)\n"
+               "master"
+               "forgejo/master"))
+
+(deftest "github detect"
+  (is= "github" (provider-detect "https://github.com/a/b.git")))
+
+(deftest "forgejo detect"
+  (is= "forgejo" (provider-detect "forgejo-dclub:kim/x.git")))
+
+(deftest "gitlab detect"
+  (is= "gitlab" (provider-detect "https://gitlab.com/a/b.git")))
+
+(deftest "none detect"
+  (is= "none" (provider-detect "")))
+
+(deftest "unknown detect"
+  (is= "unknown" (provider-detect "https://example.com/a/b.git")))
+
+(deftest "github model fields"
+  (do
+    (is= "github" (get gh "provider"))
+    (is= "github.com" (get gh "host"))
+    (is= "kimjindol2025" (get gh "owner"))
+    (is= "freelang-tools" (get gh "repository"))
+    (is= "main" (get gh "branch"))
+    (is= "origin/main" (get gh "upstream"))
+    (is= "unknown" (get gh "auth"))
+    (is= "origin" (get gh "name"))))
+
+(deftest "github ssh owner repo"
+  (do
+    (is= "github" (get gh-ssh "provider"))
+    (is= "kimjindol2025" (get gh-ssh "owner"))
+    (is= "fl-git" (get gh-ssh "repository"))))
+
+(deftest "forgejo model fields"
+  (do
+    (is= "forgejo" (get fg "provider"))
+    (is= "fg.dclub.kr" (get fg "host"))
+    (is= "kim" (get fg "owner"))
+    (is= "freelang-aia" (get fg "repository"))
+    (is= "configured" (get fg "auth"))
+    (is= "forgejo" (get fg "name"))))
+
+(deftest "forgejo https"
+  (do
+    (is= "forgejo" (get fg-https "provider"))
+    (is= "kim" (get fg-https "owner"))
+    (is= "freelang-aia" (get fg-https "repository"))))
+
+(deftest "gitlab model"
+  (do
+    (is= "gitlab" (get gl "provider"))
+    (is= "group" (get gl "owner"))
+    (is= "proj" (get gl "repository"))))
+
+(deftest "empty model"
+  (do
+    (is= "none" (get none-model "provider"))
+    (is= "missing" (get none-model "auth"))))
+
+(deftest "unknown model"
+  (is= "unknown" (get unknown-model "provider")))
+
+(deftest "full name"
+  (is= "kim/freelang-aia" (provider-full-name fg)))
+
+(deftest "multi remote models"
+  (do
+    (is= 2 (length multi))
+    (is= "forgejo" (get (get multi 0) "provider"))
+    (is= "github" (get (get multi 1) "provider"))
+    (is= "forgejo" (get (get multi 0) "name"))
+    (is= "github" (get (get multi 1) "name"))))
+
+(deftest "providers stay separated"
+  (is (not (= (get (get multi 0) "provider") (get (get multi 1) "provider")))))
+
+(run-tests)

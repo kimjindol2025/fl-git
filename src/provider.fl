@@ -1,0 +1,132 @@
+;; Provider 공통 모델 — URL/remote를 GitHub·Forgejo·GitLab 공통 구조로 표현한다.
+;; 스키마 정본: docs/PROVIDER-MODEL.md
+
+(defn provider-strip-git [name]
+  (let [value (str-trim (str name))]
+    (if (and (str-ends-with value ".git") (> (length value) 4))
+      (substring value 0 (- (length value) 4))
+      value)))
+
+(defn provider-forgejo-host? [value]
+  (let [text (str-to-lower (str value))]
+    (or (str-includes text "fg.dclub.kr")
+        (str-includes text "fg.dclub.jp")
+        (str-starts-with text "forgejo-dclub:"))))
+
+(defn provider-detect [remote]
+  (let [value (str-to-lower (str-trim (str remote)))]
+    (cond
+      (= value "") "none"
+      (or (str-includes value "github.com") (str-starts-with value "github:")) "github"
+      (provider-forgejo-host? value) "forgejo"
+      (or (str-includes value "gitlab.com") (str-starts-with value "gitlab:")) "gitlab"
+      true "unknown")))
+
+(defn provider-host [provider]
+  (cond
+    (= provider "github") "github.com"
+    (= provider "forgejo") "fg.dclub.kr"
+    (= provider "gitlab") "gitlab.com"
+    true ""))
+
+(defn provider-owner-token? [owner]
+  (let [value (str-to-lower (str-trim (str owner)))]
+    (and (> (length value) 0)
+         (not (str-includes value "@"))
+         (not (str-includes value "://"))
+         (not (= value "https"))
+         (not (= value "http"))
+         (not (= value "ssh"))
+         (not (= value "git"))
+         (not (= value "github.com"))
+         (not (= value "gitlab.com"))
+         (not (= value "fg.dclub.kr"))
+         (not (= value "fg.dclub.jp"))
+         (not (= value "forgejo-dclub")))))
+
+(defn provider-parse-owner-repo [remote]
+  (let [clean (str-trim (str remote))
+        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split clean "[/:]"))
+        n (length parts)
+        repo-raw (if (> n 0) (get parts (- n 1)) "")
+        owner-raw (if (> n 1) (get parts (- n 2)) "")
+        repository (provider-strip-git repo-raw)
+        owner (str-trim (str owner-raw))]
+    {"owner" (if (provider-owner-token? owner) owner "")
+     "repository" repository}))
+(defn provider-empty-model []
+  {"provider" "none"
+   "host" ""
+   "owner" ""
+   "repository" ""
+   "remote" ""
+   "branch" ""
+   "upstream" ""
+   "auth" "missing"
+   "name" ""})
+
+(defn provider-model [remote opts]
+  (let [clean (str-trim (str remote))
+        options (or opts {})
+        provider (provider-detect clean)
+        parsed (provider-parse-owner-repo clean)
+        auth-opt (str-trim (str (or (get options "auth") "")))
+        auth (cond
+               (= clean "") "missing"
+               (> (length auth-opt) 0) auth-opt
+               true "unknown")]
+    (if (= clean "")
+      (provider-empty-model)
+      {"provider" provider
+       "host" (provider-host provider)
+       "owner" (or (get parsed "owner") "")
+       "repository" (or (get parsed "repository") "")
+       "remote" clean
+       "branch" (str (or (get options "branch") ""))
+       "upstream" (str (or (get options "upstream") ""))
+       "auth" auth
+       "name" (str (or (get options "name") ""))})))
+
+(defn provider-full-name [model]
+  (let [owner (str-trim (str (or (get model "owner") "")))
+        repository (str-trim (str (or (get model "repository") "")))]
+    (if (= owner "")
+      repository
+      (if (= repository "")
+        owner
+        (str owner "/" repository)))))
+
+(defn provider-remote-line-url [line]
+  (let [trimmed (str-trim (str line))
+        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split trimmed "[ \\t]+"))]
+    (if (< (length parts) 2)
+      ""
+      (str-trim (str (get parts 1))))))
+
+(defn provider-remote-line-name [line]
+  (let [trimmed (str-trim (str line))
+        parts (filter (fn [part] (> (length (str-trim part)) 0)) (regex_split trimmed "[ \\t]+"))]
+    (if (= (length parts) 0)
+      ""
+      (str-trim (str (get parts 0))))))
+
+(defn provider-remote-line-fetch? [line]
+  (str-includes (str-to-lower (str line)) "(fetch)"))
+
+(defn provider-models-from-remote-v [remote-v branch upstream]
+  (let [lines (filter (fn [line] (provider-remote-line-fetch? line))
+                      (filter (fn [line] (> (length (str-trim line)) 0))
+                              (regex_split (str remote-v) "\\n")))]
+    (map (fn [line]
+           (provider-model (provider-remote-line-url line)
+                           {"name" (provider-remote-line-name line)
+                            "branch" branch
+                            "upstream" upstream
+                            "auth" "unknown"}))
+         lines)))
+
+(defn provider-primary-model [remote-v branch upstream]
+  (let [models (provider-models-from-remote-v remote-v branch upstream)]
+    (if (= (length models) 0)
+      (assoc (provider-empty-model) "branch" (str branch) "upstream" (str upstream))
+      (first models))))

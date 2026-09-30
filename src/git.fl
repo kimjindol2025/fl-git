@@ -1,4 +1,5 @@
 ;; Git 업무 계층 — 모든 명령은 결과와 exit를 보존한다.
+(load "./provider-adapter.fl")
 
 (defn git-shell-quote [value]
   (str "'" (str-replace-all (str value) "'" "'\\''") "'"))
@@ -67,16 +68,28 @@
       (do (println "사용법: fl-git branch-delete <이름> --yes") 2)
       (git-print (git-run (str "git branch -d " (git-shell-quote name)))))))
 
+(defn git-upstream []
+  (let [result (git-run "git rev-parse --abbrev-ref --symbolic-full-name @{upstream}")]
+    (if (= (or (get result "exit") -1) 0)
+      (str-trim (or (get result "stdout") ""))
+      "")))
+
 (defn git-context []
   (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
         branch (str-trim (git-capture "git branch --show-current"))
         remote (git-capture "git remote -v")
+        upstream (git-upstream)
+        primary (provider-primary-model remote branch upstream)
         status (git-capture "git status --short --branch")
         log (git-capture "git --no-pager log -5 --oneline")]
     (println "# fl-git 프로젝트 문맥")
     (println "")
     (println (str "- 브랜치: " branch))
     (println (str "- 저장소 루트: " root))
+    (println (str "- provider: " (get primary "provider")))
+    (println (str "- host: " (get primary "host")))
+    (println (str "- repository: " (provider-full-name primary)))
+    (println (str "- upstream: " upstream))
     (println "")
     (println "## 원격")
     (print remote)
@@ -90,10 +103,71 @@
   (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
         branch (str-trim (git-capture "git branch --show-current"))
         remote (str-trim (git-capture "git remote -v"))
+        upstream (git-upstream)
+        remotes (provider-models-from-remote-v remote branch upstream)
+        remote-info (provider-primary-model remote branch upstream)
         status (str-trim (git-capture "git status --short --branch"))
         log (str-trim (git-capture "git --no-pager log -5 --oneline"))]
-    (println (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log}))
+    (println (json-stringify {"root" root
+                              "branch" branch
+                              "remote" remote
+                              "status" status
+                              "recent_log" log
+                              "remote_info" remote-info
+                              "remotes" remotes}))
     0))
+
+(defn git-provider-model []
+  (let [branch (str-trim (git-capture "git branch --show-current"))
+        remote (str-trim (git-capture "git remote -v"))
+        upstream (git-upstream)
+        remotes (provider-models-from-remote-v remote branch upstream)
+        remote-info (provider-primary-model remote branch upstream)]
+    (println (json-stringify {"remote_info" remote-info "remotes" remotes}))
+    0))
+
+(defn git-provider-status [provider]
+  (let [kind (str-to-lower (str-trim (str provider)))
+        payload (if (= kind "")
+                  (provider-auth-status-all)
+                  {"ok" true "providers" [(provider-auth-probe kind)]})
+        blocked (filter (fn [item] (= (get item "code") "AUTH_BLOCKED"))
+                        (or (get payload "providers") []))
+        unknown (filter (fn [item] (= (get item "code") "UNKNOWN"))
+                        (or (get payload "providers") []))]
+    (println (json-stringify payload))
+    (cond
+      (> (length unknown) 0) (do (println "PROVIDER_STATUS=UNKNOWN") 2)
+      (> (length blocked) 0) (do (println "PROVIDER_STATUS=AUTH_BLOCKED") 2)
+      true (do (println "PROVIDER_STATUS=PASS") 0))))
+
+(defn git-provider-repos [provider]
+  (let [kind (str-to-lower (str-trim (str provider)))]
+    (if (= kind "")
+      (do (println "사용법: fl-git provider repos <github|forgejo>")
+          (println "PROVIDER_REPOS=UNKNOWN")
+          2)
+      (let [payload (provider-repos-list kind)
+            code (or (get payload "code") "UNKNOWN")]
+        (println (json-stringify payload))
+        (cond
+          (= code "PROVIDER_REPOS_OK") (do (println "PROVIDER_REPOS=PASS") 0)
+          (= code "AUTH_BLOCKED") (do (println "PROVIDER_REPOS=AUTH_BLOCKED") 2)
+          true (do (println "PROVIDER_REPOS=UNKNOWN") 2))))))
+
+(defn git-provider [action argument]
+  (cond
+    (= action "model") (git-provider-model)
+    (= action "status") (git-provider-status argument)
+    (= action "repos") (git-provider-repos argument)
+    (= action "help") (do (println "사용법:")
+                          (println "  fl-git provider model")
+                          (println "  fl-git provider status [github|forgejo]")
+                          (println "  fl-git provider repos <github|forgejo>")
+                          (println "읽기 전용. push/create는 제공하지 않는다.")
+                          0)
+    true (do (println "사용법: fl-git provider <model|status|repos> [provider]")
+             2)))
 
 (defn git-github [action argument]
   (cond

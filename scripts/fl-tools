@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+
+usage() {
+  cat <<'EOF'
+FreeLang Tools — 공용 개발 CLI
+
+사용법:
+  fl-tools test             FreeLang deftest 테스트 실행
+  fl-tools check            전체 문법·CLI·회귀 검증
+  fl-tools dev              Front 개발 서버 실행
+  fl-tools server           일반 Front 서버 실행
+  fl-tools git <명령>       fl-git CLI 실행
+  fl-tools help             도움말
+EOF
+}
+
+command_name="${1:-help}"
+shift || true
+
+case "$command_name" in
+  test)
+    exec "$ROOT/scripts/fl-test" "$@"
+    ;;
+  check)
+    exec "$ROOT/scripts/check.sh" "$@"
+    ;;
+  dev)
+    exec "$ROOT/scripts/fl-dev" "$@"
+    ;;
+  server|web)
+    exec "$ROOT/scripts/fl-git-web" "$@"
+    ;;
+  git)
+    exec "$ROOT/scripts/fl-git" "$@"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "알 수 없는 명령: $command_name" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

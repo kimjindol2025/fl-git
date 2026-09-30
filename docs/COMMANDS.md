@@ -17,7 +17,10 @@
 | `branch` | branch 조회 | 읽기 |
 | `branch-create <이름>` | 새 branch 생성·전환 | 변경 |
 | `context` | AI 전달 문맥 출력 | 읽기 |
-| `context-json` | AI/API 전달용 JSON 문맥 출력 | 읽기 |
+| `context-json` | AI/API 전달용 JSON 문맥 출력 (`remote_info`·`remotes` 포함) | 읽기 |
+| `provider model` | Provider 공통 모델 JSON 출력 | 읽기 |
+| `provider status [github\|forgejo]` | Provider 인증 프로브 (`AUTH_OK` / `AUTH_BLOCKED` / `UNKNOWN`) | 읽기 |
+| `provider repos <github\|forgejo>` | Provider별 레포 목록 (인증 필요, 쓰기 없음) | 읽기 |
 | `branch-delete <이름> --yes` | 로컬 branch 삭제 | 확인 필요 |
 | `github repo` | 현재 GitHub 저장소 정보 | 읽기 |
 | `github pr` | 열려 있는 PR 목록 | 읽기 |
