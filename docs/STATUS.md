@@ -14,6 +14,7 @@
 - AI Context 4단계: `sync.local_head/remote_head/match`, `recent_commits`, `remotes` provider 분리, CLI/Web 스키마 정렬
 - UI 분리 5단계: GitHub / Forgejo / 기타 패널 분리, 목록·remote·sync 혼입 방지, 클라이언트·서버 교차 연결 거부
 - 쓰기 6단계: `provider-write` 공통 게이트, CLI/Web confirm, 패널 Fetch/Pull/Push 대상 표시
+- 검증 7단계: `provider-gate` fixture PASS/DENY 코드, `fl-git provider gate`, `scripts/provider-gate`
 
 ## 검증 상태
 
@@ -25,12 +26,13 @@
 | Git CLI | PASS | 임시 저장소에서 status/add/unstage/commit/branch/context 검증 |
 | 원격 안전장치 | PASS | `pull/push/branch-delete`에 `--yes` 요구 |
 | Provider 쓰기 confirm | PASS | `provider-write` preview/mismatch, CLI `--yes`, Web `confirm=true` |
+| Provider fixture 게이트 | PASS | `PROVIDER_DETECT`…`REMOTE_WRITE_CONFIRM` 로드맵 코드 재현 |
 | GitHub 연동 | 구현 PASS / 외부 인증 BLOCKED | `gh` 명령 연결 완료, 현재 로컬 토큰 invalid |
 | TUI | PASS | PTY에서 상태·커밋 입력·종료 키 검증 |
 | 브라우저 UI | PASS | FL-Front 빌드 errors=0, HTTP 200, Playwright 패널·교차 거부 |
 | Provider UI 분리 | PASS | GitHub/Forgejo/기타 탭, sync 게이트, URL 형식 토스트 |
 | Provider 쓰기 UI | PASS | 패널 WRITE trio·active 게이트, confirm에 provider/repo/branch |
-| 화면 중심 흐름 | 진행 중 | Stage6 쓰기 confirm 완료. 7단계는 fixture 게이트 |
+| 화면 중심 흐름 | PASS | Stage1–7 Provider 로드맵 완료 |
 | AI 문맥 | PASS | Markdown `context`, JSON `context-json` |
 
 ## 발견된 경계

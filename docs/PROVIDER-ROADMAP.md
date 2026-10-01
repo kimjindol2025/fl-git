@@ -216,6 +216,9 @@ push
 
 ## 7단계 — 검증
 
+상태: **구현 완료**  
+정본: `src/provider-gate.fl` · `tests/provider-gate.test.fl` · `scripts/provider-gate` · CLI `fl-git provider gate`
+
 최소 fixture:
 
 - GitHub remote fixture
@@ -235,6 +238,21 @@ INVALID_PROVIDER=DENY
 HEAD_SYNC=PASS
 TOKEN_NOT_EXPOSED=PASS
 REMOTE_WRITE_CONFIRM=PASS
+```
+
+구현 요지:
+
+- 네트워크 없이 순수 fixture로 위 코드를 산출·검증
+- CLI: `fl-git provider gate` → 코드 출력 후 `PROVIDER_GATE=PASS|FAIL`
+- 스크립트: `./scripts/provider-gate` (테스트 + CLI 라인 재현). `scripts/check.sh`에 포함
+- `INVALID_PROVIDER=DENY`는 잘못된 provider가 거부되는 것이 정상 결과
+
+재현:
+
+```bash
+./scripts/provider-gate
+# 또는
+./scripts/fl-git provider gate
 ```
 
 ---
@@ -264,7 +282,7 @@ Forgejo(`fg.dclub.kr`)는 단순 백업이 아니라, 프로젝트·문서·커�
 4 AI Context 스키마 통일    ✅
 5 UI provider 분리          ✅
 6 쓰기(connect/fetch/pull/push) + confirm ✅
-7 fixture 검증 게이트
+7 fixture 검증 게이트     ✅
 ```
 
 기존 `docs/PLAN.md`의 “GitHub 앱” Phase는 이 로드맵으로 대체한다.  

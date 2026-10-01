@@ -1,0 +1,55 @@
+; Provider fixture 검증 게이트 (7단계, 네트워크 없음)
+(load "../src/provider-gate.fl")
+
+(define report (provider-gate-report))
+(define expected (provider-gate-expected))
+
+(deftest "github remote fixture"
+  (do
+    (is= "github" (get (provider-gate-fixture-github) "provider"))
+    (is= "kimjindol2025" (get (provider-gate-fixture-github) "owner"))
+    (is= "fl-git" (get (provider-gate-fixture-github) "repository"))))
+
+(deftest "forgejo remote fixture"
+  (do
+    (is= "forgejo" (get (provider-gate-fixture-forgejo) "provider"))
+    (is= "fg.dclub.kr" (get (provider-gate-fixture-forgejo) "host"))
+    (is= "kim/freelang-aia" (provider-full-name (provider-gate-fixture-forgejo)))))
+
+(deftest "provider none fixture"
+  (do
+    (is= "none" (get (provider-gate-fixture-none) "provider"))
+    (is= "missing" (get (provider-gate-fixture-none) "auth"))))
+
+(deftest "unknown provider fixture"
+  (is= "unknown" (get (provider-gate-fixture-unknown) "provider")))
+
+(deftest "auth missing fixture"
+  (do
+    (is= "AUTH_BLOCKED" (get (provider-auth-forgejo-from-logins []) "code"))
+    (is= "missing" (get (provider-gate-fixture-none) "auth"))))
+
+(deftest "head mismatch fixture"
+  (do
+    (is= false (get (provider-sync-build "a" "b" "origin/main" "1" "0") "match"))
+    (is= true (get (provider-sync-build "a" "a" "origin/main" "0" "0") "match"))))
+
+(deftest "gate codes match roadmap"
+  (do
+    (is= "PASS" (get report "PROVIDER_DETECT"))
+    (is= "PASS" (get report "GITHUB_CONTEXT"))
+    (is= "PASS" (get report "FORGEJO_CONTEXT"))
+    (is= "DENY" (get report "INVALID_PROVIDER"))
+    (is= "PASS" (get report "HEAD_SYNC"))
+    (is= "PASS" (get report "TOKEN_NOT_EXPOSED"))
+    (is= "PASS" (get report "REMOTE_WRITE_CONFIRM"))
+    (is (provider-gate-ok? report))))
+
+(deftest "expected map fixed"
+  (do
+    (is= "PASS" (get expected "PROVIDER_DETECT"))
+    (is= "DENY" (get expected "INVALID_PROVIDER"))
+    (is= "PASS" (get expected "REMOTE_WRITE_CONFIRM"))))
+
+(run-tests)
+(provider-gate-print report)

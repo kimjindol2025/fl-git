@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Provider fixture 검증 게이트 (7단계)
+# 네트워크 없이 로드맵 PASS/DENY 코드를 확인하고 재현한다.
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+RUNNER="${FREELANG_AFJ_RUNNER:-/home/kim/kim/platform/freelang-afj/bootstrap.js}"
+TEST_FILE="$ROOT/tests/provider-gate.test.fl"
+
+if [[ ! -f "$RUNNER" ]]; then
+  echo "PROVIDER_GATE=BLOCKED"
+  echo "CAUSE=AFJ runner not found: $RUNNER" >&2
+  exit 2
+fi
+
+if [[ ! -f "$TEST_FILE" ]]; then
+  echo "PROVIDER_GATE=BLOCKED"
+  echo "CAUSE=missing $TEST_FILE" >&2
+  exit 2
+fi
+
+gate_out="$(mktemp)"
+test_out="$(mktemp)"
+trap 'rm -f "$gate_out" "$test_out"' EXIT
+
+echo "[provider-gate] check tests/provider-gate.test.fl"
+node "$RUNNER" check "$TEST_FILE"
+
+echo "[provider-gate] run tests/provider-gate.test.fl"
+if ! node "$RUNNER" run "$TEST_FILE" >"$test_out" 2>&1; then
+  cat "$test_out"
+  echo "PROVIDER_GATE=FAIL"
+  echo "CAUSE=provider-gate.test.fl failed" >&2
+  exit 1
+fi
+cat "$test_out"
+
+echo "[provider-gate] fl-git provider gate"
+if ! "$ROOT/scripts/fl-git" provider gate >"$gate_out" 2>&1; then
+  cat "$gate_out"
+  echo "PROVIDER_GATE=FAIL"
+  echo "CAUSE=fl-git provider gate exit non-zero" >&2
+  exit 1
+fi
+cat "$gate_out"
+
+required=(
+  "PROVIDER_DETECT=PASS"
+  "GITHUB_CONTEXT=PASS"
+  "FORGEJO_CONTEXT=PASS"
+  "INVALID_PROVIDER=DENY"
+  "HEAD_SYNC=PASS"
+  "TOKEN_NOT_EXPOSED=PASS"
+  "REMOTE_WRITE_CONFIRM=PASS"
+  "PROVIDER_GATE=PASS"
+)
+
+missing=0
+for line in "${required[@]}"; do
+  if ! grep -Fxq -- "$line" "$gate_out"; then
+    echo "MISSING:$line" >&2
+    missing=1
+  fi
+done
+
+if [[ "$missing" -ne 0 ]]; then
+  echo "PROVIDER_GATE=FAIL"
+  exit 1
+fi
+
+echo "PROVIDER_GATE=PASS"
+exit 0

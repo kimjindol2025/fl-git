@@ -23,3 +23,4 @@ run_bounded "$RUNNER" run "$ROOT/src/main.fl" --help
 run_bounded "$RUNNER" check "$ROOT/tests/smoke.fl"
 run_bounded "$RUNNER" run "$ROOT/tests/smoke.fl"
 "$ROOT/scripts/fl-test"
+"$ROOT/scripts/provider-gate"

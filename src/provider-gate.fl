@@ -1,0 +1,179 @@
+;; Provider fixture 검증 게이트 (7단계)
+;; 네트워크 없이 로드맵 PASS/DENY 코드를 산출한다.
+(load "./provider.fl")
+(load "./provider-context.fl")
+(load "./provider-adapter.fl")
+(load "./provider-write.fl")
+
+(defn provider-gate-fixture-github []
+  (provider-model "https://github.com/kimjindol2025/fl-git.git"
+                  {"name" "origin" "branch" "main" "upstream" "origin/main" "auth" "unknown"}))
+
+(defn provider-gate-fixture-forgejo []
+  (provider-model "forgejo-dclub:kim/freelang-aia.git"
+                  {"name" "forgejo" "branch" "master" "upstream" "forgejo/master" "auth" "unknown"}))
+
+(defn provider-gate-fixture-none []
+  (provider-model "" {}))
+
+(defn provider-gate-fixture-unknown []
+  (provider-model "https://example.com/org/repo.git" {}))
+
+(defn provider-gate-detect-status []
+  (if (and (= (provider-detect "https://github.com/a/b.git") "github")
+           (= (provider-detect "forgejo-dclub:kim/x.git") "forgejo")
+           (= (provider-detect "https://fg.dclub.kr/kim/x.git") "forgejo")
+           (= (provider-detect "") "none")
+           (= (provider-detect "https://example.com/a/b.git") "unknown")
+           (= (get (provider-gate-fixture-github) "provider") "github")
+           (= (get (provider-gate-fixture-forgejo) "provider") "forgejo")
+           (= (get (provider-gate-fixture-none) "provider") "none")
+           (= (get (provider-gate-fixture-unknown) "provider") "unknown"))
+    "PASS"
+    "FAIL"))
+
+(defn provider-gate-github-context-status []
+  (let [info (provider-gate-fixture-github)
+        remotes [(provider-gate-fixture-forgejo) (provider-gate-fixture-github)]
+        sync (provider-sync-build "abc" "abc" "origin/main" "0" "0")
+        commits (provider-recent-commits-from-oneline "aaa feat one\nbbb fix two\n")
+        fields (provider-context-fields info remotes sync commits)]
+    (if (and (= (get (get fields "remote_info") "provider") "github")
+             (= (get (get fields "remote_info") "owner") "kimjindol2025")
+             (= (get (get fields "remote_info") "repository") "fl-git")
+             (= (provider-full-name (get fields "remote_info")) "kimjindol2025/fl-git")
+             (= 2 (length (get fields "remotes")))
+             (= true (get (get fields "sync") "match"))
+             (= 2 (length (get fields "recent_commits")))
+             (provider-context-providers-separated? (get fields "remotes")))
+      "PASS"
+      "FAIL")))
+
+(defn provider-gate-forgejo-context-status []
+  (let [info (provider-gate-fixture-forgejo)
+        remotes [(provider-gate-fixture-forgejo) (provider-gate-fixture-github)]
+        sync (provider-sync-build "def" "def" "forgejo/master" "0" "0")
+        commits (provider-recent-commits-from-delimited "ccc~2026-10-01~kim~forgejo commit\n")
+        fields (provider-context-fields info remotes sync commits)]
+    (if (and (= (get (get fields "remote_info") "provider") "forgejo")
+             (= (get (get fields "remote_info") "host") "fg.dclub.kr")
+             (= (provider-full-name (get fields "remote_info")) "kim/freelang-aia")
+             (= "forgejo" (get (get (get fields "remotes") 0) "provider"))
+             (= "github" (get (get (get fields "remotes") 1) "provider"))
+             (= true (get (get fields "sync") "match"))
+             (= 1 (length (get fields "recent_commits")))
+             (not (= (get (get (get fields "remotes") 0) "provider")
+                     (get (get (get fields "remotes") 1) "provider"))))
+      "PASS"
+      "FAIL")))
+
+(defn provider-gate-invalid-provider-status []
+  (let [probe (provider-auth-probe "bitbucket")
+        write-gate (provider-write-gate
+                     (provider-write-target-from-model (provider-gate-fixture-github) "pull")
+                     "forgejo"
+                     true)
+        supported? (provider-supported? "bitbucket")]
+    (if (and (= (get probe "code") "UNKNOWN")
+             (= (get probe "auth") "blocked")
+             (= (get write-gate "code") "REMOTE_WRITE_MISMATCH")
+             (= supported? false)
+             (= (get (provider-gate-fixture-none) "auth") "missing"))
+      "DENY"
+      "FAIL")))
+
+(defn provider-gate-head-sync-status []
+  (let [match (provider-sync-build "abc123" "abc123" "origin/main" "0" "0")
+        miss (provider-sync-build "abc123" "def456" "origin/main" "1" "0")
+        empty-remote (provider-sync-build "abc123" "" "origin/main" "" "")]
+    (if (and (= true (get match "match"))
+             (= false (get miss "match"))
+             (= false (get empty-remote "match"))
+             (= "abc123" (get match "local_head"))
+             (= "def456" (get miss "remote_head"))
+             (= "1" (get miss "ahead")))
+      "PASS"
+      "FAIL")))
+
+(defn provider-gate-token-status []
+  (let [redacted (provider-redact "Token: gho_secretvalue GH_TOKEN=abc123 GITHUB_TOKEN=zzz ghp_old glpat-xyz")
+        auth-none (provider-auth-forgejo-from-logins [])
+        detail (get auth-none "detail")]
+    (if (and (str-includes redacted "[redacted]")
+             (not (str-includes redacted "gho_secretvalue"))
+             (not (str-includes redacted "GH_TOKEN=abc123"))
+             (not (str-includes redacted "ghp_old"))
+             (not (str-includes redacted "glpat-xyz"))
+             (= (get auth-none "code") "AUTH_BLOCKED")
+             (= (get auth-none "auth") "blocked")
+             (not (str-includes (str detail) "gho_"))
+             (not (str-includes (str detail) "ghp_")))
+      "PASS"
+      "FAIL")))
+
+(defn provider-gate-write-confirm-status []
+  (let [target (provider-write-target-from-model (provider-gate-fixture-github) "push")
+        preview (provider-write-gate target "" false)
+        ready (provider-write-gate target "github" true)
+        none-write (provider-write-gate
+                     (provider-write-target-from-model (provider-gate-fixture-none) "fetch")
+                     ""
+                     true)
+        connect (provider-write-target-from-url "https://fg.dclub.kr/kim/x.git" "main" "connect")]
+    (if (and (= (get preview "code") "REMOTE_WRITE_CONFIRM_REQUIRED")
+             (= true (get preview "preview"))
+             (= "github" (get (get preview "display") "provider"))
+             (= "kimjindol2025/fl-git" (get (get preview "display") "repository"))
+             (= "main" (get (get preview "display") "branch"))
+             (= (get ready "code") "REMOTE_WRITE_READY")
+             (= (get none-write "code") "REMOTE_WRITE_NO_PROVIDER")
+             (= (get connect "provider") "forgejo")
+             (= (get connect "repository") "kim/x"))
+      "PASS"
+      "FAIL")))
+
+(defn provider-gate-report []
+  {"PROVIDER_DETECT" (provider-gate-detect-status)
+   "GITHUB_CONTEXT" (provider-gate-github-context-status)
+   "FORGEJO_CONTEXT" (provider-gate-forgejo-context-status)
+   "INVALID_PROVIDER" (provider-gate-invalid-provider-status)
+   "HEAD_SYNC" (provider-gate-head-sync-status)
+   "TOKEN_NOT_EXPOSED" (provider-gate-token-status)
+   "REMOTE_WRITE_CONFIRM" (provider-gate-write-confirm-status)})
+
+(defn provider-gate-expected []
+  {"PROVIDER_DETECT" "PASS"
+   "GITHUB_CONTEXT" "PASS"
+   "FORGEJO_CONTEXT" "PASS"
+   "INVALID_PROVIDER" "DENY"
+   "HEAD_SYNC" "PASS"
+   "TOKEN_NOT_EXPOSED" "PASS"
+   "REMOTE_WRITE_CONFIRM" "PASS"})
+
+(defn provider-gate-keys []
+  ["PROVIDER_DETECT"
+   "GITHUB_CONTEXT"
+   "FORGEJO_CONTEXT"
+   "INVALID_PROVIDER"
+   "HEAD_SYNC"
+   "TOKEN_NOT_EXPOSED"
+   "REMOTE_WRITE_CONFIRM"])
+
+(defn provider-gate-ok? [report]
+  (let [expected (provider-gate-expected)]
+    (= 0 (length (filter (fn [key]
+                           (not (= (get report key) (get expected key))))
+                         (provider-gate-keys))))))
+
+(defn provider-gate-print [report]
+  (do
+    (println (str "PROVIDER_DETECT=" (get report "PROVIDER_DETECT")))
+    (println (str "GITHUB_CONTEXT=" (get report "GITHUB_CONTEXT")))
+    (println (str "FORGEJO_CONTEXT=" (get report "FORGEJO_CONTEXT")))
+    (println (str "INVALID_PROVIDER=" (get report "INVALID_PROVIDER")))
+    (println (str "HEAD_SYNC=" (get report "HEAD_SYNC")))
+    (println (str "TOKEN_NOT_EXPOSED=" (get report "TOKEN_NOT_EXPOSED")))
+    (println (str "REMOTE_WRITE_CONFIRM=" (get report "REMOTE_WRITE_CONFIRM")))
+    (if (provider-gate-ok? report)
+      (println "PROVIDER_GATE=PASS")
+      (println "PROVIDER_GATE=FAIL"))))

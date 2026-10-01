@@ -11,6 +11,7 @@
   (println "")
   (println "읽기: status diff log branch stash context context-json")
   (println "Provider 읽기: provider model | status [github|forgejo] | repos <github|forgejo>")
+  (println "Provider 검증: provider gate")
   (println "Provider 쓰기: provider fetch|pull|push [provider] --yes")
   (println "Provider 연결: provider connect <url> [provider] --yes")
   (println "변경: add [파일...] unstage [파일...] commit <메시지>")

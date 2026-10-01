@@ -21,6 +21,7 @@
 | `provider model` | Provider 공통 모델 JSON 출력 | 읽기 |
 | `provider status [github\|forgejo]` | Provider 인증 프로브 (`AUTH_OK` / `AUTH_BLOCKED` / `UNKNOWN`) | 읽기 |
 | `provider repos <github\|forgejo>` | Provider별 레포 목록 (인증 필요, 쓰기 없음) | 읽기 |
+| `provider gate` | fixture 검증 게이트 (`PROVIDER_DETECT`…`REMOTE_WRITE_CONFIRM`) | 읽기 |
 | `provider fetch [provider] --yes` | 대상 provider/repo/branch 표시 후 fetch | 확인 필요 |
 | `provider pull [provider] --yes` | 대상 표시 후 pull | 확인 필요 |
 | `provider push [provider] --yes` | 대상 표시 후 push | 확인 필요 |

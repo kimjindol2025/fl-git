@@ -2,6 +2,7 @@
 (load "./provider-adapter.fl")
 (load "./provider-context.fl")
 (load "./provider-write.fl")
+(load "./provider-gate.fl")
 
 (defn git-shell-quote [value]
   (str "'" (str-replace-all (str value) "'" "'\\''") "'"))
@@ -261,6 +262,13 @@
                 (do (println "REMOTE_WRITE=PASS") 0)
                 (do (println "REMOTE_WRITE=FAIL") code)))))))))
 
+(defn git-provider-gate []
+  (let [report (provider-gate-report)]
+    (provider-gate-print report)
+    (if (provider-gate-ok? report)
+      0
+      2)))
+
 (defn git-provider [provider-args]
   (let [action (or (get provider-args 0) "help")
         rest-args (rest (or provider-args []))
@@ -271,6 +279,7 @@
       (= action "model") (git-provider-model)
       (= action "status") (git-provider-status argument)
       (= action "repos") (git-provider-repos argument)
+      (= action "gate") (git-provider-gate)
       (= action "fetch") (git-provider-write-op "fetch" argument yes?)
       (= action "pull") (git-provider-write-op "pull" argument yes?)
       (= action "push") (git-provider-write-op "push" argument yes?)
@@ -279,11 +288,13 @@
                             (println "  fl-git provider model")
                             (println "  fl-git provider status [github|forgejo]")
                             (println "  fl-git provider repos <github|forgejo>")
+                            (println "  fl-git provider gate")
                             (println "  fl-git provider fetch|pull|push [github|forgejo] [--yes]")
                             (println "  fl-git provider connect <url> [github|forgejo] [--yes]")
                             (println "쓰기 작업은 provider → repository → branch 표시 후 --yes 확인이 필요합니다.")
+                            (println "gate는 네트워크 없이 fixture PASS/DENY 코드를 출력한다.")
                             0)
-      true (do (println "사용법: fl-git provider <model|status|repos|fetch|pull|push|connect> …")
+      true (do (println "사용법: fl-git provider <model|status|repos|gate|fetch|pull|push|connect> …")
                2))))
 
 (defn git-github [action argument]
