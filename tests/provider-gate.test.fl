@@ -16,6 +16,12 @@
     (is= "fg.dclub.kr" (get (provider-gate-fixture-forgejo) "host"))
     (is= "kim/freelang-aia" (provider-full-name (provider-gate-fixture-forgejo)))))
 
+(deftest "gitlab remote fixture"
+  (do
+    (is= "gitlab" (get (provider-gate-fixture-gitlab) "provider"))
+    (is= "gitlab.com" (get (provider-gate-fixture-gitlab) "host"))
+    (is= "group/demo" (provider-full-name (provider-gate-fixture-gitlab)))))
+
 (deftest "provider none fixture"
   (do
     (is= "none" (get (provider-gate-fixture-none) "provider"))
@@ -39,6 +45,7 @@
     (is= "PASS" (get report "PROVIDER_DETECT"))
     (is= "PASS" (get report "GITHUB_CONTEXT"))
     (is= "PASS" (get report "FORGEJO_CONTEXT"))
+    (is= "PASS" (get report "GITLAB_CONTEXT"))
     (is= "DENY" (get report "INVALID_PROVIDER"))
     (is= "PASS" (get report "HEAD_SYNC"))
     (is= "PASS" (get report "TOKEN_NOT_EXPOSED"))

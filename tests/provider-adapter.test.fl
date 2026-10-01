@@ -61,8 +61,41 @@
 
 (deftest "unsupported provider unknown"
   (do
-    (is= "UNKNOWN" (get (provider-auth-probe "gitlab") "code"))
-    (is= "UNKNOWN" (get (provider-repos-list "gitlab") "code"))))
+    (is= "UNKNOWN" (get (provider-auth-probe "bitbucket") "code"))
+    (is= "UNKNOWN" (get (provider-repos-list "bitbucket") "code"))))
+
+(deftest "gitlab supported and blocked without glab or auth"
+  (do
+    (is (provider-supported? "gitlab"))
+    (is= "gitlab" (get (provider-auth-probe "gitlab") "provider"))
+    (is (or (= (get (provider-auth-probe "gitlab") "code") "AUTH_BLOCKED")
+            (= (get (provider-auth-probe "gitlab") "code") "AUTH_OK")))
+    (is (or (= (get (provider-repos-list "gitlab") "code") "AUTH_BLOCKED")
+            (= (get (provider-repos-list "gitlab") "code") "PROVIDER_REPOS_OK")))))
+
+(deftest "gitlab repo item split"
+  (let [item (provider-repo-item-gitlab
+              {"path_with_namespace" "group/demo"
+               "ssh_url_to_repo" "git@gitlab.com:group/demo.git"
+               "http_url_to_repo" "https://gitlab.com/group/demo.git"
+               "description" "demo"
+               "visibility" "private"
+               "last_activity_at" "2026-10-01T00:00:00Z"})]
+    (do
+      (is= "gitlab" (get item "provider"))
+      (is= "group" (get item "owner"))
+      (is= "demo" (get item "repository"))
+      (is= "group/demo" (get item "full_name"))
+      (is= "git@gitlab.com:group/demo.git" (get item "remote"))
+      (is= true (get item "private")))))
+
+(deftest "gitlab json list parse"
+  (let [repos (provider-repos-from-gitlab-json "[{\"path_with_namespace\":\"a/b\",\"ssh_url_to_repo\":\"git@gitlab.com:a/b.git\",\"http_url_to_repo\":\"https://gitlab.com/a/b.git\",\"description\":\"\",\"visibility\":\"public\",\"last_activity_at\":\"t\"}]")]
+    (do
+      (is= 1 (length repos))
+      (is= "a" (get (get repos 0) "owner"))
+      (is= "b" (get (get repos 0) "repository"))
+      (is= false (get (get repos 0) "private")))))
 
 (deftest "github json list parse"
   (let [repos (provider-repos-from-github-json "[{\"nameWithOwner\":\"a/b\",\"url\":\"https://github.com/a/b\",\"description\":\"\",\"isPrivate\":false,\"updatedAt\":\"t\"}]")]

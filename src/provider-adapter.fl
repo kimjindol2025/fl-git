@@ -30,7 +30,7 @@
   (str-to-lower (str-trim (str provider))))
 
 (defn provider-supported? [kind]
-  (or (= kind "github") (= kind "forgejo")))
+  (or (= kind "github") (= kind "forgejo") (= kind "gitlab")))
 
 (defn provider-auth-result [provider auth account code detail]
   {"provider" (provider-normalize-kind provider)
@@ -84,17 +84,30 @@
           (provider-auth-forgejo-from-logins [])
           (provider-auth-forgejo-from-logins (json-parse raw)))))))
 
+(defn provider-auth-gitlab []
+  (if (not (provider-tool-available? "glab"))
+    (provider-auth-result "gitlab" "blocked" "" "AUTH_BLOCKED" "glab CLI not found")
+    (let [result (provider-shell "glab api user --jq .username")
+          account (str-trim (or (get result "stdout") ""))]
+      (if (and (= (get result "ok") true) (> (length account) 0))
+        (provider-auth-result "gitlab" "configured" account "AUTH_OK" "")
+        (provider-auth-result "gitlab" "blocked" "" "AUTH_BLOCKED"
+                              (or (get result "stderr") (get result "stdout") "GitLab authentication missing"))))))
+
 (defn provider-auth-probe [provider]
   (let [kind (provider-normalize-kind provider)]
     (cond
       (= kind "") (provider-auth-result "none" "missing" "" "UNKNOWN" "provider required")
       (= kind "github") (provider-auth-github)
       (= kind "forgejo") (provider-auth-forgejo)
+      (= kind "gitlab") (provider-auth-gitlab)
       true (provider-auth-result kind "blocked" "" "UNKNOWN" "unsupported provider"))))
 
 (defn provider-auth-status-all []
   {"ok" true
-   "providers" [(provider-auth-probe "github") (provider-auth-probe "forgejo")]})
+   "providers" [(provider-auth-probe "github")
+                (provider-auth-probe "forgejo")
+                (provider-auth-probe "gitlab")]})
 
 (defn provider-repo-item-github [item]
   (let [full (str (or (get item "nameWithOwner") ""))
@@ -132,6 +145,35 @@
 
 (defn provider-repos-from-forgejo-json [raw]
   (map provider-repo-item-forgejo (provider-as-items (json-parse raw))))
+
+(defn provider-repo-item-gitlab [item]
+  (let [full (str (or (get item "path_with_namespace")
+                      (get item "pathWithNamespace")
+                      ""))
+        parts (regex_split full "/")
+        owner (if (> (length parts) 0) (str (get parts 0)) "")
+        name (if (> (length parts) 1)
+               (str (get parts (- (length parts) 1)))
+               (str (or (get item "path") (get item "name") full)))
+        remote (or (get item "ssh_url_to_repo")
+                   (get item "http_url_to_repo")
+                   (get item "web_url")
+                   "")
+        visibility (str-to-lower (str (or (get item "visibility") "")))]
+    {"provider" "gitlab"
+     "owner" owner
+     "repository" name
+     "full_name" (if (= full "") (if (or (= owner "") (= name "")) name (str owner "/" name)) full)
+     "name" (if (= full "") name full)
+     "remote" remote
+     "url" (or (get item "http_url_to_repo") (get item "web_url") remote)
+     "description" (or (get item "description") "")
+     "private" (or (= visibility "private") (= (get item "private") true))
+     "updated" (or (get item "last_activity_at") (get item "updated_at") "")}))
+
+(defn provider-repos-from-gitlab-json [raw]
+  (map provider-repo-item-gitlab (provider-as-items (json-parse raw))))
+
 (defn provider-repos-blocked [kind auth-info]
   {"ok" false
    "provider" kind
@@ -159,26 +201,41 @@
         (let [auth-info (provider-auth-probe kind)]
           (if (not (= (get auth-info "auth") "configured"))
             (provider-repos-blocked kind auth-info)
-            (if (= kind "github")
-              (let [result (provider-shell "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")]
-                (if (= (get result "ok") true)
-                  {"ok" true
-                   "provider" "github"
-                   "auth" "configured"
-                   "code" "PROVIDER_REPOS_OK"
-                   "account" (get auth-info "account")
-                   "repositories" (provider-repos-from-github-json (get result "stdout"))}
-                  (provider-repos-blocked "github"
-                    (provider-auth-result "github" "blocked" "" "AUTH_BLOCKED"
-                                          (or (get result "stderr") "gh repo list failed")))))
-              (let [result (provider-shell "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated")]
-                (if (= (get result "ok") true)
-                  {"ok" true
-                   "provider" "forgejo"
-                   "auth" "configured"
-                   "code" "PROVIDER_REPOS_OK"
-                   "account" (get auth-info "account")
-                   "repositories" (provider-repos-from-forgejo-json (get result "stdout"))}
-                  (provider-repos-blocked "forgejo"
-                    (provider-auth-result "forgejo" "blocked" "" "AUTH_BLOCKED"
-                                          (or (get result "stderr") "tea repos list failed")))))))))))
+            (cond
+              (= kind "github")
+                (let [result (provider-shell "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")]
+                  (if (= (get result "ok") true)
+                    {"ok" true
+                     "provider" "github"
+                     "auth" "configured"
+                     "code" "PROVIDER_REPOS_OK"
+                     "account" (get auth-info "account")
+                     "repositories" (provider-repos-from-github-json (get result "stdout"))}
+                    (provider-repos-blocked "github"
+                      (provider-auth-result "github" "blocked" "" "AUTH_BLOCKED"
+                                            (or (get result "stderr") "gh repo list failed")))))
+              (= kind "forgejo")
+                (let [result (provider-shell "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated")]
+                  (if (= (get result "ok") true)
+                    {"ok" true
+                     "provider" "forgejo"
+                     "auth" "configured"
+                     "code" "PROVIDER_REPOS_OK"
+                     "account" (get auth-info "account")
+                     "repositories" (provider-repos-from-forgejo-json (get result "stdout"))}
+                    (provider-repos-blocked "forgejo"
+                      (provider-auth-result "forgejo" "blocked" "" "AUTH_BLOCKED"
+                                            (or (get result "stderr") "tea repos list failed")))))
+              (= kind "gitlab")
+                (let [result (provider-shell "glab repo list -P 50 -F json")]
+                  (if (= (get result "ok") true)
+                    {"ok" true
+                     "provider" "gitlab"
+                     "auth" "configured"
+                     "code" "PROVIDER_REPOS_OK"
+                     "account" (get auth-info "account")
+                     "repositories" (provider-repos-from-gitlab-json (get result "stdout"))}
+                    (provider-repos-blocked "gitlab"
+                      (provider-auth-result "gitlab" "blocked" "" "AUTH_BLOCKED"
+                                            (or (get result "stderr") "glab repo list failed")))))
+              true (provider-repos-unknown kind "unsupported provider")))))))

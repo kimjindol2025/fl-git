@@ -175,7 +175,7 @@
 (defn git-provider-repos [provider]
   (let [kind (str-to-lower (str-trim (str provider)))]
     (if (= kind "")
-      (do (println "사용법: fl-git provider repos <github|forgejo>")
+      (do (println "사용법: fl-git provider repos <github|forgejo|gitlab>")
           (println "PROVIDER_REPOS=UNKNOWN")
           2)
       (let [payload (provider-repos-list kind)
@@ -237,7 +237,7 @@
         gate (provider-write-gate target expected confirmed)]
     (git-provider-print-gate gate)
     (if (= ref "")
-      (do (println "사용법: fl-git provider connect <url> [github|forgejo] [--yes]")
+      (do (println "사용법: fl-git provider connect <url> [github|forgejo|gitlab] [--yes]")
           (println "REMOTE_WRITE=UNKNOWN")
           2)
       (if (not (= (get gate "ok") true))
@@ -286,11 +286,11 @@
       (= action "connect") (git-provider-connect argument (or (get clean 1) "") yes?)
       (= action "help") (do (println "사용법:")
                             (println "  fl-git provider model")
-                            (println "  fl-git provider status [github|forgejo]")
-                            (println "  fl-git provider repos <github|forgejo>")
+                            (println "  fl-git provider status [github|forgejo|gitlab]")
+                            (println "  fl-git provider repos <github|forgejo|gitlab>")
                             (println "  fl-git provider gate")
-                            (println "  fl-git provider fetch|pull|push [github|forgejo] [--yes]")
-                            (println "  fl-git provider connect <url> [github|forgejo] [--yes]")
+                            (println "  fl-git provider fetch|pull|push [github|forgejo|gitlab] [--yes]")
+                            (println "  fl-git provider connect <url> [github|forgejo|gitlab] [--yes]")
                             (println "쓰기 작업은 provider → repository → branch 표시 후 --yes 확인이 필요합니다.")
                             (println "gate는 네트워크 없이 fixture PASS/DENY 코드를 출력한다.")
                             0)

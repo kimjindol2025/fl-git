@@ -11,7 +11,7 @@
 Git Provider
 ├─ GitHub
 ├─ Forgejo
-└─ GitLab 확장 가능
+└─ GitLab (adapter·UI·write·gate 2026-10-01)
 ```
 
 기준선 스냅샷: [`PROVIDER-BASELINE.md`](PROVIDER-BASELINE.md)
@@ -289,3 +289,9 @@ Forgejo(`fg.dclub.kr`)는 단순 백업이 아니라, 프로젝트·문서·커�
 
 기존 `docs/PLAN.md`의 “GitHub 앱” Phase는 이 로드맵으로 대체한다.  
 tracked `PLAN.md` 갱신·코드 구현은 2단계 착수 때 수행한다.
+
+
+## GitLab provider 확장 (2026-10-01)
+
+상태: **구현** — detect/model 기존 + adapter(`glab`)/UI 탭/write confirm/gate `GITLAB_CONTEXT`.
+호스트에 glab 없으면 AUTH_BLOCKED가 정상 경로다. 토큰 원문 비노출(`glpat-` redact).

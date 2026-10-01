@@ -144,7 +144,7 @@
                              (do (reset! tab provider)
                                  (reset! provider-selected-repo "")
                                  (reset! connect-remote-ref "")
-                                 (if (or (= provider "github") (= provider "forgejo"))
+                                 (if (or (= provider "github") (= provider "forgejo") (= provider "gitlab"))
                                    (load-provider-repos provider)
                                    (do (reset! remote-provider provider)
                                        (reset! provider-repos-provider provider)
@@ -225,7 +225,7 @@
                         (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 상세 정보를 불러오는 중…") (fetch-post! "/api" {"action" "commit-detail" "hash" (get commit "hash")} commit-detail-result)))
         rail-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "rail-nav-item active" "rail-nav-item")
-                                 :on-click (if (= name "compare") open-compare (if (or (= name "github") (= name "forgejo") (= name "other")) (fn [] (open-provider-page name)) (fn [] (reset! tab name))))} label))
+                                 :on-click (if (= name "compare") open-compare (if (or (= name "github") (= name "forgejo") (= name "gitlab") (= name "other")) (fn [] (open-provider-page name)) (fn [] (reset! tab name))))} label))
         view-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (if (= name "compare") open-compare (fn [] (reset! tab name)))} label))
         status-card (fn [label value tone]
@@ -233,7 +233,7 @@
                         (str (h "span" {:class "stat-label"} label) (h "strong" {:class (str "tone-" tone)} (or value "—")))))
         provider-label (fn []
                         (let [provider (get (get @data "remote_info") "provider")]
-                          (if (= provider "forgejo") "Forgejo (fg)" (if (= provider "github") "GitHub" "Remote"))))
+                          (if (= provider "forgejo") "Forgejo (fg)" (if (= provider "github") "GitHub" (if (= provider "gitlab") "GitLab" "Remote")))))
         file-row (fn [line]
                    (h "div" {:class "file-row"}
                      (str (h "span" {:class "file-mark"} (if (> (str-count line "??") 0) "?" "M")) (h "code" {} line))))
@@ -372,14 +372,20 @@
                                                (str-contains v "GitHub:"))
                                    forgejo? (or (str-contains v "fg.dclub.kr")
                                                 (str-contains v "fg.dclub.jp")
-                                                (str-contains v "forgejo-dclub:"))]
+                                                (str-contains v "forgejo-dclub:"))
+                                   gitlab? (or (str-contains v "gitlab.com")
+                                               (str-contains v "GitLab.com")
+                                               (str-contains v "gitlab:")
+                                               (str-contains v "GitLab:"))]
                                (if (= provider "github")
                                  github?
                                  (if (= provider "forgejo")
                                    forgejo?
-                                   (if (= provider "other")
-                                     (and (not github?) (not forgejo?))
-                                     true)))))
+                                   (if (= provider "gitlab")
+                                     gitlab?
+                                     (if (= provider "other")
+                                       (and (not github?) (not forgejo?) (not gitlab?))
+                                       true))))))
         render-provider-remote-row (fn [item]
                                      (h "div" {:class "provider-linked-row"}
                                        (str (h "strong" {} (or (get item "full_name") (str (get item "owner") "/" (get item "repository")) "—"))
@@ -406,7 +412,8 @@
                                 (let [linked (if (= provider "other")
                                                (filter (fn [item]
                                                          (and (not (= (get item "provider") "github"))
-                                                              (not (= (get item "provider") "forgejo"))))
+                                                              (not (= (get item "provider") "forgejo"))
+                                                              (not (= (get item "provider") "gitlab"))))
                                                        (or (get @data "remotes") []))
                                                (provider-remotes-for provider))
                                       current (if (> (length linked) 0) (first linked) nil)
@@ -469,7 +476,7 @@
                                                   (h "div" {:class "empty"} "커밋이 없습니다.")
                                                   (h "div" {:class "provider-commit-list"} (arr-join (map render-provider-commit-row commits) "")))))
                                          (if (= provider "other")
-                                           (h "p" {:class "provider-note"} "기타 Provider는 읽기 전용 요약입니다. 목록 연동 adapter는 GitHub/Forgejo만 제공합니다.")
+                                           (h "p" {:class "provider-note"} "기타 Provider는 읽기 전용 요약입니다. GitLab은 별도 탭에서 adapter·쓰기를 제공합니다.")
                                            (str (h "div" {:class "panel-heading"}
                                                   (str (h "h3" {} (str title " 레포지토리"))
                                                        (h "button" {:class "button ghost" :on-click (fn [] (load-provider-repos provider))} "새로고침")))
@@ -512,12 +519,15 @@
                                      (h "div" {:class "provider-switch-buttons"}
                                        (str (h "button" {:class (if (= @remote-provider "github") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "github"))} "GitHub")
                                             (h "button" {:class (if (= @remote-provider "forgejo") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "forgejo"))} "Forgejo (fg)")
+                                            (h "button" {:class (if (= @remote-provider "gitlab") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "gitlab"))} "GitLab")
                                             (h "button" {:class (if (= @remote-provider "other") "provider-switch-button active" "provider-switch-button") :on-click (fn [] (open-provider-page "other"))} "기타"))))))
                                  (if (= @remote-provider "forgejo")
                                    (render-provider-panel "forgejo" "Forgejo (fg)" "fg.dclub.kr" "forgejo-dclub:owner/repo.git 또는 https://fg.dclub.kr/owner/repo.git")
-                                   (if (= @remote-provider "other")
-                                     (render-provider-panel "other" "기타 Provider" "unknown" "지원 adapter 없음 · 읽기 전용")
-                                     (render-provider-panel "github" "GitHub" "github.com" "owner/repo 또는 https://github.com/owner/repo.git"))))
+                                   (if (= @remote-provider "gitlab")
+                                     (render-provider-panel "gitlab" "GitLab" "gitlab.com" "https://gitlab.com/group/repo.git 또는 git@gitlab.com:group/repo.git")
+                                     (if (= @remote-provider "other")
+                                       (render-provider-panel "other" "기타 Provider" "unknown" "지원 adapter 없음 · 읽기 전용")
+                                       (render-provider-panel "github" "GitHub" "github.com" "owner/repo 또는 https://github.com/owner/repo.git")))))
         render-compare (fn []
                         (let [server-files (or (get @file-compare "server_files") [])
                               github-files (or (get @file-compare "github_files") [])]
@@ -630,6 +640,7 @@
                         (str (h "span" {:class "rail-nav-label"} "GIT PROVIDERS")
                              (rail-tab "github" "GitHub")
                              (rail-tab "forgejo" "Forgejo (fg)")
+                             (rail-tab "gitlab" "GitLab")
                              (rail-tab "other" "기타 Provider")))))
                (h "div" {:class "rail-footer"}
                  (str (h "span" {:class "online-dot"} "●") " DESKTOP MODE"))))
@@ -699,13 +710,15 @@
                                  " · ↑" (or (get (get @data "sync") "ahead") "—")
                                  " ↓" (or (get (get @data "sync") "behind") "—"))))))))
             (h "section" {:class "provider-directory"}
-              (str (h "style" {} ".provider-directory{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}.provider-directory-card{display:block;width:100%;text-align:left;background:#111925;border:1px solid var(--line);border-radius:14px;color:var(--text);padding:16px;cursor:pointer}.provider-directory-card:hover{border-color:var(--blue);background:#17243a}.provider-directory-card strong{display:block;font-size:14px}.provider-directory-card span{display:block;margin-top:7px;color:var(--muted);font:11px ui-monospace,monospace}@media(max-width:1000px){.provider-directory{grid-template-columns:1fr}}")
+              (str (h "style" {} ".provider-directory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.provider-directory-card{display:block;width:100%;text-align:left;background:#111925;border:1px solid var(--line);border-radius:14px;color:var(--text);padding:16px;cursor:pointer}.provider-directory-card:hover{border-color:var(--blue);background:#17243a}.provider-directory-card strong{display:block;font-size:14px}.provider-directory-card span{display:block;margin-top:7px;color:var(--muted);font:11px ui-monospace,monospace}@media(max-width:1000px){.provider-directory{grid-template-columns:1fr}}")
                    (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "github"))}
                      (str (h "strong" {} "GitHub") (h "span" {} "github.com · GitHub 저장소 관리 화면 열기 →")))
                    (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "forgejo"))}
                      (str (h "strong" {} "Forgejo (fg)") (h "span" {} "fg.dclub.kr · 우리 Forgejo 저장소 관리 화면 열기 →")))
+                   (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "gitlab"))}
+                     (str (h "strong" {} "GitLab") (h "span" {} "gitlab.com · glab adapter · 목록·쓰기 게이트 →")))
                    (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "other"))}
-                     (str (h "strong" {} "기타 Provider") (h "span" {} "GitLab/unknown · 읽기 전용 요약 →"))))
+                     (str (h "strong" {} "기타 Provider") (h "span" {} "unknown · 읽기 전용 요약 →"))))
                  (h "section" {:class "panel create-panel"}
                    (str (h "div" {:class "panel-heading"} (h "h2" {} "새 저장소 만들기"))
                         (h "p" {:class "muted"} "현재 폴더에 새 로컬 Git 저장소를 생성합니다.")
@@ -753,7 +766,9 @@
               (render-provider-panel "github" "GitHub" "github.com" "owner/repo 또는 https://github.com/owner/repo.git")
               (if (= @tab "forgejo")
                 (render-provider-panel "forgejo" "Forgejo (fg)" "fg.dclub.kr" "forgejo-dclub:owner/repo.git 또는 https://fg.dclub.kr/owner/repo.git")
-                (if (= @tab "other")
+                (if (= @tab "gitlab")
+                  (render-provider-panel "gitlab" "GitLab" "gitlab.com" "https://gitlab.com/group/repo.git 또는 git@gitlab.com:group/repo.git")
+                  (if (= @tab "other")
                   (render-provider-panel "other" "기타 Provider" "unknown" "지원 adapter 없음 · 읽기 전용")
                   (if (= @tab "remote")
                     (render-connect-panel)
@@ -803,7 +818,7 @@
                                         (h "div" {:class "commit-detail"}
                                           (str (h "div" {:class "commit-detail-heading"} "커밋 상세 · 클릭한 커밋의 변경 내용")
                                                (h "pre" {:class "commit-detail-output"} (get @commit-detail "detail")))))))))))))))
-))))))
+)))))))
 
 (defn render [req]
   (server_header

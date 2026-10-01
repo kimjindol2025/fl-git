@@ -1,6 +1,6 @@
 {
   "brief": [
-    "핫은 (task-gitlab-provider-확장) 내용 (GitLab provider 확장) 다.",
+    "핫은 (task-fl-git-next-agenda) 내용 (fl-git residual PLAN candidates or NEW_AGENDA) 다.",
     "lock·graveyard에 있는 방향은 다시 꺼내지 않는다."
   ],
   "$": "airc-spec",
@@ -14,7 +14,7 @@
     "for": "브라우저 UI 본체 + CLI/TUI 보조 + AI context",
     "not": "업무앱과 메뉴/인증 공유, reset --hard/clean -fd 기본 제공, 토큰을 URL/파일 저장"
   },
-  "hot": "task-gitlab-provider-확장",
+  "hot": "task-fl-git-next-agenda",
   "constitution": {
     "1": "AI 전용. 인간 가독성을 위한 구조 타협 금지",
     "2": "identity는 잠긴다. 변경은 사용자 협의 필수. Claude 단독 변경 금지",
@@ -53,7 +53,21 @@
     },
     "task-gitlab-provider-확장": {
       "t": "task",
-      "v": "GitLab provider 확장",
+      "v": "GitLab provider adapter UI write gate",
+      "entry": [
+        "src/provider-adapter.fl web/pages/index.flx web/pages/api.flx"
+      ],
+      "check": [
+        "./scripts/provider-gate"
+      ],
+      "verified": true,
+      "next": [
+        "task-fl-git-next-agenda"
+      ]
+    },
+    "task-fl-git-next-agenda": {
+      "t": "task",
+      "v": "fl-git residual PLAN candidates or NEW_AGENDA",
       "entry": [],
       "check": [],
       "verified": false,
@@ -76,11 +90,11 @@
   "handoff": {
     "step1": "print-hot만 실행한다. SPEC.airc 본문(10줄 이후)은 읽지 않는다.",
     "step2": "brief 2줄의 hot id만 실행한다. lock·graveyard 방향은 재도입 금지.",
-    "step3": "hot=task-gitlab-provider-확장 실행. 완료 표식=Provider roadmap 1-7",
-    "step4": "너는 'Provider roadmap 1-7'까지 끝난 상태다. 'GitLab provider 확장'를 하면 된다.",
+    "step3": "hot=task-fl-git-next-agenda 실행. 완료 표식=GitLab provider adapter UI write gate",
+    "step4": "너는 'GitLab provider adapter UI write gate'까지 끝난 상태다. 'fl-git residual PLAN candidates or NEW_AGENDA'를 하면 된다.",
     "step5": "identity 변경 필요 시 사용자에게 먼저 물어라",
-    "done": "Provider roadmap 1-7",
-    "next": "GitLab provider 확장",
-    "checkpoint_at": "2026-10-01T18:13:43.946736+09:00"
+    "done": "GitLab provider adapter UI write gate",
+    "next": "fl-git residual PLAN candidates or NEW_AGENDA",
+    "checkpoint_at": "2026-10-01T23:51:20.307243+09:00"
   }
 }

@@ -55,3 +55,13 @@
 구분해 기록한다.
 
 검증 스크립트는 무한 대기를 막기 위해 15초 제한을 둔다.
+
+
+## GitLab provider 확장 · 2026-10-01
+
+- adapter: `provider status|repos gitlab` (glab 없으면 `AUTH_BLOCKED`)
+- UI: GitLab 탭·디렉터리 카드·패널 (기타와 분리)
+- write: confirm/mismatch에 gitlab 포함
+- gate: `GITLAB_CONTEXT=PASS` · `PROVIDER_GATE=PASS`
+- Front 빌드: `web/fl-front-build.js` diagnostics errors=0
+- 재현: `./scripts/provider-gate` · `./scripts/fl-git provider status gitlab` · POST `/api` provider-status/repos

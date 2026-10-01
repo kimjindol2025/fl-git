@@ -178,22 +178,85 @@
             {"provider" "forgejo" "host" "fg.dclub.kr" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED"
              "detail" "Forgejo tea login for fg.dclub.kr missing"}))))))
 
+(defn api-provider-auth-gitlab []
+  (if (not (api-provider-tool? "glab"))
+    {"provider" "gitlab" "host" "gitlab.com" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED" "detail" "glab CLI not found"}
+    (let [result (api-run "glab api user --jq .username")
+          account (str-trim (api-out result))]
+      (if (and (= (api-code result) 0) (> (length account) 0))
+        {"provider" "gitlab" "host" "gitlab.com" "auth" "configured" "account" account "code" "AUTH_OK" "detail" ""}
+        {"provider" "gitlab" "host" "gitlab.com" "auth" "blocked" "account" "" "code" "AUTH_BLOCKED"
+         "detail" (api-provider-redact (or (get result "stderr") (get result "stdout") "GitLab authentication missing"))}))))
+
 (defn api-provider-auth [provider]
   (let [kind (str-to-lower (str-trim (str provider)))]
     (cond
       (= kind "github") (api-provider-auth-github)
       (= kind "forgejo") (api-provider-auth-forgejo)
+      (= kind "gitlab") (api-provider-auth-gitlab)
       true {"provider" kind "host" "" "auth" "blocked" "account" "" "code" "UNKNOWN" "detail" "unsupported provider"})))
 
 (defn api-provider-status [provider]
   (let [kind (str-to-lower (str-trim (str provider)))]
     (if (= kind "")
-      {"ok" true "providers" [(api-provider-auth "github") (api-provider-auth "forgejo")]}
+      {"ok" true "providers" [(api-provider-auth "github") (api-provider-auth "forgejo") (api-provider-auth "gitlab")]}
       {"ok" true "providers" [(api-provider-auth kind)]})))
+
+(defn api-provider-repo-item [kind item]
+  (cond
+    (= kind "github")
+      (let [full (or (get item "nameWithOwner") "")
+            parts (regex_split full "/")
+            owner (if (> (length parts) 0) (get parts 0) "")
+            name (if (> (length parts) 1) (get parts 1) full)]
+        {"provider" "github"
+         "owner" owner
+         "repository" name
+         "full_name" full
+         "name" full
+         "remote" (or (get item "url") "")
+         "url" (or (get item "url") "")
+         "description" (or (get item "description") "")
+         "private" (or (get item "isPrivate") false)
+         "updated" (or (get item "updatedAt") "")})
+    (= kind "forgejo")
+      (let [owner (or (get item "owner") "")
+            name (or (get item "name") "")
+            full (if (or (= owner "") (= name "")) name (str owner "/" name))]
+        {"provider" "forgejo"
+         "owner" owner
+         "repository" name
+         "full_name" full
+         "name" name
+         "remote" (or (get item "ssh") (get item "url") "")
+         "url" (or (get item "url") "")
+         "description" (or (get item "description") "")
+         "private" false
+         "updated" (or (get item "updated") "")})
+    (= kind "gitlab")
+      (let [full (str (or (get item "path_with_namespace") (get item "pathWithNamespace") ""))
+            parts (regex_split full "/")
+            owner (if (> (length parts) 0) (str (get parts 0)) "")
+            name (if (> (length parts) 1)
+                   (str (get parts (- (length parts) 1)))
+                   (str (or (get item "path") (get item "name") full)))
+            remote (or (get item "ssh_url_to_repo") (get item "http_url_to_repo") (get item "web_url") "")
+            visibility (str-to-lower (str (or (get item "visibility") "")))]
+        {"provider" "gitlab"
+         "owner" owner
+         "repository" name
+         "full_name" (if (= full "") (if (or (= owner "") (= name "")) name (str owner "/" name)) full)
+         "name" (if (= full "") name full)
+         "remote" remote
+         "url" (or (get item "http_url_to_repo") (get item "web_url") remote)
+         "description" (or (get item "description") "")
+         "private" (or (= visibility "private") (= (get item "private") true))
+         "updated" (or (get item "last_activity_at") (get item "updated_at") "")})
+    true {"provider" kind "owner" "" "repository" "" "full_name" "" "name" "" "remote" "" "url" "" "description" "" "private" false "updated" ""}))
 
 (defn api-provider-repos [provider]
   (let [kind (str-to-lower (str-trim (str provider)))]
-    (if (not (or (= kind "github") (= kind "forgejo")))
+    (if (not (or (= kind "github") (= kind "forgejo") (= kind "gitlab")))
       {"ok" false "provider" kind "auth" "blocked" "code" "UNKNOWN" "repositories" []
        "error" "지원하지 않는 Git provider입니다."}
       (let [auth-info (api-provider-auth kind)]
@@ -201,43 +264,15 @@
           {"ok" false "provider" kind "auth" (get auth-info "auth") "code" "AUTH_BLOCKED"
            "account" (get auth-info "account") "repositories" []
            "error" (or (get auth-info "detail") "AUTH_BLOCKED")}
-          (let [result (if (= kind "github")
-                         (api-run "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")
-                         (api-run "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated"))]
+          (let [result (cond
+                         (= kind "github") (api-run "gh repo list --limit 50 --json nameWithOwner,url,description,isPrivate,updatedAt")
+                         (= kind "forgejo") (api-run "tea repos list --output json --limit 50 --fields owner,name,type,ssh,url,description,updated")
+                         true (api-run "glab repo list -P 50 -F json"))]
             (if (not (= (api-code result) 0))
               {"ok" false "provider" kind "auth" "blocked" "code" "AUTH_BLOCKED" "repositories" []
                "error" (api-provider-redact (or (get result "stderr") "provider 레포 목록을 불러오지 못했습니다."))}
               (let [parsed (json_parse (api-out result))
-                    repos (map (fn [item]
-                                 (if (= kind "github")
-                                   (let [full (or (get item "nameWithOwner") "")
-                                         parts (regex_split full "/")
-                                         owner (if (> (length parts) 0) (get parts 0) "")
-                                         name (if (> (length parts) 1) (get parts 1) full)]
-                                     {"provider" "github"
-                                      "owner" owner
-                                      "repository" name
-                                      "full_name" full
-                                      "name" full
-                                      "remote" (or (get item "url") "")
-                                      "url" (or (get item "url") "")
-                                      "description" (or (get item "description") "")
-                                      "private" (or (get item "isPrivate") false)
-                                      "updated" (or (get item "updatedAt") "")})
-                                   (let [owner (or (get item "owner") "")
-                                         name (or (get item "name") "")
-                                         full (if (or (= owner "") (= name "")) name (str owner "/" name))]
-                                     {"provider" "forgejo"
-                                      "owner" owner
-                                      "repository" name
-                                      "full_name" full
-                                      "name" name
-                                      "remote" (or (get item "ssh") (get item "url") "")
-                                      "url" (or (get item "url") "")
-                                      "description" (or (get item "description") "")
-                                      "private" false
-                                      "updated" (or (get item "updated") "")})))
-                               parsed)]
+                    repos (map (fn [item] (api-provider-repo-item kind item)) parsed)]
                 {"ok" true "provider" kind "auth" "configured" "code" "PROVIDER_REPOS_OK"
                  "account" (get auth-info "account") "repositories" repos}))))))))
 

@@ -13,6 +13,10 @@
   (provider-model "forgejo-dclub:kim/freelang-aia.git"
                   {"name" "forgejo" "branch" "master" "upstream" "forgejo/master" "auth" "unknown"}))
 
+(defn provider-gate-fixture-gitlab []
+  (provider-model "https://gitlab.com/group/demo.git"
+                  {"name" "gitlab" "branch" "main" "upstream" "gitlab/main" "auth" "unknown"}))
+
 (defn provider-gate-fixture-none []
   (provider-model "" {}))
 
@@ -23,10 +27,13 @@
   (if (and (= (provider-detect "https://github.com/a/b.git") "github")
            (= (provider-detect "forgejo-dclub:kim/x.git") "forgejo")
            (= (provider-detect "https://fg.dclub.kr/kim/x.git") "forgejo")
+           (= (provider-detect "https://gitlab.com/group/demo.git") "gitlab")
+           (= (provider-detect "gitlab:group/demo.git") "gitlab")
            (= (provider-detect "") "none")
            (= (provider-detect "https://example.com/a/b.git") "unknown")
            (= (get (provider-gate-fixture-github) "provider") "github")
            (= (get (provider-gate-fixture-forgejo) "provider") "forgejo")
+           (= (get (provider-gate-fixture-gitlab) "provider") "gitlab")
            (= (get (provider-gate-fixture-none) "provider") "none")
            (= (get (provider-gate-fixture-unknown) "provider") "unknown"))
     "PASS"
@@ -64,6 +71,35 @@
              (= 1 (length (get fields "recent_commits")))
              (not (= (get (get (get fields "remotes") 0) "provider")
                      (get (get (get fields "remotes") 1) "provider"))))
+      "PASS"
+      "FAIL")))
+
+(defn provider-gate-gitlab-context-status []
+  (let [info (provider-gate-fixture-gitlab)
+        remotes [(provider-gate-fixture-gitlab) (provider-gate-fixture-github)]
+        sync (provider-sync-build "g1" "g1" "gitlab/main" "0" "0")
+        commits (provider-recent-commits-from-oneline "ddd gitlab one\n")
+        fields (provider-context-fields info remotes sync commits)
+        write-ready (provider-write-gate
+                      (provider-write-target-from-model info "push")
+                      "gitlab"
+                      true)
+        write-mismatch (provider-write-gate
+                         (provider-write-target-from-model info "pull")
+                         "github"
+                         true)
+        probe (provider-auth-probe "gitlab")]
+    (if (and (= (get (get fields "remote_info") "provider") "gitlab")
+             (= (get (get fields "remote_info") "host") "gitlab.com")
+             (= (provider-full-name (get fields "remote_info")) "group/demo")
+             (= "gitlab" (get (get (get fields "remotes") 0) "provider"))
+             (= true (get (get fields "sync") "match"))
+             (= 1 (length (get fields "recent_commits")))
+             (provider-supported? "gitlab")
+             (= (get write-ready "code") "REMOTE_WRITE_READY")
+             (= (get write-mismatch "code") "REMOTE_WRITE_MISMATCH")
+             (or (= (get probe "code") "AUTH_BLOCKED")
+                 (= (get probe "code") "AUTH_OK")))
       "PASS"
       "FAIL")))
 
@@ -136,6 +172,7 @@
   {"PROVIDER_DETECT" (provider-gate-detect-status)
    "GITHUB_CONTEXT" (provider-gate-github-context-status)
    "FORGEJO_CONTEXT" (provider-gate-forgejo-context-status)
+   "GITLAB_CONTEXT" (provider-gate-gitlab-context-status)
    "INVALID_PROVIDER" (provider-gate-invalid-provider-status)
    "HEAD_SYNC" (provider-gate-head-sync-status)
    "TOKEN_NOT_EXPOSED" (provider-gate-token-status)
@@ -145,6 +182,7 @@
   {"PROVIDER_DETECT" "PASS"
    "GITHUB_CONTEXT" "PASS"
    "FORGEJO_CONTEXT" "PASS"
+   "GITLAB_CONTEXT" "PASS"
    "INVALID_PROVIDER" "DENY"
    "HEAD_SYNC" "PASS"
    "TOKEN_NOT_EXPOSED" "PASS"
@@ -154,6 +192,7 @@
   ["PROVIDER_DETECT"
    "GITHUB_CONTEXT"
    "FORGEJO_CONTEXT"
+   "GITLAB_CONTEXT"
    "INVALID_PROVIDER"
    "HEAD_SYNC"
    "TOKEN_NOT_EXPOSED"
@@ -170,6 +209,7 @@
     (println (str "PROVIDER_DETECT=" (get report "PROVIDER_DETECT")))
     (println (str "GITHUB_CONTEXT=" (get report "GITHUB_CONTEXT")))
     (println (str "FORGEJO_CONTEXT=" (get report "FORGEJO_CONTEXT")))
+    (println (str "GITLAB_CONTEXT=" (get report "GITLAB_CONTEXT")))
     (println (str "INVALID_PROVIDER=" (get report "INVALID_PROVIDER")))
     (println (str "HEAD_SYNC=" (get report "HEAD_SYNC")))
     (println (str "TOKEN_NOT_EXPOSED=" (get report "TOKEN_NOT_EXPOSED")))
