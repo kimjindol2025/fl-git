@@ -743,7 +743,7 @@
                  (h "div" {:class "panel-heading"}
                      (str (h "h2" {} "AI Context 카드")
                           (h "span" {:class "muted"} (str (length @context-selected) "개 선택"))))
-                 (h "p" {:class "muted"} "카드를 선택하면 선택한 정보만 API 응답으로 전달합니다. 전체 상태는 POST /api action=ai-context, 저장소 검색은 POST /api action=ai-search로 제공합니다.")
+                 (h "p" {:class "muted"} "카드를 선택하면 선택한 정보만 API 응답으로 전달합니다. 계승 참조(continuity:*)와 프로젝트 SPEC(spec:*)·provider:remotes가 연결됩니다. 전체는 ai-context, 검색은 ai-search(continuity=PROJECT-CONTINUITY+SPEC)입니다.")
                  (h "div" {:class "context-readiness"}
                    (str (h "span" {:class "context-readiness-item"}
                               (str "AIRC " (if (= (get (get @data "continuity") "available") true) "연결됨" "없음")))

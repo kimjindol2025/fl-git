@@ -101,6 +101,61 @@
       (provider-recent-commits-from-delimited (or (get result "stdout") ""))
       [])))
 
+(defn git-airc-packet [path source-label]
+  (let [raw (str-trim (git-capture (str "if test -f " path "; then cat -- " path "; else printf '{}'; fi")))
+        document (if (= raw "") {} (json-parse raw))
+        identity (or (get document "identity") {})
+        nodes (or (get document "nodes") {})
+        hot (or (get document "hot") "")
+        hot-node (or (get nodes hot) {})
+        handoff (or (get document "handoff") {})
+        locks (or (get document "lock") [])]
+    {"available" (> (length (or (get identity "what") "")) 0)
+     "source" source-label
+     "identity" identity
+     "hot" hot
+     "hot_node" hot-node
+     "locks" locks
+     "handoff" handoff}))
+
+(defn git-context-card [number key title content]
+  {"number" number "key" key "title" title "content" (str (or content ""))})
+
+(defn git-reference-cards [continuity spec remote-info remotes sync]
+  [(git-context-card "01" "continuity:identity" "계승 참조 · 정체성"
+     (if (= (get continuity "available") true)
+       (str (get (get continuity "identity") "what") "\n이유: " (get (get continuity "identity") "why"))
+       "PROJECT-CONTINUITY.airc 없음"))
+   (git-context-card "02" "continuity:hot" "계승 참조 · Hot"
+     (if (= (get continuity "available") true)
+       (str "hot=" (get continuity "hot") "\n" (get (get continuity "hot_node") "v"))
+       "PROJECT-CONTINUITY.airc 없음"))
+   (git-context-card "03" "spec:identity" "프로젝트 SPEC · 정체성"
+     (if (= (get spec "available") true)
+       (str (get (get spec "identity") "what") "\n이유: " (get (get spec "identity") "why"))
+       "SPEC.airc 없음"))
+   (git-context-card "04" "spec:hot" "프로젝트 SPEC · Hot"
+     (if (= (get spec "available") true)
+       (str "hot=" (get spec "hot") "\n" (get (get spec "hot_node") "v"))
+       "SPEC.airc 없음"))
+   (git-context-card "05" "provider:remotes" "Provider remotes (분리)"
+     (str-join
+       (map (fn [item]
+              (str (get item "provider") " · "
+                   (or (get item "full_name") (get item "repository") "—")
+                   " · " (or (get item "remote") "")))
+            (or remotes []))
+       "\n"))
+   (git-context-card "06" "repo:sync" "HEAD Sync"
+     (str "match=" (get sync "match")
+          " local=" (get sync "local_head")
+          " remote=" (get sync "remote_head")
+          " upstream=" (get sync "upstream")))
+   (git-context-card "07" "remote:status" "Remote Provider"
+     (str "provider=" (get remote-info "provider")
+          " host=" (get remote-info "host")
+          " repository=" (provider-full-name remote-info)))])
+
 (defn git-ai-context-packet []
   (let [root (str-trim (git-capture "git rev-parse --show-toplevel"))
         branch (str-trim (git-capture "git branch --show-current"))
@@ -112,18 +167,26 @@
         sync (git-sync-info)
         recent-commits (git-recent-commits)
         recent-log (str-trim (git-capture "git --no-pager log -5 --oneline"))
+        continuity (git-airc-packet "PROJECT-CONTINUITY.airc" "PROJECT-CONTINUITY.airc")
+        spec (git-airc-packet "SPEC.airc" "SPEC.airc")
+        cards (git-reference-cards continuity spec remote-info remotes sync)
         fields (provider-context-fields remote-info remotes sync recent-commits)]
     (obj-merge {"root" root
                 "branch" branch
                 "remote" remote
                 "status" status
-                "recent_log" recent-log}
+                "recent_log" recent-log
+                "continuity" continuity
+                "spec" spec
+                "cards" cards
+                "available_keys" (map (fn [card] (get card "key")) cards)}
                fields)))
 
 (defn git-context []
   (let [packet (git-ai-context-packet)
         primary (get packet "remote_info")
-        sync (get packet "sync")]
+        sync (get packet "sync")
+        cards (or (get packet "cards") [])]
     (println "# fl-git 프로젝트 문맥")
     (println "")
     (println (str "- 브랜치: " (get packet "branch")))
@@ -135,7 +198,15 @@
     (println (str "- local_head: " (get sync "local_head")))
     (println (str "- remote_head: " (get sync "remote_head")))
     (println (str "- head_match: " (get sync "match")))
+    (println (str "- spec.hot: " (get (get packet "spec") "hot")))
+    (println (str "- continuity.hot: " (get (get packet "continuity") "hot")))
     (println "")
+    (println "## 참조 카드")
+    (doall (map (fn [card]
+                  (do (println (str "### " (get card "number") " · " (get card "title") " [" (get card "key") "]"))
+                      (println (get card "content"))
+                      (println "")))
+                cards))
     (println "## 원격 (provider 분리)")
     (print (get packet "remote"))
     (println "## 상태")

@@ -40,8 +40,7 @@
 
 ## 다음 후보
 
-- GitLab provider adapter·UI·쓰기 (detect/model만 있음)
-- `docs/PLAN.md` 잔여: 참조 시스템 카드 연결, TTY 마우스 선택 등
+- `docs/PLAN.md` 잔여: TTY 마우스 선택
 
 ## 발견된 경계
 
@@ -65,3 +64,11 @@
 - gate: `GITLAB_CONTEXT=PASS` · `PROVIDER_GATE=PASS`
 - Front 빌드: `web/fl-front-build.js` diagnostics errors=0
 - 재현: `./scripts/provider-gate` · `./scripts/fl-git provider status gitlab` · POST `/api` provider-status/repos
+
+
+## 참조 시스템 카드 연결 · 2026-10-02
+
+- Web `ai-context` 카드에 `spec:*`(SPEC.airc) · `provider:remotes` 추가 (총 19장)
+- CLI `context` / `context-json`에 continuity·spec·cards 패리티
+- `ai-search` continuity 범위에 SPEC.airc 포함
+- 재현: `fl-git context-json` · `curl ... -d '{"action":"ai-context"}'` · `{"action":"context","keys":["spec:hot"]}`

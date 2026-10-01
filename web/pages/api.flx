@@ -528,8 +528,8 @@
           {"ok" false "code" "REMOTE_WRITE_UNKNOWN_OP" "error" (str "지원하지 않는 쓰기 작업: " kind)
            "target" target "display" (get gate "display")}))))
 
-(defn api-continuity []
-  (let [result (api-run "if test -f PROJECT-CONTINUITY.airc; then cat -- PROJECT-CONTINUITY.airc; else printf '{}'; fi")
+(defn api-airc-packet [path source-label]
+  (let [result (api-run (str "if test -f " (api-shell-quote path) "; then cat -- " (api-shell-quote path) "; else printf '{}'; fi"))
         raw (api-out result)
         document (json_parse raw)
         identity (or (get document "identity") {})
@@ -540,13 +540,19 @@
         handoff (or (get document "handoff") {})
         locks (or (get document "lock") [])]
     {"available" (> (length (or (get identity "what") "")) 0)
-     "source" "PROJECT-CONTINUITY.airc"
+     "source" source-label
      "identity" identity
      "constitution" constitution
      "hot" hot
      "hot_node" hot-node
      "locks" locks
      "handoff" handoff}))
+
+(defn api-continuity []
+  (api-airc-packet "PROJECT-CONTINUITY.airc" "PROJECT-CONTINUITY.airc"))
+
+(defn api-spec-airc []
+  (api-airc-packet "SPEC.airc" "SPEC.airc"))
 
 (defn api-airc-documents []
   (map
@@ -573,7 +579,7 @@
                              (api-command (str "git log --all --oneline --regexp-ignore-case --grep=" (api-shell-quote clean) " -n 40"))
                              {"code" 0 "stdout" "" "stderr" ""})
             continuity-result (if (or (= selected "continuity") (= selected "all"))
-                               (api-command (str "if test -f PROJECT-CONTINUITY.airc; then grep -n -F -- " (api-shell-quote clean) " PROJECT-CONTINUITY.airc | head -n 80; fi"))
+                               (api-command (str "{ if test -f PROJECT-CONTINUITY.airc; then grep -n -F -- " (api-shell-quote clean) " PROJECT-CONTINUITY.airc; fi; if test -f SPEC.airc; then grep -n -F -- " (api-shell-quote clean) " SPEC.airc; fi; } | head -n 80"))
                                {"code" 0 "stdout" "" "stderr" ""})]
         {"ok" true
          "mode" "read-only"
@@ -582,29 +588,45 @@
          "files" (api-out file-result)
          "history" (api-out history-result)
          "continuity" (api-out continuity-result)
-         "ai_instruction" "검색 결과는 참고 자료입니다. 변경·커밋·Push·Pull은 이 검색 API에서 실행되지 않습니다."}))))
+         "ai_instruction" "검색 결과는 참고 자료입니다. continuity 범위는 PROJECT-CONTINUITY.airc와 SPEC.airc를 함께 검색합니다. 변경·커밋·Push·Pull은 이 검색 API에서 실행되지 않습니다."}))))
 
-(defn api-context-json [root branch remote status log continuity risk remote-info remotes sync recent-commits]
+(defn api-context-json [root branch remote status log continuity spec risk remote-info remotes sync recent-commits cards]
   (json-stringify {"root" root "branch" branch "remote" remote "status" status "recent_log" log
-                   "continuity" continuity "change_risk" risk
-                   "remote_info" remote-info "remotes" remotes "sync" sync "recent_commits" recent-commits}))
+                   "continuity" continuity "spec" spec "change_risk" risk
+                   "remote_info" remote-info "remotes" remotes "sync" sync "recent_commits" recent-commits
+                   "cards" cards
+                   "available_keys" (map (fn [card] (get card "key")) (or cards []))}))
 
-(defn api-context-cards [root branch remote status diff commits github sync conflicts branches continuity risk remote-info]
-  [{"number" "01" "key" "continuity:identity" "title" "프로젝트 정체성" "content" (if (= (get continuity "available") true) (str (get (get continuity "identity") "what") "\n이유: " (get (get continuity "identity") "why")) "AIRC 정본 없음")}
-   {"number" "02" "key" "continuity:hot" "title" "현재 Hot 작업" "content" (if (= (get continuity "available") true) (str "hot=" (get continuity "hot") "\n" (get (get continuity "hot_node") "v") "\n검증: " (str-join (or (get (get continuity "hot_node") "check") []) "\n")) "AIRC 정본 없음")}
-   {"number" "03" "key" "continuity:locks" "title" "계승 Lock" "content" (if (= (get continuity "available") true) (str-join (map (fn [item] (str "[" (get item "severity") "] " (get item "rule") " — " (get item "why"))) (or (get continuity "locks") [])) "\n") "AIRC 정본 없음")}
-   {"number" "04" "key" "continuity:handoff" "title" "AI 인수인계" "content" (if (= (get continuity "available") true) (str-join [(get (get continuity "handoff") "step1") (get (get continuity "handoff") "step2") (get (get continuity "handoff") "step3") (get (get continuity "handoff") "step4") (get (get continuity "handoff") "step5") (get (get continuity "handoff") "step6")] "\n") "AIRC 정본 없음")}
-   {"number" "05" "key" "ai:change-risk" "title" "변경 위험도" "content" (str "level=" (get risk "level") "\n" (get risk "reason") "\n변경 파일=" (get risk "file_count") " 민감 파일=" (get risk "sensitive_count") " 충돌=" (get risk "conflict_count"))}
-   {"number" "06" "key" "repo:root" "title" "저장소 경로" "content" root}
-   {"number" "07" "key" "repo:branch" "title" "현재 branch" "content" branch}
-   {"number" "08" "key" "repo:remote" "title" "Remote" "content" (str (get remote-info "provider") " · " (or (get remote-info "full_name") (get remote-info "repository")) "\n" remote)}
-   {"number" "09" "key" "repo:sync" "title" "HEAD Sync" "content" (str "match=" (get sync "match") "\nlocal_head=" (get sync "local_head") "\nremote_head=" (get sync "remote_head") "\nupstream=" (get sync "upstream") " ahead=" (get sync "ahead") " behind=" (get sync "behind"))}
-   {"number" "10" "key" "changes:files" "title" "변경 파일" "content" (str-join (map (fn [file] (str (get file "kind") " " (get file "path"))) (or (api-status-files) [])) "\n")}
-   {"number" "11" "key" "diff:current" "title" "현재 Diff" "content" diff}
-   {"number" "12" "key" "remote:status" "title" "Remote Provider" "content" (str "provider=" (get remote-info "provider") " host=" (get remote-info "host") " auth=" (get remote-info "auth") " owner=" (get remote-info "owner") " repository=" (get remote-info "repository"))}
-   {"number" "13" "key" "commits:recent" "title" "최근 커밋" "content" (str-join (map (fn [commit] (str (get commit "hash") " " (get commit "message"))) (or commits [])) "\n")}
-   {"number" "14" "key" "remote:conflicts" "title" "충돌 파일" "content" (str-join (or conflicts []) "\n")}
-   {"number" "15" "key" "repo:branches" "title" "Branch 목록" "content" (str-join (or branches []) "\n")}])
+(defn api-provider-remotes-content [remotes]
+  (str-join
+    (map (fn [item]
+           (str (get item "provider") " · "
+                (or (get item "full_name") (get item "repository") "—")
+                " · " (or (get item "remote") "")
+                " · auth=" (or (get item "auth") "unknown")))
+         (or remotes []))
+    "\n"))
+
+(defn api-context-cards [root branch remote status diff commits github sync conflicts branches continuity spec risk remote-info remotes]
+  [{"number" "01" "key" "continuity:identity" "title" "계승 참조 · 정체성" "content" (if (= (get continuity "available") true) (str (get (get continuity "identity") "what") "\n이유: " (get (get continuity "identity") "why") "\nsource=" (get continuity "source")) "PROJECT-CONTINUITY.airc 없음")}
+   {"number" "02" "key" "continuity:hot" "title" "계승 참조 · Hot" "content" (if (= (get continuity "available") true) (str "hot=" (get continuity "hot") "\n" (get (get continuity "hot_node") "v") "\n검증: " (str-join (or (get (get continuity "hot_node") "check") []) "\n")) "PROJECT-CONTINUITY.airc 없음")}
+   {"number" "03" "key" "continuity:locks" "title" "계승 Lock" "content" (if (= (get continuity "available") true) (str-join (map (fn [item] (str "[" (get item "priority") "] " (get item "rule") " — " (get item "why"))) (or (get continuity "locks") [])) "\n") "PROJECT-CONTINUITY.airc 없음")}
+   {"number" "04" "key" "continuity:handoff" "title" "계승 인수인계" "content" (if (= (get continuity "available") true) (str-join [(get (get continuity "handoff") "step1") (get (get continuity "handoff") "step2") (get (get continuity "handoff") "step3") (get (get continuity "handoff") "step4") (get (get continuity "handoff") "step5") (get (get continuity "handoff") "step6")] "\n") "PROJECT-CONTINUITY.airc 없음")}
+   {"number" "05" "key" "spec:identity" "title" "프로젝트 SPEC · 정체성" "content" (if (= (get spec "available") true) (str (get (get spec "identity") "what") "\n이유: " (get (get spec "identity") "why") "\nsource=" (get spec "source")) "SPEC.airc 없음")}
+   {"number" "06" "key" "spec:hot" "title" "프로젝트 SPEC · Hot" "content" (if (= (get spec "available") true) (str "hot=" (get spec "hot") "\n" (get (get spec "hot_node") "v") "\n검증: " (str-join (or (get (get spec "hot_node") "check") []) "\n")) "SPEC.airc 없음")}
+   {"number" "07" "key" "spec:handoff" "title" "프로젝트 SPEC · 인수인계" "content" (if (= (get spec "available") true) (str-join [(get (get spec "handoff") "step1") (get (get spec "handoff") "step2") (get (get spec "handoff") "step3") (get (get spec "handoff") "step4") (get (get spec "handoff") "step5") (or (get (get spec "handoff") "done") "") (or (get (get spec "handoff") "next") "")] "\n") "SPEC.airc 없음")}
+   {"number" "08" "key" "ai:change-risk" "title" "변경 위험도" "content" (str "level=" (get risk "level") "\n" (get risk "reason") "\n변경 파일=" (get risk "file_count") " 민감 파일=" (get risk "sensitive_count") " 충돌=" (get risk "conflict_count"))}
+   {"number" "09" "key" "repo:root" "title" "저장소 경로" "content" root}
+   {"number" "10" "key" "repo:branch" "title" "현재 branch" "content" branch}
+   {"number" "11" "key" "repo:remote" "title" "Remote (primary)" "content" (str (get remote-info "provider") " · " (or (get remote-info "full_name") (get remote-info "repository")) "\n" remote)}
+   {"number" "12" "key" "provider:remotes" "title" "Provider remotes (분리)" "content" (api-provider-remotes-content remotes)}
+   {"number" "13" "key" "repo:sync" "title" "HEAD Sync" "content" (str "match=" (get sync "match") "\nlocal_head=" (get sync "local_head") "\nremote_head=" (get sync "remote_head") "\nupstream=" (get sync "upstream") " ahead=" (get sync "ahead") " behind=" (get sync "behind"))}
+   {"number" "14" "key" "changes:files" "title" "변경 파일" "content" (str-join (map (fn [file] (str (get file "kind") " " (get file "path"))) (or (api-status-files) [])) "\n")}
+   {"number" "15" "key" "diff:current" "title" "현재 Diff" "content" diff}
+   {"number" "16" "key" "remote:status" "title" "Remote Provider" "content" (str "provider=" (get remote-info "provider") " host=" (get remote-info "host") " auth=" (get remote-info "auth") " owner=" (get remote-info "owner") " repository=" (get remote-info "repository"))}
+   {"number" "17" "key" "commits:recent" "title" "최근 커밋" "content" (str-join (map (fn [commit] (str (get commit "hash") " " (get commit "message"))) (or commits [])) "\n")}
+   {"number" "18" "key" "remote:conflicts" "title" "충돌 파일" "content" (str-join (or conflicts []) "\n")}
+   {"number" "19" "key" "repo:branches" "title" "Branch 목록" "content" (str-join (or branches []) "\n")}])
 
 (defn api-context-markdown [cards]
   (str-join (map (fn [card] (str "## " (get card "number") " · " (get card "title") " [" (get card "key") "]\n" (or (get card "content") ""))) (or cards [])) "\n\n"))
@@ -874,6 +896,7 @@
         github (api-github-info)
         sync (api-sync-info)
         continuity (api-continuity)
+        spec (api-spec-airc)
         airc-documents (api-airc-documents)
         risk (api-change-risk files conflicts)
         root (api-out root-result)
@@ -884,14 +907,14 @@
         log (api-out log-result)
         remotes (api-remotes-from-remote-v remote-v branch sync)
         remote-info (if (> (length remotes) 0) (first remotes) (api-remote-info remote branch sync))
-        context-cards (api-context-cards root branch remote status (api-out diff-result) commits github sync conflicts branches continuity risk remote-info)]
+        context-cards (api-context-cards root branch remote status (api-out diff-result) commits github sync conflicts branches continuity spec risk remote-info remotes)]
     {"ok" true "message" (or message "") "root" root "branch" branch
      "remote" remote "status" status "files" files "diff" (api-out diff-result) "log" log "commits" commits
      "recent_commits" commits
      "github" github "sync" sync "conflicts" conflicts "branches" branches
-     "continuity" continuity "airc_documents" airc-documents "change_risk" risk
+     "continuity" continuity "spec" spec "airc_documents" airc-documents "change_risk" risk
      "remote_info" remote-info "remotes" remotes
-     "context_json" (api-context-json root branch remote status log continuity risk remote-info remotes sync commits)
+     "context_json" (api-context-json root branch remote status log continuity spec risk remote-info remotes sync commits context-cards)
      "context_cards" context-cards
      "context_available_keys" (map (fn [card] (get card "key")) context-cards)}))
 
@@ -943,6 +966,7 @@
                         "mode" "read-only"
                         "source" "fl-git"
                         "continuity" (get snapshot "continuity")
+                        "spec" (get snapshot "spec")
                         "change_risk" (get snapshot "change_risk")
                         "remote_info" (get snapshot "remote_info")
                         "remotes" (get snapshot "remotes")
@@ -951,7 +975,7 @@
                         "available_keys" (get snapshot "context_available_keys")
                         "cards" cards
                         "markdown" (api-context-markdown cards)
-                        "ai_instruction" "이 응답은 현재 저장소와 AIRC 정본의 읽기 전용 상태입니다. remote_info.provider로 GitHub와 Forgejo를 구분하세요. 변경 작업은 사용자 승인과 별도 UI 작업을 거친 뒤에만 실행하세요."}))
+                        "ai_instruction" "이 응답은 현재 저장소와 참조 AIRC(PROJECT-CONTINUITY·SPEC) 카드의 읽기 전용 상태입니다. 운영 Hot은 spec:hot, 계승 참조는 continuity:* 를 보세요. remote_info.provider와 provider:remotes로 GitHub·Forgejo·GitLab을 구분하세요. 변경 작업은 사용자 승인과 별도 UI 작업을 거친 뒤에만 실행하세요."}))
       (= action "ai-search")
         (let [result (api-ai-search (get body "query") (get body "scope"))]
           (if (= (get result "ok") true)

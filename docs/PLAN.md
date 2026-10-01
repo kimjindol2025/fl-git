@@ -62,7 +62,7 @@
 - [x] 현재 branch에서 PR 생성
 - [x] `fl-git context` Markdown 출력
 - [x] JSON context 출력
-- [ ] 기존 참조 시스템 카드와 연결
+- [x] 기존 참조 시스템 카드와 연결 (PROJECT-CONTINUITY + SPEC + provider remotes → AI Context/CLI)
 
 ## 완료 판정
 

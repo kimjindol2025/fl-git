@@ -14,19 +14,18 @@ Content-Type: application/json
 
 응답에는 다음이 포함된다.
 
-- `continuity.identity`: 프로젝트 목적과 존재 이유
-- `continuity.hot`: 현재 우선 작업
-- `continuity.hot_node`: 작업 내용과 검증 명령
-- `continuity.locks`: 계승하면 안 되는 금지·보호 규칙
-- `continuity.handoff`: 다음 세션 인수인계 절차
+- `continuity.*`: 계승 참조 시스템 (`PROJECT-CONTINUITY.airc`) — identity/hot/locks/handoff
+- `spec.*`: 프로젝트 운영 AIRC (`SPEC.airc`) — identity/hot/handoff. **운영 Hot은 `spec:hot`**
 - `remote_info`: Provider 공통 모델 (`provider`, `host`, `owner`, `repository`, `remote`, `branch`, `upstream`, `auth`) — 정본 [`PROVIDER-MODEL.md`](PROVIDER-MODEL.md)
-- `remotes`: 로컬 remote를 provider별로 분리한 배열 (GitHub와 Forgejo를 섞지 않음)
+- `remotes`: 로컬 remote를 provider별로 분리한 배열 (GitHub·Forgejo·GitLab을 섞지 않음)
 - `sync`: `local_head` · `remote_head` · `match` · `upstream` · `ahead` · `behind`
 - `recent_commits`: `{hash,date,author,message}` 배열
 - `change_risk`: 변경 파일·민감 파일·충돌 기반 위험도
-- `cards`: 저장소 상태와 AIRC를 분리한 참고 카드
+- `cards` / `available_keys`: 참조 카드. `continuity:*` · `spec:*` · `provider:remotes` · repo/sync/diff 등
 - `markdown`: AI 프롬프트에 바로 붙일 수 있는 읽기용 문맥
 - `ai_instruction`: 읽기 전용 및 승인 경계
+
+선택 카드만 받으려면 `{"action":"context","keys":["spec:hot","provider:remotes"]}` 를 쓴다.
 
 CLI도 같은 핵심 필드를 제공한다.
 
@@ -39,7 +38,11 @@ fl-git context-json
   "remote_info": {"provider": "github", "host": "github.com", "owner": "...", "repository": "..."},
   "remotes": [{"provider": "github", "...": "..."}],
   "sync": {"local_head": "...", "remote_head": "...", "match": true},
-  "recent_commits": [{"hash": "...", "message": "..."}]
+  "recent_commits": [{"hash": "...", "message": "..."}],
+  "continuity": {"source": "PROJECT-CONTINUITY.airc", "hot": "..."},
+  "spec": {"source": "SPEC.airc", "hot": "..."},
+  "cards": [{"key": "spec:hot", "title": "...", "content": "..."}],
+  "available_keys": ["continuity:identity", "spec:hot", "provider:remotes"]
 }
 ```
 
@@ -56,7 +59,7 @@ Content-Type: application/json
 
 - `files`: 현재 Git 작업 트리의 파일 내용 검색
 - `history`: 모든 branch의 커밋 메시지 검색
-- `continuity`: `PROJECT-CONTINUITY.airc` 검색
+- `continuity`: `PROJECT-CONTINUITY.airc` + `SPEC.airc` 검색
 - `all` 또는 생략: 위 세 영역 검색
 
 검색 API는 `git grep`, `git log`, 고정된 AIRC 파일 검색만 수행한다. 임의 셸 명령,
