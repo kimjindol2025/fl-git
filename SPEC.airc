@@ -1,12 +1,12 @@
 {
   "brief": [
-    "핫은 (task-004) 내용 (Chrome에서 AI Context 카드·읽기전용 API·변경 위험도 실화면 검증) 다.",
+    "핫은 (task-gitlab-provider-확장) 내용 (GitLab provider 확장) 다.",
     "lock·graveyard에 있는 방향은 다시 꺼내지 않는다."
   ],
   "$": "airc-spec",
   "version": "1.0.0",
   "project": "fl-git",
-  "date": "2026-09-29",
+  "date": "2026-10-01",
   "cmd": "python3 ~/.grok/skills/checkpoint/scripts/print-hot.py SPEC.airc",
   "identity": {
     "what": "서버에서 VS Code Source Control처럼 Git을 화면으로 다루는 FreeLang 제품",
@@ -14,7 +14,7 @@
     "for": "브라우저 UI 본체 + CLI/TUI 보조 + AI context",
     "not": "업무앱과 메뉴/인증 공유, reset --hard/clean -fd 기본 제공, 토큰을 URL/파일 저장"
   },
-  "hot": "task-004",
+  "hot": "task-gitlab-provider-확장",
   "constitution": {
     "1": "AI 전용. 인간 가독성을 위한 구조 타협 금지",
     "2": "identity는 잠긴다. 변경은 사용자 협의 필수. Claude 단독 변경 금지",
@@ -40,6 +40,24 @@
       "check": [],
       "verified": false,
       "next": []
+    },
+    "task-provider-roadmap-1-7": {
+      "t": "task",
+      "v": "Provider roadmap 1-7",
+      "entry": [],
+      "check": [],
+      "verified": true,
+      "next": [
+        "task-gitlab-provider-확장"
+      ]
+    },
+    "task-gitlab-provider-확장": {
+      "t": "task",
+      "v": "GitLab provider 확장",
+      "entry": [],
+      "check": [],
+      "verified": false,
+      "next": []
     }
   },
   "lock": [
@@ -56,10 +74,13 @@
     }
   ],
   "handoff": {
-    "step1": "print-hot.py SPEC.airc → identity·hot 확인",
-    "step2": "graveyard·lock 확인",
-    "step3": "hot 노드 실행",
-    "step4": "너는 'fl-git' 폴더다. hot 'task-004'을 하면 된다.",
-    "step5": "identity 변경 필요 시 사용자에게 먼저 물어라"
+    "step1": "print-hot만 실행한다. SPEC.airc 본문(10줄 이후)은 읽지 않는다.",
+    "step2": "brief 2줄의 hot id만 실행한다. lock·graveyard 방향은 재도입 금지.",
+    "step3": "hot=task-gitlab-provider-확장 실행. 완료 표식=Provider roadmap 1-7",
+    "step4": "너는 'Provider roadmap 1-7'까지 끝난 상태다. 'GitLab provider 확장'를 하면 된다.",
+    "step5": "identity 변경 필요 시 사용자에게 먼저 물어라",
+    "done": "Provider roadmap 1-7",
+    "next": "GitLab provider 확장",
+    "checkpoint_at": "2026-10-01T18:13:43.946736+09:00"
   }
 }

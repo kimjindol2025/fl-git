@@ -260,14 +260,16 @@ REMOTE_WRITE_CONFIRM=PASS
 ## 최종 사용 흐름
 
 ```text
-fl-tools start
-fl-tools review
+fl-tools check          # check.sh + provider-gate
 fl-git context
-fl-git remote status
+fl-git provider status
 fl-git provider repos forgejo
 fl-git provider repos github
-fl-tools deploy
+fl-git provider gate
+# web: http://127.0.0.1:40850/  (pm2 fl-git)
 ```
+
+2026-10-01 스모크: `PROVIDER_GATE=PASS`, `PROVIDER_STATUS=PASS`, github/forgejo `PROVIDER_REPOS=PASS`, web HTTP 200, `ai-context` ok.
 
 Forgejo(`fg.dclub.kr`)는 단순 백업이 아니라, 프로젝트·문서·커밋·AI 계승 맥락의 핵심 저장소로 취급한다.
 

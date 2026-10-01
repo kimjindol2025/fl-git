@@ -15,6 +15,7 @@
 - UI 분리 5단계: GitHub / Forgejo / 기타 패널 분리, 목록·remote·sync 혼입 방지, 클라이언트·서버 교차 연결 거부
 - 쓰기 6단계: `provider-write` 공통 게이트, CLI/Web confirm, 패널 Fetch/Pull/Push 대상 표시
 - 검증 7단계: `provider-gate` fixture PASS/DENY 코드, `fl-git provider gate`, `scripts/provider-gate`
+- Provider 로드맵 1–7 완료. 커밋 `527d4c8` (`origin/main`)
 
 ## 검증 상태
 
@@ -27,13 +28,20 @@
 | 원격 안전장치 | PASS | `pull/push/branch-delete`에 `--yes` 요구 |
 | Provider 쓰기 confirm | PASS | `provider-write` preview/mismatch, CLI `--yes`, Web `confirm=true` |
 | Provider fixture 게이트 | PASS | `PROVIDER_DETECT`…`REMOTE_WRITE_CONFIRM` 로드맵 코드 재현 |
-| GitHub 연동 | 구현 PASS / 외부 인증 BLOCKED | `gh` 명령 연결 완료, 현재 로컬 토큰 invalid |
+| GitHub 연동 | PASS | `provider status` AUTH_OK, `provider repos github` PROVIDER_REPOS=PASS |
+| Forgejo 연동 | PASS | `provider status` AUTH_OK, `provider repos forgejo` PROVIDER_REPOS=PASS |
 | TUI | PASS | PTY에서 상태·커밋 입력·종료 키 검증 |
 | 브라우저 UI | PASS | FL-Front 빌드 errors=0, HTTP 200, Playwright 패널·교차 거부 |
 | Provider UI 분리 | PASS | GitHub/Forgejo/기타 탭, sync 게이트, URL 형식 토스트 |
 | Provider 쓰기 UI | PASS | 패널 WRITE trio·active 게이트, confirm에 provider/repo/branch |
 | 화면 중심 흐름 | PASS | Stage1–7 Provider 로드맵 완료 |
 | AI 문맥 | PASS | Markdown `context`, JSON `context-json` |
+| 최종 사용 흐름 스모크 | PASS | gate · context · provider status/repos · web `:40850` · ai-context |
+
+## 다음 후보
+
+- GitLab provider adapter·UI·쓰기 (detect/model만 있음)
+- `docs/PLAN.md` 잔여: 참조 시스템 카드 연결, TTY 마우스 선택 등
 
 ## 발견된 경계
 
