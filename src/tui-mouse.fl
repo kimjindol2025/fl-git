@@ -1,0 +1,55 @@
+;; TTY 마우스 CSI 파싱·상태 행 매핑 (AFJ). 호스트에 마우스 빌트인 없음.
+;; 검증: tests/tui-mouse.test.fl  · 사용: src/tui.fl
+
+(defn tui-status-path [line]
+  (let [raw (str-trim (slice (str line) 3 (length (str line))))
+        unquoted (if (and (str-starts-with raw "\"") (str-ends-with raw "\""))
+                   (slice raw 1 (- (length raw) 1))
+                   raw)]
+    (if (str-includes unquoted " -> ")
+      (str-trim (get (regex_split unquoted " -> ") 1))
+      unquoted)))
+
+(defn tui-status-staged? [line]
+  (let [x (slice (str line) 0 1)]
+    (and (not (= x " ")) (not (= x "?")))))
+
+(defn tui-status-lines [text]
+  (filter (fn [line] (> (length (str-trim line)) 0))
+          (regex_split (str-trim (str text)) "\\n")))
+
+(defn tui-index-rows [lines row acc]
+  (if (= (length lines) 0)
+    acc
+    (let [line (get lines 0)
+          rest (slice lines 1 (length lines))
+          entry (if (str-starts-with line "##")
+                  {"row" row "kind" "branch" "line" line}
+                  {"row" row
+                   "kind" "file"
+                   "line" line
+                   "path" (tui-status-path line)
+                   "staged" (tui-status-staged? line)})]
+      (tui-index-rows rest (+ row 1) (append acc entry)))))
+
+(defn tui-rows-from-status [text]
+  (tui-index-rows (tui-status-lines text) 3 []))
+
+(defn tui-row-at [rows screen-row]
+  (let [hits (filter (fn [e] (= (get e "row") screen-row)) rows)]
+    (if (> (length hits) 0) (get hits 0) nil)))
+
+(defn tui-parse-sgr-params [params end]
+  (let [parts (regex_split (str params) ";")
+        btn (or (str-to-num (get parts 0)) -1)
+        col (or (str-to-num (get parts 1)) -1)
+        row (or (str-to-num (get parts 2)) -1)]
+    {"type" "mouse"
+     "button" btn
+     "col" col
+     "row" row
+     "press" (= end "M")}))
+
+;; 단위 테스트용: 이미 모은 파라미터 문자열로 SGR 클릭 해석
+(defn tui-parse-sgr [params end]
+  (tui-parse-sgr-params params end))

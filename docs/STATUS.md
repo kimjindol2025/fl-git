@@ -31,6 +31,7 @@
 | GitHub 연동 | PASS | `provider status` AUTH_OK, `provider repos github` PROVIDER_REPOS=PASS |
 | Forgejo 연동 | PASS | `provider status` AUTH_OK, `provider repos forgejo` PROVIDER_REPOS=PASS |
 | TUI | PASS | PTY에서 상태·커밋 입력·종료 키 검증 |
+| TUI 마우스 | PASS | SGR 파싱·행 매핑 fixture 11/11, 계약·enable/disable 문서화 |
 | 브라우저 UI | PASS | FL-Front 빌드 errors=0, HTTP 200, Playwright 패널·교차 거부 |
 | Provider UI 분리 | PASS | GitHub/Forgejo/기타 탭, sync 게이트, URL 형식 토스트 |
 | Provider 쓰기 UI | PASS | 패널 WRITE trio·active 게이트, confirm에 provider/repo/branch |
@@ -40,7 +41,9 @@
 
 ## 다음 후보
 
-- `docs/PLAN.md` 잔여: TTY 마우스 선택
+- Phase 1 잔여: 화면에서 폴더 선택 및 저장소 전환
+- Phase 3 잔여: 브라우저 GitHub 연결·branch 선택 화면
+- NEW_AGENDA (사용자 선택)
 
 ## 발견된 경계
 
@@ -72,3 +75,11 @@
 - CLI `context` / `context-json`에 continuity·spec·cards 패리티
 - `ai-search` continuity 범위에 SPEC.airc 포함
 - 재현: `fl-git context-json` · `curl ... -d '{"action":"ai-context"}'` · `{"action":"context","keys":["spec:hot"]}`
+
+
+## TTY 마우스 선택 · 2026-10-02
+
+- 계약: `docs/TTY-CONTRACT.md` 마우스(SGR) 절 — AFJ 마우스 빌트인 없음, `tty-read-byte` + ANSI
+- 구현: `src/tui-mouse.fl` (경로·staged·행 매핑·SGR 파싱), `src/tui.fl` (enable/disable·클릭 토글)
+- 검증: `tests/tui-mouse.test.fl` 11/11 · `./scripts/check.sh` PASS · PTY 스모크에서 SGR 클릭 → `A  click-me.txt` stage
+- 재현: `./scripts/fl-test` · `fl-git tui` 후 상태 파일 행 클릭 → stage/unstage 메시지

@@ -37,6 +37,10 @@
 `pull`과 `push`는 실수로 실행되지 않도록 `--yes`를 명시해야 한다. TUI에서는
 사용자가 해당 키를 누른 것이 확인으로 취급된다.
 
+`fl-git tui`는 raw TTY에서 키보드 단축키와 SGR 마우스 클릭을 받는다. 상태
+화면의 파일 행을 왼쪽 클릭하면 해당 경로를 stage/unstage 토글한다. 계약은
+`docs/TTY-CONTRACT.md`다.
+
 `provider fetch|pull|push|connect`는 실행 전에 provider → repository → branch를
 표시하고, `--yes`가 없으면 `REMOTE_WRITE_CONFIRM_REQUIRED`로 거부한다.
 요청 provider와 대상 provider가 다르면 `REMOTE_WRITE_MISMATCH`다.

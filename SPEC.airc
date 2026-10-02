@@ -1,6 +1,6 @@
 {
   "brief": [
-    "핫은 (task-fl-git-next-agenda) 내용 (TTY mouse select or NEW_AGENDA) 다.",
+    "핫은 (task-fl-git-next-agenda) 내용 (NEW_AGENDA after TTY mouse) 다.",
     "lock·graveyard에 있는 방향은 다시 꺼내지 않는다."
   ],
   "$": "airc-spec",
@@ -67,16 +67,16 @@
     },
     "task-fl-git-next-agenda": {
       "t": "task",
-      "v": "TTY mouse select or NEW_AGENDA",
+      "v": "NEW_AGENDA after TTY mouse",
       "entry": [
-        "docs/PLAN.md web/pages/index.flx docs/AI-CONTEXT.md"
+        "docs/TTY-CONTRACT.md src/tui.fl scripts/tui-runner.mjs"
       ],
       "check": [
-        "grep -n 참조 docs/PLAN.md"
+        "grep -n 마우스 docs/TTY-CONTRACT.md docs/PLAN.md"
       ],
       "verified": false,
       "next": [
-        "task-fl-git-reference-cards"
+        "task-fl-git-tty-mouse"
       ]
     },
     "task-fl-git-reference-cards": {
@@ -87,6 +87,20 @@
       ],
       "check": [
         "./scripts/fl-git context-json | python3 -c \"import sys,json;d=json.load(sys.stdin);assert 'spec:hot' in d.get('available_keys',[])\""
+      ],
+      "verified": true,
+      "next": [
+        "task-fl-git-next-agenda"
+      ]
+    },
+    "task-fl-git-tty-mouse": {
+      "t": "task",
+      "v": "TTY mouse select after contract check",
+      "entry": [
+        "docs/TTY-CONTRACT.md src/tui-mouse.fl src/tui.fl tests/tui-mouse.test.fl"
+      ],
+      "check": [
+        "./scripts/fl-test"
       ],
       "verified": true,
       "next": [
@@ -110,11 +124,11 @@
   "handoff": {
     "step1": "print-hot만 실행한다. SPEC.airc 본문(10줄 이후)은 읽지 않는다.",
     "step2": "brief 2줄의 hot id만 실행한다. lock·graveyard 방향은 재도입 금지.",
-    "step3": "hot=task-fl-git-next-agenda 실행. 완료 표식=Connect reference-system cards to AI Context",
-    "step4": "너는 'Connect reference-system cards to AI Context'까지 끝난 상태다. 'TTY mouse select or NEW_AGENDA'를 하면 된다.",
+    "step3": "hot=task-fl-git-next-agenda 실행. 완료 표식=TTY mouse select after contract check",
+    "step4": "너는 'TTY mouse select after contract check'까지 끝난 상태다. 'NEW_AGENDA after TTY mouse'를 하면 된다.",
     "step5": "identity 변경 필요 시 사용자에게 먼저 물어라",
-    "done": "Connect reference-system cards to AI Context",
-    "next": "TTY mouse select or NEW_AGENDA",
-    "checkpoint_at": "2026-10-02T00:10:56.824145+09:00"
+    "done": "TTY mouse select after contract check",
+    "next": "NEW_AGENDA after TTY mouse",
+    "checkpoint_at": "2026-10-02T01:03:20.812942+09:00"
   }
 }

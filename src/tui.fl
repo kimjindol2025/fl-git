@@ -1,5 +1,6 @@
-;; 키보드 기반 Git TUI. 실행: fl-git tui
+;; 키보드 + TTY 마우스(SGR) Git TUI. 실행: fl-git tui
 (load "./git.fl")
+(load "./tui-mouse.fl")
 
 (defn tui-read-line [buffer]
   (let [byte (tty-read-byte)]
@@ -12,49 +13,132 @@
       (= byte 27) buffer
       true (do (print (char-from-code byte)) (tui-read-line (str buffer (char-from-code byte)))))))
 
-(defn draw [message]
+(defn tui-mouse-enable! []
+  (print "\x1b[?1000h\x1b[?1006h"))
+
+(defn tui-mouse-disable! []
+  (print "\x1b[?1000l\x1b[?1006l"))
+
+(defn tui-drain-csi []
+  (let [b (tty-read-byte)]
+    (cond
+      (nil? b) nil
+      (and (>= b 64) (<= b 126)) nil
+      true (tui-drain-csi))))
+
+(defn tui-read-sgr-body [acc]
+  (let [b (tty-read-byte)]
+    (cond
+      (nil? b) (tui-parse-sgr acc "")
+      (or (= b 77) (= b 109)) (tui-parse-sgr acc (char-from-code b))
+      true (tui-read-sgr-body (str acc (char-from-code b))))))
+
+(defn tui-read-x10-body []
+  (let [cb (tty-read-byte)
+        cx (tty-read-byte)
+        cy (tty-read-byte)]
+    (if (or (nil? cb) (nil? cx) (nil? cy))
+      {"type" "none"}
+      {"type" "mouse"
+       "button" (- cb 32)
+       "col" (- cx 32)
+       "row" (- cy 32)
+       "press" true})))
+
+(defn tui-read-escape []
+  (let [b1 (tty-read-byte)]
+    (cond
+      (nil? b1) {"type" "key" "code" 27}
+      (not (= b1 91)) {"type" "key" "code" 27}
+      true
+        (let [b2 (tty-read-byte)]
+          (cond
+            (nil? b2) {"type" "key" "code" 27}
+            (= b2 60) (tui-read-sgr-body "")
+            (= b2 77) (tui-read-x10-body)
+            true (do (tui-drain-csi) {"type" "none"}))))))
+
+(defn tui-read-event []
+  (let [b (tty-read-byte)]
+    (cond
+      (nil? b) {"type" "none"}
+      (= b 27) (tui-read-escape)
+      true {"type" "key" "code" b})))
+
+(defn draw [message rows]
   (print "\x1b[2J\x1b[H")
   (println "fl-git — Git 터미널 관리")
   (println "────────────────────────────────────────")
-  (print (git-capture "git status --short --branch"))
+  (map (fn [entry] (println (get entry "line"))) rows)
   (println "────────────────────────────────────────")
+  (println "클릭: 파일 행 stage/unstage 토글")
   (println "s 상태  d diff  l log  b branch  t stash")
   (println "a add .  n unstage .  c commit  p push(2회)  u pull(2회)  x 종료")
   (if (> (length message) 0) (println (str "\n" message)) nil))
 
+(defn tui-toggle-file [entry]
+  (let [path (get entry "path")]
+    (if (or (nil? path) (= path ""))
+      "경로를 읽지 못했습니다."
+      (if (get entry "staged")
+        (do (git-unstage [path]) (str "unstage: " path))
+        (do (git-add [path]) (str "stage: " path))))))
+
+(defn tui-handle-mouse [event rows]
+  (if (and (= (get event "type") "mouse")
+           (get event "press")
+           (= (get event "button") 0))
+    (let [entry (tui-row-at rows (get event "row"))]
+      (if (and entry (= (get entry "kind") "file"))
+        (tui-toggle-file entry)
+        "파일 행을 클릭하세요."))
+    nil))
+
 (defn tui-loop [message pending]
-  (draw message)
-  (let [key (tty-read-byte)]
-    (cond
-      (= key 120) false
-      (and (not (= pending ""))
-           (not (or (and (= pending "push") (= key 112))
-                    (and (= pending "pull") (= key 117)))))
-        (tui-loop "대기 중인 원격 작업을 취소했습니다." "")
-      (= key 115) (tui-loop "status는 화면 상단에 표시됩니다." "")
-      (= key 100) (do (print "\x1b[2J\x1b[H") (git-diff) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
-      (= key 108) (do (print "\x1b[2J\x1b[H") (git-log) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
-      (= key 98) (do (print "\x1b[2J\x1b[H") (git-branch) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
-      (= key 116) (do (print "\x1b[2J\x1b[H") (git-stash) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
-      (= key 97) (do (git-add []) (tui-loop "전체 파일을 stage했습니다." ""))
-      (= key 110) (do (git-unstage []) (tui-loop "전체 파일의 stage를 취소했습니다." ""))
-      (= key 99) (do
-        (print "\n커밋 메시지: ")
-        (let [message (tui-read-line "")]
-          (println "")
-          (git-commit message)
-          (tui-loop "commit 완료 여부를 확인하세요." "")))
-      (= key 112)
-        (if (= pending "push")
-          (do (git-push "--yes") (tui-loop "push 완료 여부를 확인하세요." ""))
-          (tui-loop "push를 실행하려면 p를 한 번 더 누르세요." "push"))
-      (= key 117)
-        (if (= pending "pull")
-          (do (git-pull "--yes") (tui-loop "pull 완료 여부를 확인하세요." ""))
-          (tui-loop "pull을 실행하려면 u를 한 번 더 누르세요." "pull"))
-      true (tui-loop "지원 키: s d l b t a c p u x" ""))))
+  (let [status-text (git-capture "git status --short --branch")
+        rows (tui-rows-from-status status-text)]
+    (draw message rows)
+    (let [event (tui-read-event)
+          mouse-msg (tui-handle-mouse event rows)]
+      (cond
+        (not (nil? mouse-msg)) (tui-loop mouse-msg "")
+        (= (get event "type") "key")
+          (let [key (get event "code")]
+            (cond
+              (= key 120) false
+              (and (not (= pending ""))
+                   (not (or (and (= pending "push") (= key 112))
+                            (and (= pending "pull") (= key 117)))))
+                (tui-loop "대기 중인 원격 작업을 취소했습니다." "")
+              (= key 115) (tui-loop "status는 화면 상단에 표시됩니다." "")
+              (= key 100) (do (print "\x1b[2J\x1b[H") (git-diff) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+              (= key 108) (do (print "\x1b[2J\x1b[H") (git-log) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+              (= key 98) (do (print "\x1b[2J\x1b[H") (git-branch) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+              (= key 116) (do (print "\x1b[2J\x1b[H") (git-stash) (print "\nEnter를 누르면 돌아갑니다.") (tty-read-byte) (tui-loop "" ""))
+              (= key 97) (do (git-add []) (tui-loop "전체 파일을 stage했습니다." ""))
+              (= key 110) (do (git-unstage []) (tui-loop "전체 파일의 stage를 취소했습니다." ""))
+              (= key 99) (do
+                (print "\n커밋 메시지: ")
+                (let [message (tui-read-line "")]
+                  (println "")
+                  (git-commit message)
+                  (tui-loop "commit 완료 여부를 확인하세요." "")))
+              (= key 112)
+                (if (= pending "push")
+                  (do (git-push "--yes") (tui-loop "push 완료 여부를 확인하세요." ""))
+                  (tui-loop "push를 실행하려면 p를 한 번 더 누르세요." "push"))
+              (= key 117)
+                (if (= pending "pull")
+                  (do (git-pull "--yes") (tui-loop "pull 완료 여부를 확인하세요." ""))
+                  (tui-loop "pull을 실행하려면 u를 한 번 더 누르세요." "pull"))
+              true (tui-loop "지원 키: s d l b t a c p u x · 파일 행 클릭" "")))
+        true (tui-loop message pending)))))
 
 (try
-  (do (tty-raw-enter!) (tui-loop "" ""))
+  (do
+    (tty-raw-enter!)
+    (tui-mouse-enable!)
+    (tui-loop "" ""))
   (catch error (print (str "\nfl-git TUI 오류: " (get error "message") "\n")))
-  (finally (tty-raw-leave!)))
+  (finally
+    (do (tui-mouse-disable!) (tty-raw-leave!))))

@@ -1,0 +1,54 @@
+; TTY 마우스 SGR 파싱·상태 행 매핑 smoke
+; 실행: fl-test
+
+(load "../src/tui-mouse.fl")
+
+(deftest "unstaged path"
+  (is= "src/a.fl" (tui-status-path " M src/a.fl")))
+
+(deftest "untracked path"
+  (is= "new.txt" (tui-status-path "?? new.txt")))
+
+(deftest "staged path"
+  (is= "src/b.fl" (tui-status-path "M  src/b.fl")))
+
+(deftest "quoted path"
+  (is= "my file.txt" (tui-status-path "?? \"my file.txt\"")))
+
+(deftest "rename path takes right side"
+  (is= "new.fl" (tui-status-path "R  old.fl -> new.fl")))
+
+(deftest "staged? true for index letter"
+  (is= true (tui-status-staged? "M  src/b.fl")))
+
+(deftest "staged? false for worktree-only"
+  (is= false (tui-status-staged? " M src/a.fl")))
+
+(deftest "staged? false for untracked"
+  (is= false (tui-status-staged? "?? new.txt")))
+
+(deftest "rows map file screen rows from status"
+  (let [text "## main\n M src/a.fl\n?? new.txt"
+        rows (tui-rows-from-status text)
+        f1 (tui-row-at rows 4)
+        f2 (tui-row-at rows 5)
+        br (tui-row-at rows 3)]
+    (is= "branch" (get br "kind"))
+    (is= "file" (get f1 "kind"))
+    (is= "src/a.fl" (get f1 "path"))
+    (is= false (get f1 "staged"))
+    (is= "new.txt" (get f2 "path"))))
+
+(deftest "SGR left press"
+  (let [ev (tui-parse-sgr "0;12;4" "M")]
+    (is= "mouse" (get ev "type"))
+    (is= 0 (get ev "button"))
+    (is= 12 (get ev "col"))
+    (is= 4 (get ev "row"))
+    (is= true (get ev "press"))))
+
+(deftest "SGR left release"
+  (let [ev (tui-parse-sgr "0;12;4" "m")]
+    (is= false (get ev "press"))))
+
+(run-tests)

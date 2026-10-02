@@ -52,7 +52,7 @@
 - [x] Git 상태·작업 결과 화면
 - [x] TTY 크기 조회 계약
 - [x] TTY capability 호스트 경계
-- [ ] 마우스 선택은 TTY 계약 확인 후 추가
+- [x] 마우스 선택은 TTY 계약 확인 후 추가 (SGR enable + `tui-mouse.fl` 파싱 + 파일 행 클릭 토글)
 - [x] 웹 UI를 본체로 전환
 
 ## Phase 5 — GitHub와 AI 문맥
