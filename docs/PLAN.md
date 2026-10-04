@@ -25,7 +25,7 @@
 - [x] staged/unstaged/untracked/conflict 원문 보존 표시
 - [x] 임시 저장소 테스트 추가
 - [x] 브라우저 저장소 대시보드와 상태 API
-- [ ] 화면에서 폴더 선택 및 저장소 전환
+- [x] 화면에서 폴더 선택 및 저장소 전환 (`open-path`·`list-parent`·폴더 클릭 진입/전환)
 
 ## Phase 2 — 안전한 변경 작업
 

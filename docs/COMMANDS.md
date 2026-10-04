@@ -41,6 +41,10 @@
 화면의 파일 행을 왼쪽 클릭하면 해당 경로를 stage/unstage 토글한다. 계약은
 `docs/TTY-CONTRACT.md`다.
 
+웹 UI 저장소 전환: POST `/api` `action=open-path` (Git 저장소면 전환, 일반
+폴더면 하위 목록), `list-folders`, `list-parent`(허용 루트 안 상위),
+`list-repos`, `select-repo`. 경로는 `FL_GIT_ROOTS` 물리 경로 안으로 제한한다.
+
 `provider fetch|pull|push|connect`는 실행 전에 provider → repository → branch를
 표시하고, `--yes`가 없으면 `REMOTE_WRITE_CONFIRM_REQUIRED`로 거부한다.
 요청 provider와 대상 provider가 다르면 `REMOTE_WRITE_MISMATCH`다.

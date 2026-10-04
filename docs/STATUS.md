@@ -32,6 +32,7 @@
 | Forgejo 연동 | PASS | `provider status` AUTH_OK, `provider repos forgejo` PROVIDER_REPOS=PASS |
 | TUI | PASS | PTY에서 상태·커밋 입력·종료 키 검증 |
 | TUI 마우스 | PASS | SGR 파싱·행 매핑 fixture 11/11, 계약·enable/disable 문서화 |
+| 웹 폴더·저장소 전환 | PASS | open-path/list-parent curl 스모크, Front errors=0, FL_GIT_ROOTS 거부 |
 | 브라우저 UI | PASS | FL-Front 빌드 errors=0, HTTP 200, Playwright 패널·교차 거부 |
 | Provider UI 분리 | PASS | GitHub/Forgejo/기타 탭, sync 게이트, URL 형식 토스트 |
 | Provider 쓰기 UI | PASS | 패널 WRITE trio·active 게이트, confirm에 provider/repo/branch |
@@ -41,7 +42,6 @@
 
 ## 다음 후보
 
-- Phase 1 잔여: 화면에서 폴더 선택 및 저장소 전환
 - Phase 3 잔여: 브라우저 GitHub 연결·branch 선택 화면
 - NEW_AGENDA (사용자 선택)
 
@@ -83,3 +83,11 @@
 - 구현: `src/tui-mouse.fl` (경로·staged·행 매핑·SGR 파싱), `src/tui.fl` (enable/disable·클릭 토글)
 - 검증: `tests/tui-mouse.test.fl` 11/11 · `./scripts/check.sh` PASS · PTY 스모크에서 SGR 클릭 → `A  click-me.txt` stage
 - 재현: `./scripts/fl-test` · `fl-git tui` 후 상태 파일 행 클릭 → stage/unstage 메시지
+
+
+## 웹 폴더 선택·저장소 전환 · 2026-10-04
+
+- API: `open-path`(Git이면 전환, 일반 폴더면 진입), `list-parent`(FL_GIT_ROOTS 안 상위), `list-folders` 숨김 `.` 디렉터리
+- UI: overview 피커 `열기/전환` · `폴더 선택` · `상위` · 폴더/레포 클릭 → `open-path`
+- 검증: Front `diagnostics errors=0` · pm2 `fl-git` · curl open-path/list-parent 스모크 PASS
+- 재현: `curl -X POST :40850/api -d '{"action":"open-path","path":"/home/kim/kim/projects/airc-spec"}'` 후 root 전환 확인

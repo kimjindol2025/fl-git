@@ -1,12 +1,12 @@
 {
   "brief": [
-    "핫은 (task-fl-git-next-agenda) 내용 (NEW_AGENDA after TTY mouse) 다.",
+    "핫은 (task-fl-git-next-agenda) 내용 (NEW_AGENDA after web folder switch) 다.",
     "lock·graveyard에 있는 방향은 다시 꺼내지 않는다."
   ],
   "$": "airc-spec",
   "version": "1.0.0",
   "project": "fl-git",
-  "date": "2026-10-02",
+  "date": "2026-10-04",
   "cmd": "python3 ~/.grok/skills/checkpoint/scripts/print-hot.py SPEC.airc",
   "identity": {
     "what": "서버에서 VS Code Source Control처럼 Git을 화면으로 다루는 FreeLang 제품",
@@ -67,16 +67,16 @@
     },
     "task-fl-git-next-agenda": {
       "t": "task",
-      "v": "NEW_AGENDA after TTY mouse",
+      "v": "NEW_AGENDA after web folder switch",
       "entry": [
-        "docs/TTY-CONTRACT.md src/tui.fl scripts/tui-runner.mjs"
+        "docs/PLAN.md web/pages/index.flx web/pages/api.flx"
       ],
       "check": [
-        "grep -n 마우스 docs/TTY-CONTRACT.md docs/PLAN.md"
+        "grep -n 폴더 docs/PLAN.md"
       ],
       "verified": false,
       "next": [
-        "task-fl-git-tty-mouse"
+        "task-fl-git-web-folder-switch"
       ]
     },
     "task-fl-git-reference-cards": {
@@ -106,6 +106,20 @@
       "next": [
         "task-fl-git-next-agenda"
       ]
+    },
+    "task-fl-git-web-folder-switch": {
+      "t": "task",
+      "v": "web folder select and repo switch",
+      "entry": [
+        "web/pages/api.flx web/pages/index.flx docs/PLAN.md"
+      ],
+      "check": [
+        "curl -s -X POST http://127.0.0.1:40850/api -H 'content-type: application/json' -d '{\"action\":\"open-path\",\"path\":\"/home/kim/kim/projects/fl-git\"}'"
+      ],
+      "verified": true,
+      "next": [
+        "task-fl-git-next-agenda"
+      ]
     }
   },
   "lock": [
@@ -124,11 +138,11 @@
   "handoff": {
     "step1": "print-hot만 실행한다. SPEC.airc 본문(10줄 이후)은 읽지 않는다.",
     "step2": "brief 2줄의 hot id만 실행한다. lock·graveyard 방향은 재도입 금지.",
-    "step3": "hot=task-fl-git-next-agenda 실행. 완료 표식=TTY mouse select after contract check",
-    "step4": "너는 'TTY mouse select after contract check'까지 끝난 상태다. 'NEW_AGENDA after TTY mouse'를 하면 된다.",
+    "step3": "hot=task-fl-git-next-agenda 실행. 완료 표식=web folder select and repo switch",
+    "step4": "너는 'web folder select and repo switch'까지 끝난 상태다. 'NEW_AGENDA after web folder switch'를 하면 된다.",
     "step5": "identity 변경 필요 시 사용자에게 먼저 물어라",
-    "done": "TTY mouse select after contract check",
-    "next": "NEW_AGENDA after TTY mouse",
-    "checkpoint_at": "2026-10-02T01:03:20.812942+09:00"
+    "done": "web folder select and repo switch",
+    "next": "NEW_AGENDA after web folder switch",
+    "checkpoint_at": "2026-10-04T18:39:41.195626+09:00"
   }
 }

@@ -105,9 +105,40 @@
       (if (not (api-root-allowed root))
         {"ok" false "error" "허용되지 않은 물리 경로입니다. FL_GIT_ROOTS를 확인하세요."}
         (let [entries (api-run-at root "find . -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort")
-              names (filter (fn [name] (> (length (str-trim name)) 0)) (regex_split (api-out entries) "\\n"))]
-          {"ok" true "root" root
+              names (filter (fn [name]
+                              (let [n (str-trim name)]
+                                (and (> (length n) 0) (not (str-starts-with n ".")))))
+                            (regex_split (api-out entries) "\\n"))]
+          {"ok" true "root" root "mode" "dir"
            "folders" (map (fn [name] (str root "/" (str-trim name))) names)})))))
+
+(defn api-parent-directory [requested]
+  (let [root (api-resolve-directory requested)]
+    (if (= root "")
+      {"ok" false "error" "현재 폴더를 읽을 수 없습니다."}
+      (let [parent (api-resolve-directory (str root "/.."))]
+        (if (= parent "")
+          {"ok" false "error" "상위 폴더를 읽을 수 없습니다."}
+          (if (not (api-root-allowed parent))
+            {"ok" false "error" "허용된 물리 경로 밖으로는 올라갈 수 없습니다. FL_GIT_ROOTS를 확인하세요."}
+            (api-list-folders parent)))))))
+
+(defn api-open-path [requested]
+  (let [path (api-resolve-directory requested)]
+    (if (= path "")
+      {"ok" false "error" "선택한 폴더를 읽을 수 없습니다."}
+      (if (not (api-root-allowed path))
+        {"ok" false "error" "허용된 물리 경로 밖입니다. FL_GIT_ROOTS를 확인하세요."}
+        (let [git (api-run-at path "git rev-parse --show-toplevel")]
+          (if (= (api-code git) 0)
+            (let [selected (api-select-repo path)]
+              (if (= (get selected "ok") true)
+                {"ok" true "mode" "repo" "root" (get selected "root")}
+                selected))
+            (let [listed (api-list-folders path)]
+              (if (= (get listed "ok") true)
+                (assoc listed "message" "폴더로 이동했습니다.")
+                listed))))))))
 
 (defn api-repo-paths [base names]
   (map (fn [name] (str-replace-in (str base "/" (str-replace-in (str-trim name) "./" "") "/") "/.git/" "")) names))
@@ -927,6 +958,15 @@
     (cond
       (= action "list-folders")
         (server-json (api-list-folders (get body "path")))
+      (= action "list-parent")
+        (server-json (api-parent-directory (get body "path")))
+      (= action "open-path")
+        (let [opened (api-open-path (get body "path"))]
+          (if (= (get opened "ok") true)
+            (if (= (get opened "mode") "repo")
+              (server-json (api-payload "저장소를 전환했습니다."))
+              (server-json opened))
+            (server-json opened 400)))
       (= action "list-repos")
         (server-json (api-list-repos))
       (= action "provider-status")
