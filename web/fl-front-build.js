@@ -1112,15 +1112,8 @@ const INJECTED_HELPERS = `
 
 ; 404 핸들러
 (defn not_found_handler [req]
-  (server_status 404
-    "<!DOCTYPE html><html><head><meta charset='utf-8'><title>404 — 페이지를 찾을 수 없음 — FreeLang Front</title>
-<style>body{font-family:sans-serif;margin:0;background:#f9fafb}
-.box{max-width:480px;margin:120px auto;text-align:center;padding:24px}
-h1{font-size:4rem;margin:0;color:#6366f1}p{color:#6b7280}
-a{color:#6366f1;text-decoration:none;font-weight:600}</style></head>
-<body><div class='box'><h1>404</h1>
-<p>요청하신 페이지를 찾을 수 없습니다.</p>
-<a href='/'>← 홈으로</a></div></body></html>"))
+  {"__fl_response" true "status" 404 "contentType" "text/html; charset=utf-8"
+   "body" (fl-layout "페이지를 찾을 수 없음" "요청한 페이지를 찾을 수 없습니다." "<div class=done><h1>404</h1><p>요청하신 페이지를 찾을 수 없습니다.</p><a href=/>홈으로</a></div>")})
 `;
 
 function generate(routes, bindings = [], helpers = [], appCss = '') {

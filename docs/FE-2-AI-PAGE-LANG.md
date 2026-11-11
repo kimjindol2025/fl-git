@@ -106,6 +106,34 @@ ROUTE ProductDetail {
 }
 ```
 
+### DESIGN / LAYOUT
+
+디자인 값은 `DESIGN` 한 곳에만 선언하고, 공통 틀은 `LAYOUT`에서 그 이름을 가져온다. 페이지는 `layout`, `title`, `description`을 반드시 선언한다. LAYOUT은 가게 이름과 상품·장바구니 링크, 장바구니 개수, 운영자 정보 자리, 반응형 공통 CSS를 한 번만 제공한다.
+
+```text
+DESIGN StoreTheme {
+  color.primary = "#3157d5"
+  color.surface = "#ffffff"
+  font.body = "system-ui"
+  space.page = "16px"
+}
+
+LAYOUT StoreLayout {
+  design = StoreTheme
+  header = "store-name products cart-count"
+  footer = "operator-placeholder"
+}
+
+PAGE ProductListPage {
+  path = "/products"
+  layout = StoreLayout
+  title = "상품 목록"
+  description = "프리랭 상점 상품 목록"
+}
+```
+
+없는 LAYOUT 이름은 `E_LAYOUT_NOT_FOUND`, 선언하지 않은 DESIGN 이름은 `E_DESIGN_TOKEN_NOT_FOUND`로 막는다. title/description 누락은 `W_META_MISSING` 경고로 보고하되 다른 계약 오류처럼 통과를 위장하지 않는다.
+
 ### ACTION / BUTTON
 
 브라우저 버튼과 서버 API 연결은 BUTTON 블록 하나로 선언한다. `action`은 등록된 API 이름이어야 하고, `sends`는 API의 `input` 필드와 같아야 한다. `success`는 성공 응답으로 갱신할 화면 값이다.

@@ -1,0 +1,7 @@
+PAGE OrderCompletePage {
+  path = "/order/[id]"
+  params = { id: ID }
+  layout = StoreLayout
+  title = "주문 완료"
+  description = "주문 접수 완료"
+}

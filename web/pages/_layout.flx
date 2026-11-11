@@ -1,0 +1,22 @@
+; FE-7 공통 레이아웃 — 디자인 토큰과 머리말·바닥글을 한 곳에서 관리한다.
+(define DESIGN-TOKENS
+  {"primary" "#3157d5" "primary-dark" "#2443a8" "surface" "#ffffff"
+   "background" "#f5f7fb" "text" "#172033" "muted" "#667085"
+   "border" "#dfe4ec" "radius" "14px"})
+
+(defn fl-layout [title description content]
+  (let [cart (fl-cart-summary)
+        count (get cart "count")
+        safe-description (str-replace-in description " " "&#32;")
+        css (str ":root{--primary:" (get DESIGN-TOKENS "primary") ";--primary-dark:" (get DESIGN-TOKENS "primary-dark") ";--surface:" (get DESIGN-TOKENS "surface") ";--background:" (get DESIGN-TOKENS "background") ";--text:" (get DESIGN-TOKENS "text") ";--muted:" (get DESIGN-TOKENS "muted") ";--border:" (get DESIGN-TOKENS "border") ";--radius:" (get DESIGN-TOKENS "radius") ";}"
+             "*{box-sizing:border-box}body{margin:0;background:var(--background);color:var(--text);font-family:system-ui,sans-serif;line-height:1.55}"
+             "a{color:var(--primary);text-decoration:none}.site-header,.site-footer,.site-main{width:min(calc(100% - 32px),960px);margin-inline:auto}"
+             ".site-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;border-bottom:1px solid var(--border)}"
+             ".site-brand{font-weight:800;font-size:19px;color:var(--text)}.site-nav{display:flex;gap:14px;flex-wrap:wrap}.cart-badge{display:inline-block;min-width:22px;padding:1px 6px;border-radius:99px;background:var(--primary);color:#fff;text-align:center;font-size:12px}"
+             ".site-main{padding:32px 0 56px;min-height:calc(100vh - 150px)}.site-footer{padding:20px 0 32px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}"
+             ".product-card,.cart-row,.order,.done{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:0 4px 14px rgba(23,32,51,.06)}.product-card{display:inline-block;vertical-align:top;width:calc(33.333% - 12px);margin:0 12px 16px 0}"
+             "button{background:var(--primary);color:#fff;border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}input,textarea{width:100%;max-width:520px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;font:inherit}.error{color:#b42318;font-size:13px;font-weight:650}"
+             "@media(max-width:700px){.site-header{align-items:flex-start;flex-direction:column}.product-card{display:block;width:100%;margin-right:0}.site-main{padding-top:24px}}")]
+    (str "<!doctype html><html lang=ko><head><meta charset=utf-8><meta name=viewport content=width=device-width,initial-scale=1><meta name=description content=" safe-description "><title>" title " - FreeLang Shop</title><style>" css "</style></head><body>"
+         "<header class=site-header><a class=site-brand href=/>FreeLang Shop</a><nav class=site-nav><a href=/products>Products</a><a href=/cart>Cart <span class=cart-badge>" count "</span></a></nav></header><main class=site-main>" content "</main>"
+         "<footer class=site-footer>Operator: Example Shop Team</footer></body></html>")))

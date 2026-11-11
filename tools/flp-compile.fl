@@ -33,23 +33,28 @@
 
 (defn generated-list-source [products]
   (let [cards (str-join (map product-card products) "")
-        list-html (str "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>상품 목록</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product-card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}.product-card a{color:#2457c5}</style></head><body><main><p><a href=\"/cart\">장바구니</a></p><h1>상품 목록</h1>" cards "</main></body></html>")]
+        list-html (str "<h1>상품 목록</h1>" cards)]
     (str "; generated from .flp — do not edit\n"
-         "(defn render [req]\n  (server_html " (json_stringify list-html) "))\n")))
+         "(defn render [req]\n  (server_html (fl-layout \"상품 목록\" \"프리랭 상점의 상품 목록과 온라인 주문 상품을 확인하세요.\" " (json_stringify list-html) ")))\n")))
 
 (defn generated-detail-source []
   (str "; generated from .flp — do not edit\n"
        "(defn render [req]\n  (let [id (server_req_param req \"id\")\n        product (fl-cart-product id)]\n    (if (= product nil)\n      (server_status 404 {\"error\" \"상품을 찾을 수 없습니다.\"})\n      (server_html (str \"<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>\" (get product \"name\") \"</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product{border:1px solid #ddd;border-radius:12px;padding:24px}</style></head><body><main class='product'><p><a href='/products'>상품 목록</a> · <a href='/cart'>장바구니</a></p><h1>\" (get product \"name\") \"</h1><p>상품 번호: \" id \"</p><strong>\" (get product \"price\") \"원</strong><div id='cart-island-slot' data-product-id='\" id \"'>\" \"ISLAND_PLACEHOLDER_0\" \"</div>\" \"ISLAND_SCRIPTS\" \"</main></body></html>\")))))\n"
        "(island CartButton []\n  (let [count (atom 0)\n        add (fn []\n              (let [slot (.getElementById document \"cart-island-slot\")\n                    id (.getAttribute slot \"data-product-id\")]\n                (fetch-post! \"/api/cart/add\" {\"id\" id \"quantity\" 1}\n                  (fn [res]\n                    (let [data (get res \"data\")]\n                      (reset! count (get data \"count\")))))))]\n    (h \"section\" {}\n      (h \"p\" {} (str \"장바구니 개수: \" @count))\n      (h \"button\" {\"id\" \"cart-add\" :on-click add} \"담기\"))))\n"))
 
+(defn generated-detail-source-v2 []
+  (str "; generated from .flp — do not edit\n"
+       "(defn render [req]\n  (let [id (server_req_param req \"id\")\n        product (fl-cart-product id)]\n    (if (= product nil)\n      (server_status 404 {\"error\" \"상품을 찾을 수 없습니다.\"})\n      (server_html (fl-layout (get product \"name\") \"상품 상세 정보와 온라인 주문 안내를 확인하세요.\" (str \"<div class='product'><p>상품 번호: \" id \"</p><h1>\" (get product \"name\") \"</h1><strong>\" (get product \"price\") \"원</strong><div id='cart-island-slot' data-product-id='\" id \"'>\" \"ISLAND_PLACEHOLDER_0\" \"</div>\" \"ISLAND_SCRIPTS\" \"</div>\"))))))\n"
+       "(island CartButton []\n  (let [count (atom 0)\n        add (fn []\n              (let [slot (.getElementById document \"cart-island-slot\")\n                    id (.getAttribute slot \"data-product-id\")]\n                (fetch-post! \"/api/cart/add\" {\"id\" id \"quantity\" 1}\n                  (fn [res]\n                    (let [data (get res \"data\")]\n                      (reset! count (get data \"count\")))))))]\n    (h \"section\" {}\n      (h \"p\" {} (str \"장바구니 개수: \" @count))\n      (h \"button\" {\"id\" \"cart-add\" :on-click add} \"담기\"))))\n"))
+
 (defn generated-cart-source []
   (str "; generated from .flp — do not edit\n"
-       "(defn render [req]\n  (server_html (str \"<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>장바구니</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.cart-row{border-bottom:1px solid #ddd;padding:12px 0}</style></head><body><main><p><a href='/products'>상품 목록</a></p><h1>장바구니</h1>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</main></body></html>\")))\n"
+       "(defn render [req]\n  (server_html (fl-layout \"장바구니\" \"담은 상품과 온라인 주문 합계를 확인하세요.\" (str \"<h1>장바구니</h1>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\"))))\n"
        "(island CartPage []\n  (let [items (atom [])\n        total (atom 0)\n        loaded (atom false)\n        load (fn []\n               (if (= @loaded false)\n                 (do (reset! loaded true)\n                     (fetch! \"/api/cart\"\n                       (fn [res]\n                         (reset! items (or (get res \"items\") []))\n                         (reset! total (or (get res \"total\") 0)))))\n                 nil))]\n    (load)\n    (h \"section\" {}\n      (h \"div\" {\"id\" \"cart-items\"}\n        (if (= (length @items) 0)\n          (h \"p\" {} \"장바구니가 비어 있습니다.\")\n          (map (fn [item] (h \"article\" {\"class\" \"cart-row\"}\n                              (str (get item \"name\") \" · \" (get item \"quantity\") \"개 · \" (get item \"line_total\") \"원\"))) @items)))\n      (h \"h2\" {} (str \"합계: \" @total \"원\")))))\n"))
 
 (defn generated-checkout-source []
   (str "; generated from .flp — do not edit\n"
-       "(defn render [req]\n  (let [cart (fl-cart-summary)]\n    (if (= (length (get cart \"items\")) 0)\n      (server_redirect \"/cart\")\n      (server_html (str \"<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>주문서</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.order{border:1px solid #ddd;border-radius:12px;padding:24px;display:grid;gap:12px}.order input,.order textarea{padding:10px;border:1px solid #ccc;border-radius:8px}.error{color:#c62828;font-size:14px}</style></head><body><main class='order'><p><a href='/cart'>장바구니</a></p><h1>주문서</h1><p>주문 금액: \" (get cart \"total\") \"원</p>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</main></body></html>\"))))\n"
+       "(defn render [req]\n  (let [cart (fl-cart-summary)]\n    (if (= (length (get cart \"items\")) 0)\n      (server_redirect \"/cart\")\n      (server_html (fl-layout \"주문서\" \"장바구니 상품을 확인하고 온라인 주문 정보를 입력하세요.\" (str \"<div class='order'><h1>주문서</h1><p>주문 금액: \" (get cart \"total\") \"원</p>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</div>\")))))\n"
        "(island OrderForm []\n  (let [recipient-error (atom \"\")\n        phone-error (atom \"\")\n        address-error (atom \"\")\n        note-error (atom \"\")\n        submit (fn []\n                 (let [recipient (.-value (.getElementById document \"recipient\"))\n                       phone (.-value (.getElementById document \"phone\"))\n                       address (.-value (.getElementById document \"address\"))\n                       note (.-value (.getElementById document \"note\"))]\n                   (do\n                     (reset! recipient-error (if (= recipient \"\") \"받는 사람은 필수입니다.\" (if (or (< (length recipient) 2) (> (length recipient) 50)) \"받는 사람은 2~50자여야 합니다.\" \"\")))\n                     (reset! phone-error (if (or (= phone \"\") (not (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone))) \"전화번호 형식이 아닙니다.\" \"\"))\n                     (reset! address-error (if (= address \"\") \"주소는 필수입니다.\" (if (or (< (length address) 5) (> (length address) 200)) \"주소는 5~200자여야 합니다.\" \"\")))\n                     (reset! note-error (if (> (length note) 200) \"요청사항은 200자 이하입니다.\" \"\"))\n                     (if (and (= @recipient-error \"\") (= @phone-error \"\") (= @address-error \"\") (= @note-error \"\"))\n                       (fetch-post! \"/api/order\" {\"recipient\" recipient \"phone\" phone \"address\" address \"note\" note}\n                         (fn [res] (.assign (.-location window) (str \"/order/\" (get res \"order_id\")))))\n                       nil)))))]\n    (h \"section\" {}\n      (h \"label\" {} \"받는 사람\")\n      (h \"input\" {\"id\" \"recipient\" \"placeholder\" \"홍길동\"})\n      (if (= @recipient-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @recipient-error))\n      (h \"label\" {} \"전화번호\")\n      (h \"input\" {\"id\" \"phone\" \"placeholder\" \"010-1234-5678\"})\n      (if (= @phone-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @phone-error))\n      (h \"label\" {} \"주소\")\n      (h \"input\" {\"id\" \"address\" \"placeholder\" \"서울시 강남구 테헤란로 1\"})\n      (if (= @address-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @address-error))\n      (h \"label\" {} \"요청사항\")\n      (h \"textarea\" {\"id\" \"note\" \"placeholder\" \"배송 요청사항\"})\n      (if (= @note-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @note-error))\n      (h \"button\" {\"id\" \"order-submit\" :on-click submit} \"주문하기\"))))\n"))
 
 (let [source-dir (or (shell_env "FLP_SOURCE_DIR") "web/pages")
@@ -75,13 +80,10 @@
                (has? cart-source "PAGE CartPage")
                (has? checkout-source "PAGE CheckoutPage")
                (has? checkout-source "FORM OrderForm"))
-        (if (and (file_write list-output (generated-list-source products))
+                 (if (and (file_write list-output (generated-list-source products))
                  (file_write detail-output
-                             (str-replace-in
-                               (str-replace-in (generated-detail-source)
-                                               "(get data \"count\")"
-                                               "(get res \"count\")")
-                               "__PRODUCT_ID__" ""))
+                             (str-replace-in (generated-detail-source-v2)
+                                             "__PRODUCT_ID__" ""))
                  (file_write cart-output (generated-cart-source))
                  (file_write checkout-output
                              (str-replace-in

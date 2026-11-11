@@ -1,0 +1,6 @@
+PAGE NotFoundPage {
+  path = "/404"
+  layout = StoreLayout
+  title = "페이지를 찾을 수 없음"
+  description = "요청한 페이지를 찾을 수 없습니다"
+}

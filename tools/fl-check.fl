@@ -30,7 +30,8 @@
 
 (defn new-block [kind name file line]
   {"kind" kind "name" name "file" file "line" line "path" ""
-   "params" [] "fields" [] "input_fields" [] "submit" "" "source_count" 1})
+   "params" [] "fields" [] "input_fields" [] "submit" "" "layout" ""
+   "design" "" "title" "" "description" "" "source_count" 1})
 
 (defn route-path [block]
   (str-trim (str (get block "path"))))
@@ -41,6 +42,11 @@
 (defn add-error [errors file line code what fix]
   (reset! errors
     (concat @errors
+      [{"file" file "line" line "code" code "what" what "fix" fix}])))
+
+(defn add-warning [warnings file line code what fix]
+  (reset! warnings
+    (concat @warnings
       [{"file" file "line" line "code" code "what" what "fix" fix}])))
 
 (defn parse-file [file blocks lines errors]
@@ -58,6 +64,8 @@
                      (regex_match line "^API") "API"
                      (regex_match line "^COMPONENT") "COMPONENT"
                      (regex_match line "^FORM") "FORM"
+                     (regex_match line "^LAYOUT") "LAYOUT"
+                     (regex_match line "^DESIGN") "DESIGN"
                      (regex_match line "^BUTTON") "BUTTON"
                      (regex_match line "^ROUTE") "ROUTE"
                      true "")]
@@ -74,6 +82,10 @@
                   (text-has? line "params") (reset! current (assoc @current "params" (list-values (property-value line))))
                   (text-has? line "input") (reset! current (assoc @current "input_fields" (list-values (property-value line))))
                   (text-has? line "fields") (reset! current (assoc @current "fields" (list-values (property-value line))))
+                  (text-has? line "layout") (reset! current (assoc @current "layout" (clean-token (property-value line))))
+                  (text-has? line "design") (reset! current (assoc @current "design" (clean-token (property-value line))))
+                  (text-has? line "title") (reset! current (assoc @current "title" (str-trim (property-value line))))
+                  (text-has? line "description") (reset! current (assoc @current "description" (str-trim (property-value line))))
                   (or (text-has? line "submit") (text-has? line "action")) (reset! current (assoc @current "submit" (clean-token (property-value line))))
                   (text-has? line "sends") (reset! current (assoc @current "params" (list-values (property-value line))))
                   true nil))))))
@@ -83,6 +95,12 @@
 
 (defn api-exists? [blocks name]
   (> (length (filter (fn [block] (and (= (get block "kind") "API") (= (get block "name") name))) @blocks)) 0))
+
+(defn layout-exists? [blocks name]
+  (> (length (filter (fn [block] (and (= (get block "kind") "LAYOUT") (= (get block "name") name))) @blocks)) 0))
+
+(defn design-exists? [blocks name]
+  (> (length (filter (fn [block] (and (= (get block "kind") "DESIGN") (= (get block "name") name))) @blocks)) 0))
 
 (defn page-or-route-exists? [blocks name]
   (> (length (filter (fn [block]
@@ -153,7 +171,7 @@
     @lines)]
     (length visited)))
 
-(defn validate-blocks [blocks lines errors]
+(defn validate-blocks [blocks lines errors warnings]
   (let [checked
     (map
     (fn [block]
@@ -176,6 +194,33 @@
                 (add-error errors file line "E_FORM_INPUT_MISMATCH"
                   "FORM 필드와 API input 계약이 다릅니다."
                   "FORM fields와 API input을 같은 이름으로 맞추세요.")))
+          (and (or (= kind "PAGE") (= kind "ROUTE"))
+               (not (= (get block "layout") ""))
+               (not (layout-exists? blocks (get block "layout"))))
+            (add-error errors file line "E_LAYOUT_NOT_FOUND"
+              (str "LAYOUT " (get block "layout") "이 등록되지 않았습니다.")
+              "등록된 LAYOUT 이름을 사용하세요.")
+          (and (= kind "LAYOUT") (not (= (get block "design") ""))
+               (not (design-exists? blocks (get block "design"))))
+            (add-error errors file line "E_DESIGN_TOKEN_NOT_FOUND"
+              (str "디자인 값 " (get block "design") "이 선언되지 않았습니다.")
+              "DESIGN 블록을 선언하거나 정확한 이름을 사용하세요.")
+          (and (or (= kind "PAGE") (= kind "ROUTE")) (text-has? path "["))
+            (let [raw (if (text-has? path "[id]") "id" (if (text-has? path "[slug]") "slug" ""))]
+              (if (and (> (length raw) 0) (not (contains-name? params raw)))
+                (add-error errors file line "E_PARAM_MISMATCH"
+                  (str "주소 변수 " raw "과 params 선언이 다릅니다.")
+                  "path의 [변수]와 params 이름을 같게 선언하세요.")))
+          (and (or (= kind "PAGE") (= kind "ROUTE"))
+               (= (get block "title") ""))
+            (add-warning warnings file line "W_META_MISSING"
+              "검색용 title이 선언되지 않았습니다."
+              "페이지에 title을 추가하세요.")
+          (and (or (= kind "PAGE") (= kind "ROUTE"))
+               (= (get block "description") ""))
+            (add-warning warnings file line "W_META_MISSING"
+              "검색용 description이 선언되지 않았습니다."
+              "페이지에 description을 추가하세요.")
           (and (= kind "BUTTON") (not (api-exists? blocks (get block "submit"))))
             (add-error errors file line "E_BUTTON_API_NOT_FOUND"
               (str "BUTTON이 호출하는 API " (get block "submit") "이 등록되지 않았습니다.")
@@ -230,15 +275,22 @@
 
 (let [target (or (shell_env "FL_CHECK_TARGET") "pages")
       files (if (file_is_file target)
-              [target]
-              (map (fn [name] (str target "/" name))
-                   (filter (fn [name] (and (regex_match name "\\.flp$") (file_is_file (str target "/" name))))
-                           (dir_list target))))
+              (if (file_exists "web/pages/site.flp")
+                [target "web/pages/site.flp"]
+                [target])
+              (let [top (map (fn [name] (str target "/" name))
+                             (filter (fn [name] (and (regex_match name "\\.flp$") (file_is_file (str target "/" name))))
+                                     (dir_list target)))]
+                (if (file_exists (str target "/products/[id].flp"))
+                  (concat top [(str target "/products/[id].flp")])
+                  top)))
       blocks (atom [])
       lines (atom [])
-      errors (atom [])]
+      errors (atom [])
+      warnings (atom [])]
   (map (fn [file] (parse-file file blocks lines errors)) files)
   (validate-lines blocks lines errors)
-  (validate-blocks blocks lines errors)
+  (validate-blocks blocks lines errors warnings)
+  (map (fn [warning] (println (json_stringify warning))) @warnings)
   (map (fn [error] (println (json_stringify error))) @errors)
   (println (str "FL_CHECK_EXIT=" (if (> (length @errors) 0) "1" "0"))))

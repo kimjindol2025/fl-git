@@ -1,0 +1,15 @@
+DESIGN StoreTheme {
+  color.primary = "#3157d5"
+  color.surface = "#ffffff"
+  color.text = "#172033"
+  color.muted = "#667085"
+  font.body = "system-ui"
+  space.page = "16px"
+  radius.card = "14px"
+}
+
+LAYOUT StoreLayout {
+  design = StoreTheme
+  header = "store-name products cart-count"
+  footer = "operator-placeholder"
+}

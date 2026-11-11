@@ -1,0 +1,6 @@
+PAGE HomePage {
+  path = "/"
+  layout = StoreLayout
+  title = "Git Workspace"
+  description = "FreeLang Git 작업공간"
+}

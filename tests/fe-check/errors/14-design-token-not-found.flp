@@ -1,0 +1,10 @@
+LAYOUT BrokenThemeLayout {
+  design = MissingTheme
+}
+
+PAGE BrokenThemePage {
+  path = "/broken-theme"
+  layout = BrokenThemeLayout
+  title = "오류"
+  description = "오류 예제"
+}

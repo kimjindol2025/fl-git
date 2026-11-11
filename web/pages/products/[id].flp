@@ -1,5 +1,8 @@
 PAGE ProductDetailPage {
   path = "/products/[id]"
+  layout = StoreLayout
+  title = "상품 상세"
+  description = "프리랭 상점 상품 상세"
   params = { id: ID }
   load = Products.detail
   render = ProductDetailScreen

@@ -1,5 +1,8 @@
 PAGE CartPage {
   path = "/cart"
+  layout = StoreLayout
+  title = "장바구니"
+  description = "담은 상품과 주문 합계"
   load = Cart.get
   render = CartScreen
 }

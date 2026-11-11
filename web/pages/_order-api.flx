@@ -51,5 +51,12 @@
       (server_status 404 {"error" "주문을 찾을 수 없습니다."})
       (server_html (str "<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>주문 완료</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.done{border:1px solid #ddd;border-radius:12px;padding:24px}</style></head><body><main class='done'><p><a href='/products'>상품 목록</a></p><h1>주문이 완료되었습니다</h1><p>주문번호: " (get order "order_id") "</p><p>받는 사람: " (get order "recipient") "</p><strong>결제 예정 금액: " (get order "total") "원</strong></main></body></html>")))))
 
+(defn fl-order-get-v2 [req]
+  (let [id (server_req_param req "id")
+        order (get @fl-order-state (str id))]
+    (if (= order nil)
+      (server_status 404 {"error" "주문을 찾을 수 없습니다."})
+      (server_html (fl-layout "주문 완료" "주문이 정상적으로 접수되었습니다." (str "<div class='done'><h1>주문이 완료되었습니다</h1><p>주문번호: " (get order "order_id") "</p><p>받는 사람: " (get order "recipient") "</p><strong>결제 예정 금액: " (get order "total") "원</strong></div>"))))))
+
 (server-post "/api/order" "fl-order-create")
-(server-get "/order/:id" "fl-order-get")
+(server-get "/order/:id" "fl-order-get-v2")

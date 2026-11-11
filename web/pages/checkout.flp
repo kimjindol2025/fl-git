@@ -1,5 +1,8 @@
 PAGE CheckoutPage {
   path = "/checkout"
+  layout = StoreLayout
+  title = "주문서"
+  description = "주문 정보 입력"
   load = Cart.get
   render = CheckoutScreen
 }

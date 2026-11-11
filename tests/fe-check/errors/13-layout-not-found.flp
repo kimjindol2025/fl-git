@@ -1,0 +1,6 @@
+PAGE BrokenLayoutPage {
+  path = "/broken-layout"
+  layout = MissingLayout
+  title = "오류"
+  description = "오류 예제"
+}

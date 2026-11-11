@@ -1,5 +1,8 @@
 PAGE ProductListPage {
   path = "/products"
+  layout = StoreLayout
+  title = "상품 목록"
+  description = "프리랭 상점 상품 목록"
   load = Products.list
   render = ProductListScreen
   links = [ProductDetailPage]
@@ -14,6 +17,9 @@ API Products.list {
 
 ROUTE ProductDetailPage {
   path = "/products/[id]"
+  layout = StoreLayout
+  title = "상품 상세"
+  description = "프리랭 상점 상품 상세"
   params = { id: ID }
 }
 
