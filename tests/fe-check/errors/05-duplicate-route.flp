@@ -1,0 +1,6 @@
+PAGE FirstPage {
+  path = "/check/duplicate"
+}
+PAGE SecondPage {
+  path = "/check/duplicate"
+}

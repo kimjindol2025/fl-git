@@ -1,0 +1,4 @@
+PAGE BrokenApi {
+  path = "/check/api"
+  load = MissingApi
+}

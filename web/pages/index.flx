@@ -3,6 +3,7 @@
 (island FlGitApp []
   (let [data (atom nil)
         loaded (atom false)
+        context-loaded (atom false)
         tab (atom "overview")
         repo-input (atom "")
         folders (atom [])
@@ -61,6 +62,14 @@
                  (if (= (get res "ok") false)
                    (reset! error (or (get res "error") "상태를 불러오지 못했습니다"))
                    (do (reset! data res) (reset! remote-provider (or (get (get res "remote_info") "provider") @remote-provider)) (reset! conflict-files (or (get res "conflicts") [])) (reset! repo-input (or (get res "root") @repo-input)) (reset! error ""))))
+        context-result (fn [res]
+                         (if (= (get res "ok") false)
+                           (reset! error (or (get res "error") "AI Context를 불러오지 못했습니다"))
+                           (reset! data (json_merge (or @data {}) res))))
+        load-context (fn []
+                       (if (= @context-loaded false)
+                         (do (reset! context-loaded true) (fetch! "/api/context" context-result))
+                         nil))
         send (fn [payload] (fetch-post! "/api" payload apply-result))
         remote-action-result (fn [res]
                                (if (= (get res "ok") false)
@@ -712,6 +721,7 @@
                                      (h "div" {:class "empty"} "AIRC 문서가 없습니다.")
                                      (h "pre" {} (if (= (get selected "available") true) (get selected "content") "파일이 없습니다."))))))))) ]
     (when (not @loaded) (do (reset! loaded true) (fetch! "/api" reload)))
+    (when (and (= @context-loaded false) (or (= @tab "airc") (= @tab "context"))) (load-context))
     (h "main" {:class "app-shell"}
       (str
         (h "aside" {:class "desktop-rail"}

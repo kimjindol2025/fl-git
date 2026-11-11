@@ -1,0 +1,6 @@
+COMPONENT NeverUsed {
+  props = { id: ID }
+}
+PAGE UsedPage {
+  path = "/check/used"
+}

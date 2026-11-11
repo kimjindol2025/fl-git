@@ -1,0 +1,205 @@
+; fl-check — AI 전용 페이지 파일 구조 검사기
+; 구현 언어: FreeLang. 출력은 JSON 한 줄 진단이며, 종료 표식은 launcher가 처리한다.
+
+(defn text-has? [text needle]
+  (> (str-count (str text) (str needle)) 0))
+
+(defn clean-token [value]
+  (let [s (str-trim (str value))]
+    (str-replace-in (str-replace-in (str-replace-in (str-replace-in (str-replace-in s "[" "") "]" "") "{" "") "}" "") ":" "")))
+
+(defn property-value [line]
+  (let [parts (regex_split (str line) "=")]
+    (if (> (length parts) 1)
+      (str-trim (get parts 1))
+      "")))
+
+(defn list-values [value]
+  (filter
+    (fn [item] (> (length (clean-token item)) 0))
+    (map clean-token (regex_split (str value) "[\\[\\],{} ]+"))))
+
+(defn contains-name? [items name]
+  (> (length (filter (fn [item] (= (str item) (str name))) (or items []))) 0))
+
+(defn block-name [line]
+  (let [parts (filter (fn [item] (> (length item) 0)) (regex_split (str-trim line) " +"))]
+    (if (> (length parts) 1)
+      (clean-token (get parts 1))
+      "")))
+
+(defn new-block [kind name file line]
+  {"kind" kind "name" name "file" file "line" line "path" ""
+   "params" [] "fields" [] "submit" "" "source_count" 1})
+
+(defn route-path [block]
+  (str-trim (str (get block "path"))))
+
+(defn route-key [path]
+  (str path))
+
+(defn add-error [errors file line code what fix]
+  (reset! errors
+    (concat @errors
+      [{"file" file "line" line "code" code "what" what "fix" fix}])))
+
+(defn parse-file [file blocks lines errors]
+  (let [source (file_read file)
+        source-lines (regex_split source "\n")
+        current (atom nil)
+        line-no (atom 0)]
+    (let [visited
+      (map
+      (fn [raw]
+        (let [n (+ (deref line-no) 1)
+              line (str-trim raw)
+              kind (cond
+                     (regex_match line "^PAGE") "PAGE"
+                     (regex_match line "^API") "API"
+                     (regex_match line "^COMPONENT") "COMPONENT"
+                     (regex_match line "^FORM") "FORM"
+                     (regex_match line "^ROUTE") "ROUTE"
+                     true "")]
+          (reset! line-no n)
+          (if (> (length kind) 0)
+            (do
+              (if (not (= @current nil)) (reset! blocks (concat @blocks [@current])))
+              (reset! current (new-block kind (block-name line) file n)))
+            (if (not (= @current nil))
+              (do
+                (reset! lines (concat @lines [{"file" file "line_no" n "text" line "block" @current}]))
+                (cond
+                  (text-has? line "path") (reset! current (assoc @current "path" (property-value line)))
+                  (text-has? line "params") (reset! current (assoc @current "params" (list-values (property-value line))))
+                  (text-has? line "fields") (reset! current (assoc @current "fields" (list-values (property-value line))))
+                  (text-has? line "submit") (reset! current (assoc @current "submit" (clean-token (property-value line))))
+                  true nil))))))
+      source-lines)]
+      (length visited))
+    (if (not (= @current nil)) (reset! blocks (concat @blocks [@current])))))
+
+(defn api-exists? [blocks name]
+  (> (length (filter (fn [block] (and (= (get block "kind") "API") (= (get block "name") name))) @blocks)) 0))
+
+(defn page-or-route-exists? [blocks name]
+  (> (length (filter (fn [block]
+                       (and (or (= (get block "kind") "PAGE") (= (get block "kind") "ROUTE"))
+                            (= (get block "name") name))) @blocks)) 0))
+
+(defn api-for-field [blocks value]
+  (first
+    (filter
+      (fn [block]
+        (and (= (get block "kind") "API")
+             (text-has? value (str (get block "name") "."))))
+      @blocks)))
+
+(defn validate-lines [blocks lines errors]
+  (let [visited
+    (map
+    (fn [item]
+      (let [line (get item "text")
+            block (get item "block")
+            file (get item "file")
+            n (or (get item "line_no") (get (get item "block") "line"))]
+        (cond
+          (text-has? line "links")
+            (let [name (first (list-values (property-value line)))]
+              (if (and (not (= name nil)) (not (page-or-route-exists? blocks name)))
+                (add-error errors file (get block "line") "E_LINK_NOT_FOUND"
+                  (str "주소 대상 " name "이 등록되지 않았습니다.")
+                  "PAGE 또는 ROUTE를 등록하고 links 대상을 고치세요.")))
+          (or (text-has? line "load") (text-has? line "call") (text-has? line "submit"))
+            (let [name (clean-token (property-value line))]
+              (if (and (> (length name) 0) (not (api-exists? blocks name)))
+                (add-error errors file n "E_API_NOT_FOUND"
+                  (str "API " name "이 등록되지 않았습니다.")
+                  "API 블록을 등록하거나 호출 이름을 고치세요.")))
+          (text-has? line "read")
+            (if (text-has? line "?")
+              (add-error errors file n "E_NULLABLE_FIELD"
+                "비어 있을 수 있는 값을 검사 없이 사용했습니다."
+                "필수 필드로 선언하거나 fallback/default를 추가하세요."))
+          (text-has? line "response-field")
+            (let [value (clean-token (property-value line))
+                  api (api-for-field blocks value)
+                  field-parts (regex_split value "\\.")
+                  field (if (> (length field-parts) 0) (get field-parts (- (length field-parts) 1)) "")]
+              (if (and (not (= api nil)) (not (contains-name? (get api "fields") field)))
+                (add-error errors file n "E_RESPONSE_MISMATCH"
+                  (str "API 응답에 " field " 필드가 없습니다.")
+                  "API fields 또는 response-field를 같은 계약으로 맞추세요.")))
+          true nil)))
+    @lines)]
+    (length visited)))
+
+(defn validate-blocks [blocks lines errors]
+  (let [checked
+    (map
+    (fn [block]
+      (let [kind (get block "kind")
+            name (get block "name")
+            file (get block "file")
+            line (get block "line")
+            path (route-path block)
+            params (get block "params")]
+        (cond
+          (and (= kind "FORM") (= (get block "submit") ""))
+            (add-error errors file line "E_FORM_CONTRACT"
+              "FORM에 submit API가 없습니다."
+              "FORM의 submit을 등록된 API 이름으로 지정하세요.")
+          (and (or (= kind "PAGE") (= kind "ROUTE")) (text-has? path "["))
+            (let [raw (if (text-has? path "[id]") "id" (if (text-has? path "[slug]") "slug" ""))]
+              (if (and (not (= raw nil)) (not (contains-name? params raw)))
+                (add-error errors file line "E_PARAM_MISMATCH"
+                  (str "주소 변수 " raw "과 params 선언이 다릅니다.")
+                  "path의 [변수]와 params 이름을 같게 선언하세요.")))
+          true nil)))
+    @blocks)]
+    (length checked))
+  (let [checked
+    (map
+      (fn [left]
+        (let [path (route-path left)
+              kind (get left "kind")
+              matches (filter (fn [right]
+                          (and (= (route-key path) (route-key (route-path right)))
+                               (= (get left "file") (get right "file"))
+                                     (or (= kind "PAGE") (= kind "ROUTE"))
+                                     (or (= (get right "kind") "PAGE") (= (get right "kind") "ROUTE"))))
+                              @blocks)]
+          (if (and (> (length path) 0) (> (length matches) 1))
+            (add-error errors (get left "file") (get left "line") "E_DUPLICATE_ROUTE"
+              (str "주소 " path "가 중복 등록되었습니다.")
+              "주소를 하나만 남기거나 다른 path를 사용하세요."))))
+      @blocks)]
+    (length checked))
+  (let [checked
+    (map
+    (fn [component]
+      (let [name (get component "name")
+            used (> (length (filter (fn [item]
+                                      (or (text-has? (get item "text") (str "uses = [" name))
+                                          (text-has? (get item "text") (str "render = " name))))
+                                    @lines)) 0)]
+        (if (not used)
+          (add-error errors (get component "file") (get component "line") "E_UNUSED_COMPONENT"
+            (str "COMPONENT " name "이 어떤 페이지에서도 사용되지 않았습니다.")
+            "PAGE의 uses 또는 render에 이 컴포넌트를 연결하세요."))))
+    (filter (fn [block] (= (get block "kind") "COMPONENT")) @blocks))]
+    (length checked)))
+
+(let [target (or (shell_env "FL_CHECK_TARGET") "pages")
+      files (if (file_is_file target)
+              [target]
+              (map (fn [name] (str target "/" name))
+                   (filter (fn [name] (and (regex_match name "\\.flp$") (file_is_file (str target "/" name))))
+                           (dir_list target))))
+      blocks (atom [])
+      lines (atom [])
+      errors (atom [])]
+  (map (fn [file] (parse-file file blocks lines errors)) files)
+  (validate-lines blocks lines errors)
+  (validate-blocks blocks lines errors)
+  (map (fn [error] (println (json_stringify error))) @errors)
+  (println (str "FL_CHECK_EXIT=" (if (> (length @errors) 0) "1" "0"))))

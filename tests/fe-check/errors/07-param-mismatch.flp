@@ -1,0 +1,4 @@
+PAGE BrokenParam {
+  path = "/products/[id]"
+  params = { slug: ID }
+}

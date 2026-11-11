@@ -1,0 +1,4 @@
+PAGE BrokenNullable {
+  path = "/check/nullable"
+  read = Product.name?
+}

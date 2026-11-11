@@ -1,0 +1,22 @@
+PAGE ProductListPage {
+  path = "/products"
+  load = Products.list
+  render = ProductListScreen
+}
+
+API Products.list {
+  method = GET
+  path = "/api/products"
+  response = ProductListResult
+  fields = [id name price]
+}
+
+COMPONENT ProductCard {
+  props = { id: ID, name: String, price: Money }
+  render = ProductCardView
+}
+
+COMPONENT ProductListScreen {
+  uses = [ProductCard]
+  render = ProductListView
+}

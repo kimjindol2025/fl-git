@@ -1,0 +1,8 @@
+API Products.list {
+  path = "/api/products"
+  fields = [id name]
+}
+PAGE BrokenResponse {
+  path = "/check/response"
+  response-field = Products.list.price
+}

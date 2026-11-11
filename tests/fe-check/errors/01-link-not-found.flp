@@ -1,0 +1,4 @@
+PAGE BrokenLinks {
+  path = "/check/link"
+  links = [MissingPage]
+}

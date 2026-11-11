@@ -1,0 +1,22 @@
+; Compatibility renderer for the first .flp page.
+; The .flp contract is checked by tools/fl-check.fl.
+(defn render-product-card [id name price]
+  (h "article" {"class" "product-card"}
+    (h "h2" {} name)
+    (h "p" {} (str "상품 번호: " id))
+    (h "strong" {} (str price "원"))))
+
+(defn render [req]
+  (server_html
+    (str
+      (h "html" {:lang "ko"}
+        (str
+          (h "head" {}
+            (str (h! "meta" {:charset "utf-8"})
+                 (h "title" {} "상품 목록")
+                 (h "style" {} "body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product-card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}.product-card h2{margin:0 0 8px}")))
+          (h "body" {}
+            (str (h "h1" {} "상품 목록")
+                 (render-product-card "1" "AI 노트" "19000")
+                 (render-product-card "2" "FreeLang 키트" "29000")
+                 (render-product-card "3" "Codex 플래너" "39000"))))))))

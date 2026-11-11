@@ -3,6 +3,7 @@
 (define fl-git-repo (atom (or (fl-env-get "FL_GIT_REPO") "/home/kim/kim/projects/fl-git")))
 (define fl-git-roots (or (fl-env-get "FL_GIT_ROOTS") "/home/kim/kim/projects"))
 (define fl-git-audit-log (atom []))
+(define fl-git-context-cache (atom {}))
 
 (defn api-role []
   (let [configured (str-to-lower (str-trim (str (or (fl-env-get "FL_GIT_ROLE") ""))))]
@@ -797,6 +798,29 @@
      "configured" (> (length clean) 0)
      "full_name" (api-provider-full-name owner repository)}))
 
+(defn api-public-remote-info [info]
+  {"provider" (or (get info "provider") "unknown")
+   "host" "<가림>"
+   "owner" "<가림>"
+   "repository" "<가림>"
+   "remote" "<가림>"
+   "branch" (or (get info "branch") "")
+   "upstream" "<가림>"
+   "auth" (or (get info "auth") "unknown")
+   "name" "<가림>"
+   "ahead" (get info "ahead")
+   "behind" (get info "behind")
+   "configured" (or (get info "configured") false)
+   "full_name" "<가림>"})
+
+(defn api-public-github [info]
+  {"connected" (or (get info "connected") false)
+   "name" "<가림>"
+   "private" (or (get info "private") false)
+   "default_branch" (or (get info "default_branch") "")
+   "url" "<가림>"
+   "description" (or (get info "description") "")})
+
 (defn api-github-info []
   (let [result (api-run "gh repo view --json nameWithOwner,isPrivate,defaultBranchRef,url,description")
         remote-result (api-run "git remote get-url origin")]
@@ -971,16 +995,25 @@
         log (api-out log-result)
         remotes (api-remotes-from-remote-v remote-v branch sync)
         remote-info (if (> (length remotes) 0) (first remotes) (api-remote-info remote branch sync))
-        context-cards (api-context-cards root branch remote status (api-out diff-result) commits github sync conflicts branches continuity spec risk remote-info remotes)]
+        public-remotes (map api-public-remote-info remotes)
+        public-remote-info (api-public-remote-info remote-info)
+        public-github (api-public-github github)
+        context-cards (api-context-cards root branch "<가림>" status (api-out diff-result) commits public-github sync conflicts branches continuity spec risk public-remote-info public-remotes)
+        context-json (api-context-json root branch "<가림>" status log continuity spec risk public-remote-info public-remotes sync commits context-cards)
+        context-cache {"airc_documents" airc-documents "context_json" context-json "context_cards" context-cards
+                       "context_available_keys" (map (fn [card] (get card "key")) context-cards)}]
+    (reset! fl-git-context-cache context-cache)
     {"ok" true "message" (or message "") "root" root "branch" branch
-     "remote" remote "status" status "files" files "diff" (api-out diff-result) "log" log "commits" commits
+     "remote" "<가림>" "status" status "files" files "diff" (api-out diff-result) "log" log "commits" commits
      "recent_commits" commits
-     "github" github "sync" sync "conflicts" conflicts "branches" branches
-     "continuity" continuity "spec" spec "airc_documents" airc-documents "change_risk" risk
-     "remote_info" remote-info "remotes" remotes
-     "context_json" (api-context-json root branch remote status log continuity spec risk remote-info remotes sync commits context-cards)
-     "context_cards" context-cards
-     "context_available_keys" (map (fn [card] (get card "key")) context-cards)}))
+     "github" public-github "sync" sync "conflicts" conflicts "branches" branches
+     "continuity" continuity "spec" spec "change_risk" risk
+     "remote_info" public-remote-info "remotes" public-remotes}))
+
+(defn api-context-payload []
+  (if (= (length (json_keys @fl-git-context-cache)) 0)
+    (do (api-payload "") @fl-git-context-cache)
+    @fl-git-context-cache))
 
 (defn api-ai-key []
   (str-trim (str (or (fl-env-get "FL_AI_API_KEY") ""))))
@@ -1230,6 +1263,11 @@
 
 (defn render [req]
   (server-json (api-payload "")))
+
+(defn page_api_context [req]
+  (server-json (api-context-payload)))
+
+(server-get "/api/context" "page_api_context")
 
 (defn render_post [req]
   (let [body (or (get req "body") {})

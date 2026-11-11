@@ -1,0 +1,6 @@
+FORM BrokenForm {
+  fields = { q: String }
+}
+PAGE FormPage {
+  path = "/check/form"
+}
