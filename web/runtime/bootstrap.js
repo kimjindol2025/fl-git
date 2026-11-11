@@ -30535,7 +30535,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
           console.error(`[server] \uC11C\uBC84 \uC624\uB958: ${err4.message}`);
         }
       });
-      server.listen(port);
+      server.listen(port, process.env.FL_HTTP_HOST || "127.0.0.1");
       __activeServer.server = server;
       setInterval(() => {
       }, 1e4).unref();

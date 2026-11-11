@@ -599,7 +599,7 @@ function snapshotHashes() {
 (async () => {
   console.log('[dev] FL-Front 개발 서버 시작...');
 
-  hmrServer.listen(HMR_PORT, () =>
+  hmrServer.listen(HMR_PORT, '127.0.0.1', () =>
     console.log(`[hmr] SSE → http://localhost:${HMR_PORT}/~hmr`)
   );
 
