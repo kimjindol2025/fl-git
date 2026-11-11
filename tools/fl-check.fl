@@ -101,6 +101,12 @@
   (and (= (length sent) (length received))
        (= (length (filter (fn [item] (contains-name? received item)) sent)) (length sent))))
 
+(defn rule-name [token]
+  (first (regex_split (clean-token token) "[=:]")))
+
+(defn known-rule? [token]
+  (contains-name? ["required" "min-length" "max-length" "phone" "numeric" "email"] (rule-name token)))
+
 (defn validate-lines [blocks lines errors]
   (let [visited
     (map
@@ -136,6 +142,13 @@
                 (add-error errors file n "E_RESPONSE_MISMATCH"
                   (str "API 응답에 " field " 필드가 없습니다.")
                   "API fields 또는 response-field를 같은 계약으로 맞추세요.")))
+          (regex_match line "^rule ")
+            (let [tokens (list-values (property-value line))
+                  bad (filter (fn [token] (not (known-rule? token))) tokens)]
+              (if (> (length bad) 0)
+                (add-error errors file n "E_UNKNOWN_INPUT_RULE"
+                  (str "알 수 없는 입력 규칙 " (first bad) "을 사용했습니다.")
+                  "required, min-length, max-length, phone, numeric, email 중 하나를 사용하세요.")))
           true nil)))
     @lines)]
     (length visited)))
@@ -155,6 +168,14 @@
             (add-error errors file line "E_FORM_CONTRACT"
               "FORM에 submit API가 없습니다."
               "FORM의 submit을 등록된 API 이름으로 지정하세요.")
+          (and (= kind "FORM") (api-exists? blocks (get block "submit")))
+            (let [api (first (filter (fn [item]
+                                       (and (= (get item "kind") "API")
+                                            (= (get item "name") (get block "submit")))) @blocks))]
+              (if (not (fields-match? (get block "fields") (get api "input_fields")))
+                (add-error errors file line "E_FORM_INPUT_MISMATCH"
+                  "FORM 필드와 API input 계약이 다릅니다."
+                  "FORM fields와 API input을 같은 이름으로 맞추세요.")))
           (and (= kind "BUTTON") (not (api-exists? blocks (get block "submit"))))
             (add-error errors file line "E_BUTTON_API_NOT_FOUND"
               (str "BUTTON이 호출하는 API " (get block "submit") "이 등록되지 않았습니다.")

@@ -1,0 +1,11 @@
+API Order.create {
+  method = POST
+  path = "/api/order"
+  input = [phone]
+}
+
+FORM BrokenRuleForm {
+  fields = [phone]
+  submit = Order.create
+  rule phone = requred phone
+}

@@ -1,0 +1,34 @@
+PAGE CheckoutPage {
+  path = "/checkout"
+  load = Cart.get
+  render = CheckoutScreen
+}
+
+API Cart.get {
+  method = GET
+  path = "/api/cart"
+  response = CartResult
+  fields = [items count total]
+}
+
+API Order.create {
+  method = POST
+  path = "/api/order"
+  input = [recipient phone address note]
+  response = OrderResult
+  fields = [order_id total]
+}
+
+FORM OrderForm {
+  fields = [recipient phone address note]
+  submit = Order.create
+  rule recipient = required min-length=2 max-length=50
+  rule phone = required phone
+  rule address = required min-length=5 max-length=200
+  rule note = max-length=200
+}
+
+COMPONENT CheckoutScreen {
+  uses = [OrderForm]
+  render = CheckoutView
+}

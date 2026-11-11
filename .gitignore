@@ -14,3 +14,4 @@ web/pages/products.flx
 web/pages/products/[id].flx
 web/pages/products/\[id\].flx
 web/pages/cart.flx
+web/pages/checkout.flx

@@ -64,6 +64,23 @@ FORM ProductSearchForm {
 }
 ```
 
+FORM의 입력 규칙은 필드마다 한 줄로 선언한다. 이 줄이 브라우저 오류 표시와 서버 400 검증의 공통 계약이다.
+
+```text
+FORM OrderForm {
+  fields = [recipient phone address note]
+  submit = Order.create
+  rule recipient = required min-length=2 max-length=50
+  rule phone = required phone
+  rule address = required min-length=5 max-length=200
+  rule note = max-length=200
+}
+```
+
+지원 규칙은 `required`, `min-length`, `max-length`, `phone`, `numeric`, `email`이다. 규칙 이름과 필드 목록은 컴파일러가 브라우저·서버 산출물 양쪽에 전달하며, 애플리케이션은 같은 규칙을 두 번 선언하지 않는다.
+
+FORM의 `fields`는 `submit`이 가리키는 API의 `input`과 반드시 같아야 한다. 필드가 빠지거나 더 있으면 `E_FORM_INPUT_MISMATCH`로 컴파일을 중단한다. 지원 목록 밖의 규칙 이름도 `E_UNKNOWN_INPUT_RULE`로 중단한다.
+
 ### API
 
 메서드, 주소, 입력, 응답, 오류를 명시한다.
