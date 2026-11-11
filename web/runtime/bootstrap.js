@@ -30529,17 +30529,17 @@ function createHttpServerModule(callFn, callFunctionValue2) {
         callFn(upgradeHandler, [upgradeReq]);
       });
       server.on("error", (err4) => {
-        if (err4.code === "EADDRINUSE") {
-          console.warn(`[server] \uD3EC\uD2B8 ${port} \uC774\uBBF8 \uC0AC\uC6A9 \uC911 \u2014 \uC11C\uBC84 \uC2DC\uC791 \uAC74\uB108\uB700`);
-        } else {
-          console.error(`[server] \uC11C\uBC84 \uC624\uB958: ${err4.message}`);
-        }
+        const host = process.env.FL_HTTP_HOST || "127.0.0.1";
+        console.error(`[fail-loud] HTTP listen failed address=${host} port=${port} error=${err4.code || err4.name || "UNKNOWN"}`);
+        process.exitCode = 1;
+        process.nextTick(() => process.exit(1));
       });
-      server.listen(port, process.env.FL_HTTP_HOST || "127.0.0.1");
+      const host = process.env.FL_HTTP_HOST || "127.0.0.1";
+      server.listen(port, host, () => console.log(`server listening on :${port}`));
       __activeServer.server = server;
       setInterval(() => {
       }, 1e4).unref();
-      return `server listening on :${port}`;
+      return `server starting on :${port}`;
     },
     // server_stop -> null
     "server_stop": () => {

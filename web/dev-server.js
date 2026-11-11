@@ -20,9 +20,11 @@ const BUILD_STATE_FILE = path.join(ROOT, '.build-state.json');
 const BROWSER_STATE_FILE = path.join(ROOT, '.browser-state.json');
 const RUNTIME        = path.join(ROOT, 'runtime', 'bootstrap.js');
 const HMR_PORT       = 40851;
+const HMR_HOST       = '127.0.0.1';
 
 let serverProc    = null;
 let debounceTimer = null;
+let shuttingDown  = false;
 let hmrClients    = [];
 const fileHashes  = new Map();   // full file hash
 const logicHashes = new Map();   // (style …) 제거 후 해시 — CSS-only 판별
@@ -445,7 +447,7 @@ function build() {
 
 // ── 서버 시작 (포트 오픈 감지) ────────────────────────────────
 function startServer() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (serverProc) { serverProc.kill('SIGTERM'); serverProc = null; }
 
     serverProc = cp.spawn('node', [RUNTIME, 'run', APP_FL], {
@@ -454,6 +456,13 @@ function startServer() {
 
     // stdout/stderr 출력 + 포트 오픈 감지
     let runtimeOk = false;
+    let runtimeFailureReported = false;
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
     const handleOutput = (raw) => {
       // 런타임 파서 에러 감지 (stdout + stderr 공통)
       if (raw.includes('Unexpected character') || raw.includes('실행 오류')) {
@@ -486,14 +495,30 @@ function startServer() {
     serverProc.stderr.on('data', d => {
       const raw = d.toString();
       process.stderr.write(translateLines(raw));
+      if (raw.includes('[fail-loud]')) runtimeFailureReported = true;
       handleOutput(raw);
     });
     serverProc.on('exit', (code, signal) => {
       if (signal !== 'SIGTERM') console.log(`[dev] 서버 종료 (code=${code})`);
+      if (shuttingDown || signal === 'SIGTERM') return;
+      const detail = `runtime exit code=${code ?? 'null'} signal=${signal ?? 'none'} address=${process.env.FL_HTTP_HOST || '127.0.0.1'} port=40850`;
+      if (!runtimeOk) {
+        const failure = new Error(detail);
+        failure.reported = runtimeFailureReported;
+        finish(reject, failure);
+      }
+      else {
+        console.error(`[fail-loud] HTTP server stopped ${detail}`);
+        process.exitCode = 1;
+        process.exit(1);
+      }
     });
 
-    // 안전망: 3초 후 무조건 resolve
-    setTimeout(resolve, 3000);
+    // 안전망: 3초 안에 listen 이벤트가 없으면 실패
+    setTimeout(() => {
+      if (!runtimeOk) finish(reject, new Error(`runtime listen timeout address=${process.env.FL_HTTP_HOST || '127.0.0.1'} port=40850`));
+      else finish(resolve);
+    }, 3000);
   });
 }
 
@@ -599,15 +624,14 @@ function snapshotHashes() {
 (async () => {
   console.log('[dev] FL-Front 개발 서버 시작...');
 
-  hmrServer.listen(HMR_PORT, '127.0.0.1', () =>
+  hmrServer.listen(HMR_PORT, HMR_HOST, () =>
     console.log(`[hmr] SSE → http://localhost:${HMR_PORT}/~hmr`)
   );
 
   hmrServer.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`[hmr] 포트 ${HMR_PORT} 이미 사용 중 — 기존 dev-server 프로세스를 종료 후 재시작하세요`);
-      process.exit(1);
-    }
+    console.error(`[fail-loud] HMR listen failed address=${HMR_HOST} port=${HMR_PORT} error=${err.code || err.name || 'UNKNOWN'}`);
+    process.exitCode = 1;
+    process.exit(1);
   });
 
   snapshotHashes();
@@ -617,10 +641,16 @@ function snapshotHashes() {
     process.exit(1);
   }
 
-  await startServer();
+  try {
+    await startServer();
+  } catch (e) {
+    if (!e.reported) console.error(`[fail-loud] HTTP listen failed address=${process.env.FL_HTTP_HOST || '127.0.0.1'} port=40850 error=${e.message}`);
+    process.exit(1);
+  }
   watchAll();
 
   function shutdown() {
+    shuttingDown = true;
     console.log('\n[dev] 종료');
     if (serverProc) {
       serverProc.kill('SIGTERM');
