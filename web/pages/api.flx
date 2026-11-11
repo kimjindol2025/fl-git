@@ -2,6 +2,39 @@
 
 (define fl-git-repo (atom (or (fl-env-get "FL_GIT_REPO") "/home/kim/kim/projects/fl-git")))
 (define fl-git-roots (or (fl-env-get "FL_GIT_ROOTS") "/home/kim/kim/projects"))
+(define fl-git-audit-log (atom []))
+
+(defn api-role []
+  (let [configured (str-to-lower (str-trim (str (or (fl-env-get "FL_GIT_ROLE") ""))))]
+    (if (or (= configured "viewer") (= configured "developer") (= configured "operator")) configured "developer")))
+
+(defn api-role-can? [action]
+  (let [role (api-role)]
+    (or (= role "operator")
+        (and (= role "developer")
+             (or (= action "read") (= action "ai") (= action "editor") (= action "test") (= action "terminal") (= action "local-write"))))))
+
+(defn api-permission-error [action]
+  {"ok" false "code" "PERMISSION_DENIED" "role" (api-role)
+   "action" action "error" (str "현재 역할(" (api-role) ")에는 " action " 권한이 없습니다.")})
+
+(defn api-audit-record [action target result]
+  (reset! fl-git-audit-log
+          (concat @fl-git-audit-log
+                  [{"timestamp" (now_iso) "role" (api-role) "action" action
+                    "target" (api-provider-redact (str (or target "")))
+                    "result" (api-provider-redact (str (or result "")))}]))
+  true)
+
+(defn api-access-status []
+  {"ok" true "role" (api-role) "root" (deref fl-git-repo)
+   "permissions" {"read" (api-role-can? "read")
+                  "ai" (api-role-can? "ai")
+                  "editor" (api-role-can? "editor")
+                  "test" (api-role-can? "test")
+                  "terminal" (api-role-can? "terminal")
+                  "local_write" (api-role-can? "local-write")
+                  "remote_write" (api-role-can? "remote-write")}})
 
 (defn api-shell-quote [value]
   (str "'" (str-replace-in (str value) "'" "'\\''") "'"))
@@ -949,6 +982,252 @@
      "context_cards" context-cards
      "context_available_keys" (map (fn [card] (get card "key")) context-cards)}))
 
+(defn api-ai-key []
+  (str-trim (str (or (fl-env-get "FL_AI_API_KEY") ""))))
+
+(defn api-ai-model []
+  (let [configured (str-trim (str (or (fl-env-get "FL_AI_MODEL") "")))]
+    (if (= configured "") "gpt-4o-mini" configured)))
+
+(defn api-ai-base-url []
+  (let [configured (str-trim (str (or (fl-env-get "FL_AI_BASE_URL") "")))]
+    (if (= configured "") "https://api.openai.com/v1/chat/completions" configured)))
+
+(defn api-ai-provider-status []
+  {"ok" true
+   "provider" "openai-compatible"
+   "configured" (> (length (api-ai-key)) 0)
+   "model" (api-ai-model)
+   "base_url" (api-ai-base-url)
+   "key_exposed" false})
+
+(defn api-ai-context-text []
+  (let [snapshot (api-payload "")
+        cards (get snapshot "context_cards")]
+    (str "현재 저장소의 읽기 전용 문맥입니다. 이 문맥만 근거로 답하고, 파일 변경·명령 실행·commit·push는 제안만 하세요.\n\n"
+         (api-context-markdown cards))))
+
+(defn api-ai-tools []
+  [{"type" "function"
+    "function" {"name" "search_files"
+                "description" "현재 Git 작업 트리와 프로젝트 문서에서 검색합니다. 읽기 전용입니다."
+                "parameters" {"type" "object"
+                              "properties" {"query" {"type" "string"}
+                                            "scope" {"type" "string"
+                                                     "enum" ["files" "history" "continuity" "all"]}}
+                              "required" ["query"]}}}])
+
+(defn api-ai-tool-result [call]
+  (let [function (or (get call "function") {})
+        name (or (get function "name") "")
+        arguments (or (get function "arguments") "{}")
+        parsed (if (= arguments "") {} (json_parse arguments))
+        query (get parsed "query")
+        scope (get parsed "scope")]
+    {"role" "tool"
+     "tool_call_id" (or (get call "id") "")
+     "content" (if (= name "search_files")
+                 (json-stringify (api-ai-search query scope))
+                 (json-stringify {"ok" false "error" "허용되지 않은 AI 도구입니다."}))}))
+
+(defn api-ai-http [request-body key]
+  (http_request "POST" (api-ai-base-url)
+    {"Authorization" (str "Bearer " key) "Content-Type" "application/json"}
+    (json-stringify request-body)))
+
+(defn api-ai-worktree-signature []
+  (let [head (api-out (api-run "git rev-parse HEAD"))
+        status (api-out (api-run "git status --short"))
+        diff (api-out (api-run "git diff --no-ext-diff"))]
+    (sha256 (str head "\n" status "\n" diff))))
+
+(defn api-ai-file-context [path]
+  (let [clean (str-trim (str path))
+        content (api-file-content "server" clean "")]
+    (if (= (get content "ok") true)
+      (str "\n--- FILE: " clean " ---\n" (get content "content"))
+      (str "\n--- FILE: " clean " ---\n[읽기 실패: " (get content "error") "]"))))
+
+(defn api-ai-patch [message paths]
+  (let [clean (str-trim (str (or message "")))
+        key (api-ai-key)
+        requested (or paths [])
+        safe (filter api-safe-git-path requested)
+        selected (if (> (length safe) 0) safe (map (fn [file] (get file "path")) (api-status-files)))]
+    (cond
+      (= clean "") {"ok" false "code" "AI_MESSAGE_REQUIRED" "error" "수정 요청을 입력하세요."}
+      (> (length clean) 12000) {"ok" false "code" "AI_MESSAGE_TOO_LARGE" "error" "수정 요청은 12,000자 이하로 입력하세요."}
+      (= (length selected) 0) {"ok" false "code" "AI_PATCH_FILES_REQUIRED" "error" "수정 대상 파일을 하나 이상 선택하세요."}
+      (> (length selected) 12) {"ok" false "code" "AI_PATCH_TOO_MANY_FILES" "error" "한 번에 최대 12개 파일만 수정할 수 있습니다."}
+      (> (length (filter (fn [path] (not (api-safe-git-path path))) selected)) 0)
+        {"ok" false "code" "AI_PATCH_UNSAFE_PATH" "error" "안전하지 않은 수정 대상 파일이 포함되어 있습니다."}
+      (= key "") {"ok" false "code" "AI_NOT_CONFIGURED" "error" "FL_AI_API_KEY가 설정되지 않았습니다."}
+      true
+        (let [context (str "현재 저장소의 읽기 전용 문맥입니다.\n"
+                           "수정 대상 파일의 원문은 아래와 같습니다.\n"
+                           (str-join (map api-ai-file-context selected) "\n"))
+              system (str "당신은 코드 수정안을 만드는 AI입니다.\n"
+                          "사용자 요청을 반영하되 파일을 직접 변경하지 마세요.\n"
+                          "반드시 unified diff 형식으로만 답하세요.\n"
+                          "diff는 diff --git a/path b/path로 시작해야 합니다.\n"
+                          "설명, Markdown fence, 임의 셸 명령은 출력하지 마세요.\n\n" context)
+              body {"model" (api-ai-model) "temperature" 0.1 "max_tokens" 4000
+                    "messages" [{"role" "system" "content" system} {"role" "user" "content" clean}]}
+              response (api-ai-http body key)
+              status (or (get response "status") 0)
+              raw (or (get response "body") "")
+              parsed (if (= raw "") {} (json_parse raw))
+              choice (first (or (get parsed "choices") []))
+              answer (str-trim (or (get (get choice "message") "content") ""))]
+          (if (and (= status 200) (str-starts-with answer "diff --git"))
+            {"ok" true "proposal" true "patch" answer "base_signature" (api-ai-worktree-signature)
+             "base_head" (api-out (api-run "git rev-parse HEAD"))
+             "files" selected "model" (api-ai-model)}
+            {"ok" false "code" (if (= status 0) "AI_PROVIDER_UNAVAILABLE" "AI_PATCH_INVALID")
+             "status" status "error" (api-provider-redact (or (get (get parsed "error") "message") answer raw "AI가 유효한 unified diff를 반환하지 않았습니다."))})))))
+
+(defn api-ai-apply-patch [patch base-signature confirm]
+  (let [raw (str (or patch ""))
+        clean (if (str-ends-with raw "\n") raw (str raw "\n"))
+        expected (str (or base-signature ""))
+        current (api-ai-worktree-signature)]
+    (cond
+      (not (api-role-can? "local-write")) (api-permission-error "local-write")
+      (not (= confirm true)) {"ok" false "code" "AI_PATCH_APPROVAL_REQUIRED" "error" "diff를 확인한 뒤 confirm=true로 승인해야 합니다."}
+      (= clean "") {"ok" false "code" "AI_PATCH_REQUIRED" "error" "적용할 diff가 없습니다."}
+      (> (length clean) 100000) {"ok" false "code" "AI_PATCH_TOO_LARGE" "error" "diff는 100,000자 이하만 적용할 수 있습니다."}
+      (not (= expected current)) {"ok" false "code" "AI_PATCH_STALE" "error" "작업 트리가 변경되어 오래된 diff를 적용할 수 없습니다."}
+      (not (str-starts-with (str-trim clean) "diff --git")) {"ok" false "code" "AI_PATCH_INVALID" "error" "unified diff 형식이 아닙니다."}
+      true
+        (let [path (str "/tmp/fl-git-ai-patch-" (uuid_short) ".diff")
+              write (api-command (str "printf %s " (api-shell-quote clean) " > " (api-shell-quote path)))
+              check (if (= (api-code write) 0) (api-command (str "git apply --check --unidiff-zero -- " (api-shell-quote path))) write)
+              applied (if (= (api-code check) 0) (api-command (str "git apply --unidiff-zero -- " (api-shell-quote path))) check)
+              cleanup (api-command (str "rm -f -- " (api-shell-quote path)))]
+          (if (= (api-code applied) 0)
+            (do (api-audit-record "ai-apply-patch" "working-tree" "AI_PATCH_APPLIED")
+                {"ok" true "code" "AI_PATCH_APPLIED" "message" "승인된 diff를 적용했습니다." "signature" (api-ai-worktree-signature)})
+            {"ok" false "code" "AI_PATCH_CHECK_FAILED" "error" (api-provider-redact (or (get applied "stderr") (get applied "stdout") "diff 적용에 실패했습니다."))})))))
+
+(defn api-ai-test-command [name]
+  (cond
+    (= name "npm test") "npm test"
+    (= name "./scripts/check.sh") "./scripts/check.sh"
+    (= name "npm run test") "npm run test"
+    true ""))
+
+(defn api-ai-run-test [name confirm]
+  (let [command (api-ai-test-command (str-trim (str (or name ""))))]
+    (cond
+      (not (api-role-can? "test")) (api-permission-error "test")
+      (= command "") {"ok" false "code" "AI_TEST_COMMAND_DENIED" "error" "허용된 테스트 명령만 실행할 수 있습니다." "allowed" ["npm test" "./scripts/check.sh" "npm run test"]}
+      (not (= confirm true)) {"ok" false "code" "AI_TEST_APPROVAL_REQUIRED" "command" command "error" "테스트 실행 전 confirm=true 승인이 필요합니다."}
+      true
+        (let [result (api-command (str "timeout 120s " command))
+              code (api-code result)]
+          (do (api-audit-record "ai-test" command (if (= code 0) "AI_TEST_PASS" "AI_TEST_FAIL"))
+          {"ok" (= code 0) "code" (if (= code 0) "AI_TEST_PASS" "AI_TEST_FAIL")
+           "command" command "exit_code" code
+           "stdout" (api-provider-redact (or (get result "stdout") ""))
+           "stderr" (api-provider-redact (or (get result "stderr") ""))
+           "ai_instruction" "이 결과는 읽기 전용 테스트 실행 결과입니다. 실패 시 사용자가 승인한 AI patch만 제안하세요."})))))
+
+(defn api-editor-write [path content confirm base-signature]
+  (let [clean (str-trim (str path))
+        text (str (or content ""))
+        current (api-ai-worktree-signature)]
+    (cond
+      (not (api-role-can? "editor")) (api-permission-error "editor")
+      (not (api-safe-file-path clean)) {"ok" false "code" "EDITOR_UNSAFE_PATH" "error" "안전하지 않거나 민감한 파일은 편집할 수 없습니다."}
+      (not (= confirm true)) {"ok" false "code" "EDITOR_APPROVAL_REQUIRED" "error" "파일 저장 전 confirm=true 승인이 필요합니다."}
+      (> (length text) 200000) {"ok" false "code" "EDITOR_FILE_TOO_LARGE" "error" "파일은 200,000자 이하만 저장할 수 있습니다."}
+      (not (= (str base-signature) current)) {"ok" false "code" "EDITOR_STALE" "error" "작업 트리가 변경되어 오래된 편집 내용을 저장할 수 없습니다."}
+      true
+        (let [target (str (deref fl-git-repo) "/" clean)
+              temp (str "/tmp/fl-git-editor-" (uuid_short))
+              written (api-command (str "printf %s " (api-shell-quote text) " > " (api-shell-quote temp)))
+              moved (if (= (api-code written) 0) (api-command (str "mv -- " (api-shell-quote temp) " " (api-shell-quote target))) written)]
+          (if (= (api-code moved) 0)
+            (do (api-audit-record "editor-write" clean "EDITOR_SAVED")
+                {"ok" true "code" "EDITOR_SAVED" "path" clean "signature" (api-ai-worktree-signature)})
+            {"ok" false "code" "EDITOR_SAVE_FAILED" "error" (api-provider-redact (or (get moved "stderr") (get moved "stdout") "파일 저장에 실패했습니다."))})))))
+
+(defn api-terminal-command [name]
+  (cond
+    (= name "pwd") "pwd"
+    (= name "git status") "git status --short --branch"
+    (= name "git diff") "git --no-pager diff"
+    (= name "git log") "git --no-pager log --oneline --decorate -12"
+    (= name "npm test") "npm test"
+    (= name "./scripts/check.sh") "./scripts/check.sh"
+    true ""))
+
+(defn api-terminal-run [name confirm]
+  (let [command (api-terminal-command (str-trim (str (or name ""))))]
+    (cond
+      (not (api-role-can? "terminal")) (api-permission-error "terminal")
+      (= command "") {"ok" false "code" "TERMINAL_COMMAND_DENIED" "error" "허용된 터미널 명령만 실행할 수 있습니다."}
+      (not (= confirm true)) {"ok" false "code" "TERMINAL_APPROVAL_REQUIRED" "command" command "error" "터미널 명령 실행 전 승인이 필요합니다."}
+      true
+        (let [result (api-command (str "timeout 120s " command))
+              code (api-code result)]
+          (do (api-audit-record "terminal-run" command (if (= code 0) "TERMINAL_PASS" "TERMINAL_FAIL"))
+          {"ok" (= code 0) "code" (if (= code 0) "TERMINAL_PASS" "TERMINAL_FAIL")
+           "command" command "exit_code" code
+           "stdout" (api-provider-redact (or (get result "stdout") ""))
+           "stderr" (api-provider-redact (or (get result "stderr") ""))})))))
+
+(defn api-ai-chat [message]
+  (let [clean (str-trim (str (or message "")))
+        key (api-ai-key)]
+    (cond
+      (= clean "") {"ok" false "code" "AI_MESSAGE_REQUIRED" "error" "AI에게 보낼 메시지를 입력하세요."}
+      (> (length clean) 12000) {"ok" false "code" "AI_MESSAGE_TOO_LARGE" "error" "메시지는 12,000자 이하로 입력하세요."}
+      (= key "") {"ok" false "code" "AI_NOT_CONFIGURED" "error" "FL_AI_API_KEY가 설정되지 않았습니다. 서버 환경변수에 API 키를 설정하세요." "configured" false "model" (api-ai-model)}
+      true
+        (let [messages [{"role" "system" "content" (api-ai-context-text)}
+                        {"role" "user" "content" clean}]
+              request-body {"model" (api-ai-model)
+                            "temperature" 0.2
+                            "max_tokens" 1200
+                            "messages" messages
+                            "tools" (api-ai-tools)
+                            "tool_choice" "auto"}
+              response (api-ai-http request-body key)
+              status (or (get response "status") 0)
+              raw (or (get response "body") "")
+              parsed (if (= raw "") {} (json_parse raw))
+              choices (or (get parsed "choices") [])
+              first-choice (first choices)
+              first-message (or (get first-choice "message") {})
+              tool-calls (or (get first-message "tool_calls") [])
+              answer (or (get first-message "content") "")]
+          (if (and (= status 200) (> (length tool-calls) 0))
+            (let [follow-messages (concat messages
+                                          [{"role" "assistant" "content" (or (get first-message "content") "")
+                                            "tool_calls" tool-calls}]
+                                          (map api-ai-tool-result tool-calls))
+                  follow-body {"model" (api-ai-model) "temperature" 0.2 "max_tokens" 1200 "messages" follow-messages}
+                  follow-response (api-ai-http follow-body key)
+                  follow-status (or (get follow-response "status") 0)
+                  follow-raw (or (get follow-response "body") "")
+                  follow-parsed (if (= follow-raw "") {} (json_parse follow-raw))
+                  follow-choice (first (or (get follow-parsed "choices") []))
+                  follow-answer (or (get (get follow-choice "message") "content") "")]
+              (if (and (= follow-status 200) (> (length (str-trim (str follow-answer))) 0))
+                {"ok" true "provider" "openai-compatible" "model" (api-ai-model)
+                 "answer" follow-answer "tool_calls" tool-calls
+                 "usage" (or (get follow-parsed "usage") {})}
+                {"ok" false "code" "AI_TOOL_FOLLOWUP_ERROR" "status" follow-status
+                 "model" (api-ai-model)
+                 "error" (api-provider-redact (or (get (get follow-parsed "error") "message") (get follow-response "error") follow-raw "AI 도구 결과 후속 응답을 받지 못했습니다."))}))
+            (if (and (= status 200) (> (length (str-trim (str answer))) 0))
+              {"ok" true "provider" "openai-compatible" "model" (api-ai-model)
+               "answer" answer "usage" (or (get parsed "usage") {})}
+              {"ok" false "code" (if (= status 0) "AI_PROVIDER_UNAVAILABLE" "AI_PROVIDER_ERROR")
+               "status" status "model" (api-ai-model)
+               "error" (api-provider-redact (or (get (get parsed "error") "message") (get response "error") raw "AI provider 응답을 해석할 수 없습니다."))}))))))
+
 (defn render [req]
   (server-json (api-payload "")))
 
@@ -1021,6 +1300,43 @@
           (if (= (get result "ok") true)
             (server-json result)
             (server-json result 400)))
+      (= action "ai-status")
+        (server-json (api-ai-provider-status))
+      (= action "access-status")
+        (server-json (api-access-status))
+      (= action "audit-log")
+        (server-json {"ok" true "entries" @fl-git-audit-log "count" (length @fl-git-audit-log)})
+      (= action "ai-chat")
+        (let [result (api-ai-chat (get body "message"))]
+          (if (= (get result "ok") true)
+            (server-json result)
+            (server-json result (if (= (get result "code") "AI_NOT_CONFIGURED") 503 400))))
+      (= action "ai-patch")
+        (let [result (api-ai-patch (get body "message") (get body "paths"))]
+          (if (= (get result "ok") true)
+            (server-json result)
+            (server-json result (if (= (get result "code") "AI_NOT_CONFIGURED") 503 400))))
+      (= action "ai-apply-patch")
+        (let [result (api-ai-apply-patch (get body "patch") (get body "base_signature") (get body "confirm"))]
+          (if (= (get result "ok") true)
+            (server-json result)
+            (server-json result 400)))
+      (= action "ai-test")
+        (let [result (api-ai-run-test (get body "command") (get body "confirm"))]
+          (if (= (get result "ok") true)
+            (server-json result)
+            (server-json result (if (= (get result "code") "AI_TEST_FAIL") 200 400))))
+      (= action "editor-read")
+        (let [result (api-file-content "server" (get body "path") "")]
+          (if (= (get result "ok") true) (server-json (assoc result "signature" (api-ai-worktree-signature))) (server-json result 400)))
+      (= action "editor-write")
+        (let [result (api-editor-write (get body "path") (get body "content") (get body "confirm") (get body "base_signature"))]
+          (if (= (get result "ok") true) (server-json result) (server-json result 400)))
+      (= action "terminal-run")
+        (let [result (api-terminal-run (get body "command") (get body "confirm"))]
+          (if (= (get result "ok") true)
+            (server-json result)
+            (server-json result (if (= (get result "code") "TERMINAL_FAIL") 200 400))))
       (= action "project-setup")
         (let [created (api-project-setup (get body "parent") (get body "name") (get body "github_name") (get body "visibility") (get body "readme") (get body "gitignore_template") (get body "initial_push"))]
           (if (= (get created "ok") true)
@@ -1032,15 +1348,19 @@
             (server-json connected)
             (server-json connected 400)))
       (= action "provider-write")
-        (let [written (api-provider-write (get body "op") (get body "provider") (get body "confirm") (get body "remote_url"))]
-          (if (= (get written "ok") true)
-            (server-json written)
-            (server-json written 400)))
+        (if (not (api-role-can? "remote-write"))
+          (server-json (api-permission-error "remote-write") 403)
+          (let [written (api-provider-write (get body "op") (get body "provider") (get body "confirm") (get body "remote_url"))]
+            (if (= (get written "ok") true)
+              (server-json written)
+              (server-json written 400))))
       (= action "connect-remote")
-        (let [written (api-provider-write "connect" (get body "provider") (get body "confirm") (get body "remote_url"))]
-          (if (= (get written "ok") true)
-            (server-json written)
-            (server-json written 400)))
+        (if (not (api-role-can? "remote-write"))
+          (server-json (api-permission-error "remote-write") 403)
+          (let [written (api-provider-write "connect" (get body "provider") (get body "confirm") (get body "remote_url"))]
+            (if (= (get written "ok") true)
+              (server-json written)
+              (server-json written 400))))
       (= action "create-repo")
         (let [created (api-create-repo (get body "parent") (get body "name"))]
           (if (= (get created "ok") true)
@@ -1088,20 +1408,20 @@
             (let [r (api-command (str "git switch -- " (api-shell-quote name)))]
               (if (= (api-code r) 0) (server-json (api-payload (str "branch를 전환했습니다: " name))) (server-json {"ok" false "error" (or (get r "stderr") "branch 전환에 실패했습니다.")} 400)))))
       (= action "fetch")
-        (let [written (api-provider-write "fetch" (get body "provider") (get body "confirm") "")]
-          (if (= (get written "ok") true)
-            (server-json written)
-            (server-json written 400)))
+        (if (not (api-role-can? "remote-write"))
+          (server-json (api-permission-error "remote-write") 403)
+          (let [written (api-provider-write "fetch" (get body "provider") (get body "confirm") "")]
+            (if (= (get written "ok") true) (server-json written) (server-json written 400))))
       (= action "pull")
-        (let [written (api-provider-write "pull" (get body "provider") (get body "confirm") "")]
-          (if (= (get written "ok") true)
-            (server-json written)
-            (server-json written 400)))
+        (if (not (api-role-can? "remote-write"))
+          (server-json (api-permission-error "remote-write") 403)
+          (let [written (api-provider-write "pull" (get body "provider") (get body "confirm") "")]
+            (if (= (get written "ok") true) (server-json written) (server-json written 400))))
       (= action "push")
-        (let [written (api-provider-write "push" (get body "provider") (get body "confirm") "")]
-          (if (= (get written "ok") true)
-            (server-json written)
-            (server-json written 400)))
+        (if (not (api-role-can? "remote-write"))
+          (server-json (api-permission-error "remote-write") 403)
+          (let [written (api-provider-write "push" (get body "provider") (get body "confirm") "")]
+            (if (= (get written "ok") true) (server-json written) (server-json written 400))))
       (= action "commit")
         (let [message (str-trim (or (get body "message") ""))]
           (if (= message "")

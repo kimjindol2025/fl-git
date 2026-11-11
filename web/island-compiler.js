@@ -497,8 +497,26 @@ function extractIslands(content) {
     const idx = content.indexOf('(island ', i);
     if (idx === -1) break;
     const startLine = content.slice(0, idx).split('\n').length;
-    let depth = 0, j = idx;
+    let depth = 0, j = idx, inString = false, inTripleString = false, escaped = false;
     while (j < content.length) {
+      if (content.slice(j, j + 3) === '"""' && !inString) {
+        inTripleString = !inTripleString;
+        j += 3;
+        continue;
+      }
+      if (inTripleString) { j++; continue; }
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (content[j] === '\\') escaped = true;
+        else if (content[j] === '"') inString = false;
+        j++;
+        continue;
+      }
+      if (content[j] === '"') { inString = true; j++; continue; }
+      if (content[j] === ';') {
+        while (j < content.length && content[j] !== '\n') j++;
+        continue;
+      }
       if (content[j] === '(') depth++;
       else if (content[j] === ')') { depth--; if (depth === 0) { j++; break; } }
       j++;

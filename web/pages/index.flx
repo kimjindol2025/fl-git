@@ -17,6 +17,20 @@
         selected-files (atom [])
         context-selected (atom [])
         context-response (atom nil)
+        ai-message (atom "")
+        ai-response (atom nil)
+        ai-status (atom nil)
+        ai-loading (atom false)
+        ai-patch-response (atom nil)
+        ai-patch-loading (atom false)
+        ai-test-response (atom nil)
+        ai-test-loading (atom false)
+        editor-path (atom "README.md")
+        editor-content (atom "")
+        editor-signature (atom "")
+        editor-loaded (atom false)
+        terminal-response (atom nil)
+        audit-entries (atom [])
         airc-selected (atom "PROJECT-CONTINUITY.airc")
         conflict-files (atom [])
         right-open (atom true)
@@ -225,6 +239,91 @@
                          (reset! error "AI에게 전달할 카드를 먼저 선택하세요.")
                          (do (reset! notice "AI Context를 만드는 중…")
                              (fetch-post! "/api" {"action" "context" "keys" @context-selected} context-response-result))))
+        ai-status-result (fn [res]
+                           (if (= (get res "ok") false)
+                             (reset! error (or (get res "error") "AI 상태를 확인하지 못했습니다."))
+                             (reset! ai-status res)))
+        load-ai-status (fn [] (fetch-post! "/api" {"action" "ai-status"} ai-status-result))
+        ai-chat-result (fn [res]
+                         (reset! ai-loading false)
+                         (if (= (get res "ok") false)
+                           (reset! error (or (get res "error") "AI 응답을 받지 못했습니다."))
+                           (do (reset! ai-response res) (reset! error "") (reset! notice "AI 응답을 받았습니다."))))
+        send-ai-chat (fn []
+                       (if (= (str-trim @ai-message) "")
+                         (reset! error "AI에게 보낼 메시지를 입력하세요.")
+                         (do (reset! ai-loading true) (reset! ai-response nil) (reset! error "") (reset! notice "AI가 저장소 문맥을 읽는 중…") (fetch-post! "/api" {"action" "ai-chat" "message" @ai-message} ai-chat-result))))
+        ai-patch-result (fn [res]
+                          (reset! ai-patch-loading false)
+                          (if (= (get res "ok") false)
+                            (reset! error (or (get res "error") "AI 수정안을 만들지 못했습니다."))
+                            (do (reset! ai-patch-response res) (reset! error "") (reset! notice "AI 수정안을 만들었습니다. Diff를 확인하세요."))))
+        request-ai-patch (fn []
+                          (if (= (str-trim @ai-message) "")
+                            (reset! error "먼저 AI 수정 요청을 입력하세요.")
+                            (do (reset! ai-patch-loading true) (reset! ai-patch-response nil) (reset! error "") (reset! notice "AI가 승인 대기용 diff를 만드는 중…") (fetch-post! "/api" {"action" "ai-patch" "message" @ai-message "paths" @selected-files} ai-patch-result))))
+        apply-ai-patch (fn []
+                         (if (= @ai-patch-response nil)
+                           (reset! error "적용할 AI 수정안이 없습니다.")
+                           (if (js_confirm "표시된 diff를 현재 작업 트리에 적용할까요?")
+                             (do
+                               (reset! notice "승인된 diff를 적용하는 중…")
+                               (fetch-post! "/api"
+                                 {"action" "ai-apply-patch"
+                                  "patch" (get @ai-patch-response "patch")
+                                  "base_signature" (get @ai-patch-response "base_signature")
+                                  "confirm" true}
+                                 (fn [res]
+                                   (if (= (get res "ok") true)
+                                     (do (reset! ai-patch-response nil) (reload res) (reset! notice "승인된 AI diff를 적용했습니다."))
+                                     (reset! error (or (get res "error") "AI diff 적용에 실패했습니다."))))))
+                             nil)))
+        ai-test-result (fn [res]
+                         (reset! ai-test-loading false)
+                         (reset! ai-test-response res)
+                         (if (= (get res "ok") true)
+                           (reset! notice (str "테스트 통과: " (get res "command")))
+                           (reset! error (or (get res "error") (str "테스트 실패: exit " (get res "exit_code"))))))
+        run-ai-test (fn []
+                      (if (js_confirm "허용된 테스트 명령 npm test를 실행할까요?")
+                        (do (reset! ai-test-loading true) (reset! notice "테스트 실행 중…") (fetch-post! "/api" {"action" "ai-test" "command" "npm test" "confirm" true} ai-test-result))
+                        nil))
+        request-test-fix (fn []
+                           (if (= @ai-test-response nil)
+                             (reset! error "먼저 테스트를 실행하세요.")
+                             (do (reset! ai-message (str "테스트 실패를 수정해줘.\n명령: " (get @ai-test-response "command") "\nstdout:\n" (get @ai-test-response "stdout") "\nstderr:\n" (get @ai-test-response "stderr")))
+                                 (reset! ai-patch-loading true)
+                                 (fetch-post! "/api" {"action" "ai-patch" "message" @ai-message "paths" @selected-files} ai-patch-result))))
+        editor-read-result (fn [res]
+                             (if (= (get res "ok") false)
+                               (reset! error (or (get res "error") "파일을 열지 못했습니다."))
+                               (do (reset! editor-content (or (get res "content") "")) (reset! editor-signature (or (get res "signature") "")) (reset! editor-loaded true) (reset! error "") (reset! notice (str "편집기에서 " (get res "path") "을 열었습니다.")))))
+        load-editor (fn []
+                      (if (= (str-trim @editor-path) "")
+                        (reset! error "열 파일 경로를 입력하세요.")
+                        (do (reset! editor-loaded false) (fetch-post! "/api" {"action" "editor-read" "path" @editor-path} editor-read-result))))
+        editor-write-result (fn [res]
+                              (if (= (get res "ok") false)
+                                (reset! error (or (get res "error") "파일 저장에 실패했습니다."))
+                                (do (reset! editor-signature (or (get res "signature") "")) (reset! notice "파일을 저장했습니다."))))
+        save-editor (fn []
+                      (if (= @editor-loaded false)
+                        (reset! error "먼저 파일을 열어주세요.")
+                        (if (js_confirm (str @editor-path " 파일을 저장할까요?"))
+                          (fetch-post! "/api" {"action" "editor-write" "path" @editor-path "content" @editor-content "base_signature" @editor-signature "confirm" true} editor-write-result)
+                          nil)))
+        terminal-result (fn [res]
+                          (reset! terminal-response res)
+                          (if (= (get res "ok") true) (reset! notice "터미널 명령을 완료했습니다.") (reset! error (or (get res "error") "터미널 명령에 실패했습니다."))))
+        run-terminal (fn []
+                      (if (js_confirm "허용된 터미널 명령 git status를 실행할까요?")
+                        (fetch-post! "/api" {"action" "terminal-run" "command" "git status" "confirm" true} terminal-result)
+                        nil))
+        audit-result (fn [res]
+                       (if (= (get res "ok") true)
+                         (reset! audit-entries (or (get res "entries") []))
+                         (reset! error (or (get res "error") "감사 기록을 불러오지 못했습니다."))))
+        load-audit (fn [] (fetch-post! "/api" {"action" "audit-log"} audit-result))
         commit-selected (fn []
                          (if (= (str-trim @commit-message) "")
                            (reset! error "커밋 메시지를 입력하세요")
@@ -242,7 +341,7 @@
                         (do (reset! commit-message (or (get commit "message") "")) (reset! notice "커밋 상세 정보를 불러오는 중…") (fetch-post! "/api" {"action" "commit-detail" "hash" (get commit "hash")} commit-detail-result)))
         rail-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "rail-nav-item active" "rail-nav-item")
-                                 :on-click (if (= name "compare") open-compare (if (or (= name "github") (= name "forgejo") (= name "gitlab") (= name "other")) (fn [] (open-provider-page name)) (fn [] (reset! tab name))))} label))
+                                 :on-click (if (= name "compare") open-compare (if (= name "ai") (fn [] (do (reset! tab "ai") (load-ai-status))) (if (= name "audit") (fn [] (do (reset! tab "audit") (load-audit))) (if (or (= name "github") (= name "forgejo") (= name "gitlab") (= name "other")) (fn [] (open-provider-page name)) (fn [] (reset! tab name))))))} label))
         view-tab (fn [name label]
                    (h "button" {:class (if (= @tab name) "tab active" "tab") :on-click (if (= name "compare") open-compare (fn [] (reset! tab name)))} label))
         status-card (fn [label value tone]
@@ -647,6 +746,9 @@
                              (rail-tab "overview" "Workspace")
                              (rail-tab "changes" "Changes")
                              (rail-tab "compare" "Diff")
+                             (rail-tab "editor" "Editor")
+                             (rail-tab "audit" "Audit")
+                             (rail-tab "ai" "AI Chat")
                              (rail-tab "context" "AI Context")
                              (rail-tab "airc" "AIRC Docs")))
                       (h "div" {:class "rail-nav-group"}
@@ -755,6 +857,64 @@
             (h "button" {:class "detail-expand" :on-click (fn [] (reset! right-open true))} "‹")))
         (if (= @tab "airc")
           (render-airc)
+          (if (= @tab "audit")
+          (h "section" {:class "panel context-panel"}
+            (str (h "div" {:class "panel-heading"} (str (h "h2" {} "Audit Log") (h "button" {:class "button ghost" :on-click load-audit} "새로고침")))
+                 (h "p" {:class "muted"} "현재 서버 세션의 AI·Editor·Test·Terminal 작업 기록입니다. 비밀값은 저장 전에 마스킹됩니다.")
+                 (h "div" {:class "context-output"}
+                   (if (= (length @audit-entries) 0)
+                     "기록 없음"
+                     (str-join (map (fn [item] (str (get item "timestamp") " · role=" (get item "role") " · " (get item "action") " · " (get item "target") " · " (get item "result"))) @audit-entries) "\n")))))
+          (if (= @tab "editor")
+          (h "section" {:class "panel context-panel"}
+            (str (h "style" {} ".editor-textarea{display:block;width:100%;min-height:520px;margin-top:16px;background:#080c12;border:1px solid #1d2838;border-radius:10px;color:#d5deeb;padding:16px;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;resize:vertical;tab-size:2}")
+                 (h "div" {:class "panel-heading"} (str (h "h2" {} "Code Editor") (h "span" {:class "muted"} "승인 저장")))
+                 (h "p" {:class "muted"} "저장소 안의 안전한 파일만 열고 편집할 수 있습니다. 저장 전 확인하며, 외부 변경이 있으면 stale로 차단합니다.")
+                 (h "div" {:class "ai-chat-box"}
+                   (str (h "input" {:class "repo-input" :type "text" :value @editor-path :on-input (fn [e] (reset! editor-path (.-value (.-target e))))})
+                        (h "button" {:class "button dark" :on-click load-editor} "열기")
+                        (h "button" {:class "button primary" :on-click save-editor} "저장")))
+                 (h "textarea" {:class "editor-textarea" :value @editor-content :on-input (fn [e] (reset! editor-content (.-value (.-target e))))} "")
+                 (h "div" {:class "ai-answer"}
+                   (str (h "div" {:class "context-response-heading"} "Limited Terminal")
+                        (h "p" {:class "muted"} "허용 명령: git status, git diff, git log, npm test, ./scripts/check.sh, pwd")
+                        (h "button" {:class "button dark" :on-click run-terminal} "git status 실행")
+                        (if (= @terminal-response nil) "" (h "pre" {:class "context-output"} (str "exit=" (get @terminal-response "exit_code") "\n" (get @terminal-response "stdout") "\n" (get @terminal-response "stderr")))))))
+          (if (= @tab "ai")
+          (h "section" {:class "panel context-panel"}
+            (str (h "style" {} ".ai-chat-status{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.ai-chat-box{display:flex;gap:9px;margin-top:16px}.ai-chat-box input{flex:1}.ai-answer{margin-top:18px}.ai-answer pre{background:#0a0e15;border:1px solid #1d2838;border-radius:10px;min-height:180px;max-height:520px;overflow:auto;padding:16px;color:#d5deeb;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap}.ai-system-note{margin-top:10px;color:var(--muted);font-size:11px}")
+                 (h "div" {:class "panel-heading"}
+                   (str (h "h2" {} "AI Chat") (h "span" {:class "muted"} (if (= @ai-loading true) "응답 중…" "읽기 전용"))))
+                 (h "p" {:class "muted"} "현재 저장소의 AI Context를 자동으로 포함합니다. 1단계에서는 AI가 파일을 변경하거나 명령을 실행하지 않습니다.")
+                 (h "div" {:class "ai-chat-status"}
+                   (str (h "span" {:class "context-readiness-item"} (str "Provider " (or (get @ai-status "provider") "확인 전")))
+                        (h "span" {:class "context-readiness-item"} (str "Model " (or (get @ai-status "model") "—")))
+                        (h "span" {:class "context-readiness-item"} (if (= (get @ai-status "configured") true) "API 연결 설정됨" "API 키 미설정"))))
+                 (h "div" {:class "ai-chat-box"}
+                   (str (h "input" {:class "repo-input" :type "text" :placeholder "예: 현재 변경사항을 요약하고 위험 요소를 알려줘" :value @ai-message :on-input (fn [e] (reset! ai-message (.-value (.-target e))))})
+                        (h "button" {:class "button primary" :on-click send-ai-chat} (if (= @ai-loading true) "응답 중…" "질문 보내기"))
+                        (h "button" {:class "button dark" :on-click request-ai-patch} (if (= @ai-patch-loading true) "Diff 생성 중…" "수정안 생성"))))
+                 (h "p" {:class "ai-system-note"} "API 키는 서버 환경변수 FL_AI_API_KEY에서만 읽고 브라우저에 전달하지 않습니다.")
+                 (if (= @ai-response nil)
+                   ""
+                   (h "div" {:class "ai-answer"}
+                     (str (h "div" {:class "context-response-heading"} (str "AI 응답 · " (or (get @ai-response "model") "model")))
+                          (h "pre" {} (or (get @ai-response "answer") "")))))
+                 (if (= @ai-patch-response nil)
+                   ""
+                   (h "div" {:class "ai-answer"}
+                     (str (h "div" {:class "context-response-heading"} "승인 대기 Diff")
+                          (h "pre" {} (or (get @ai-patch-response "patch") ""))
+                          (h "div" {:class "action-row"}
+                            (h "button" {:class "button primary" :on-click apply-ai-patch} "Diff 확인 후 적용"))))))
+                 (h "div" {:class "ai-answer"}
+                   (str (h "div" {:class "context-response-heading"} "검증 실행")
+                        (h "p" {:class "muted"} "허용된 명령만 실행하며, 결과는 AI 수정안 생성에 선택적으로 전달할 수 있습니다.")
+                        (h "button" {:class "button dark" :on-click run-ai-test} (if (= @ai-test-loading true) "테스트 실행 중…" "npm test 실행"))
+                        (if (= @ai-test-response nil)
+                          ""
+                          (str (h "pre" {:class "context-output"} (str "exit=" (get @ai-test-response "exit_code") "\n" (get @ai-test-response "stdout") "\n" (get @ai-test-response "stderr")))
+                               (if (= (get @ai-test-response "ok") true) "" (h "button" {:class "button primary" :on-click request-test-fix} "실패를 AI 수정안으로 만들기"))))))
           (if (= @tab "context")
           (h "section" {:class "panel context-panel"}
             (str (h "style" {} ".context-readiness{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.context-readiness-item{border:1px solid var(--line);border-radius:999px;padding:6px 9px;color:var(--muted);font:10px ui-monospace,monospace}.context-card-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}.context-card{display:grid;grid-template-columns:auto 32px 1fr;gap:9px;align-items:start;background:#0d131d;border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}.context-card.selected{border-color:var(--blue);background:#142039}.context-card input{margin-top:3px;accent-color:var(--blue)}.context-card-number{color:var(--blue);font:11px ui-monospace,monospace;font-weight:800}.context-card-body{min-width:0}.context-card-heading{display:flex;justify-content:space-between;gap:8px;align-items:center}.context-card-heading strong{font-size:12px}.context-card-heading code{color:var(--muted);font:10px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.context-card-content{max-height:130px;overflow:auto;margin:8px 0 0;color:#c6d1e1;font:11px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap}.context-response-heading{margin-top:20px;color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.08em}@media(max-width:1000px){.context-card-list{grid-template-columns:1fr}}")
@@ -836,7 +996,7 @@
                                         (h "div" {:class "commit-detail"}
                                           (str (h "div" {:class "commit-detail-heading"} "커밋 상세 · 클릭한 커밋의 변경 내용")
                                                (h "pre" {:class "commit-detail-output"} (get @commit-detail "detail")))))))))))))))
-)))))))
+))))))))))))
 
 (defn render [req]
   (server_header
