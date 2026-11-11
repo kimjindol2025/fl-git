@@ -1,0 +1,72 @@
+; flp-compile — .flp 계약을 FreeLang 실행 라우트로 직접 컴파일한다.
+; HTML 문자열을 JS/TS로 만들지 않는다. 이 파일이 유일한 컴파일러 구현이다.
+
+(defn has? [text needle]
+  (> (str-count (str text) (str needle)) 0))
+
+(defn field-value [line key]
+  (if (= key "name")
+    (let [parts (regex_split line "name=\"")]
+      (if (> (length parts) 1)
+        (first (regex_split (get parts 1) "\""))
+        ""))
+    (let [tokens (regex_split (str-trim line) " +")
+          token (first (filter (fn [item] (regex_match item (str "^" key "="))) tokens))]
+      (str-replace-in
+        (str-replace-in
+          (str-replace-in (str token) (str key "=") "") "\"" "")
+        "'" ""))))
+
+(defn product-record [line]
+  {"id" (field-value line "id")
+   "name" (field-value line "name")
+   "price" (field-value line "price")})
+
+(defn product-lines [source]
+  (filter (fn [line] (regex_match (str-trim line) "^PRODUCT"))
+          (regex_split source "\n")))
+
+(defn product-card [product]
+  (str "<article class=\"product-card\"><h2><a href=\"/products/"
+       (get product "id") "\">" (get product "name")
+       "</a></h2><p>" (get product "price") "원</p></article>"))
+
+(defn product-detail-html [product]
+  (str "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>"
+       (get product "name") "</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product{border:1px solid #ddd;border-radius:12px;padding:24px}</style></head><body><main class=\"product\"><p><a href=\"/products\">상품 목록</a></p><h1>"
+       (get product "name") "</h1><p>상품 번호: " (get product "id")
+       "</p><strong>" (get product "price") "원</strong></main></body></html>"))
+
+(defn detail-clause [product]
+  (str "      (= id " (json_stringify (get product "id")) ") (server_html "
+       (json_stringify (product-detail-html product)) ")\n"))
+
+(defn generated-source [products]
+  (let [cards (str-join (map product-card products) "")
+        clauses (str-join (map detail-clause products) "")
+        list-html (str "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>상품 목록</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product-card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}.product-card a{color:#2457c5}</style></head><body><main><h1>상품 목록</h1>" cards "</main></body></html>")]
+    (str "; generated from .flp — do not edit\n"
+         "(defn flp-products-page [req]\n  (server_html " (json_stringify list-html) "))\n"
+         "(defn flp-product-detail-page [req]\n  (let [id (server_req_param req \"id\")]\n    (cond\n"
+         clauses
+         "      true (server_status 404 \"상품을 찾을 수 없습니다.\"))))\n"
+         "(server-get \"/products\" \"flp-products-page\")\n"
+         "(server-get \"/products/:id\" \"flp-product-detail-page\")\n")))
+
+(let [source-dir (or (shell_env "FLP_SOURCE_DIR") "web/pages")
+      list-file (str source-dir "/products.flp")
+      detail-file (str source-dir "/products/[id].flp")
+      output (or (shell_env "FLP_OUTPUT") (str source-dir "/_flp-generated.flx"))]
+  (if (and (file_exists list-file) (file_exists detail-file))
+    (let [list-source (file_read list-file)
+          detail-source (file_read detail-file)
+          products (map product-record (product-lines list-source))]
+      (if (and (= (length products) 3)
+               (has? list-source "PAGE ProductListPage")
+               (has? detail-source "PAGE ProductDetailPage")
+               (has? detail-source "path = \"/products/[id]\""))
+        (if (file_write output (generated-source products))
+          (println "FLP_COMPILE_EXIT=0")
+          (println "FLP_COMPILE_EXIT=1"))
+        (do (file_delete output) (println "FLP_COMPILE_EXIT=1"))))
+    (do (file_delete output) (println "FLP_COMPILE_EXIT=1"))))

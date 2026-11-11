@@ -2,6 +2,7 @@ PAGE ProductListPage {
   path = "/products"
   load = Products.list
   render = ProductListScreen
+  links = [ProductDetailPage]
 }
 
 API Products.list {
@@ -9,6 +10,11 @@ API Products.list {
   path = "/api/products"
   response = ProductListResult
   fields = [id name price]
+}
+
+ROUTE ProductDetailPage {
+  path = "/products/[id]"
+  params = { id: ID }
 }
 
 COMPONENT ProductCard {
@@ -19,4 +25,10 @@ COMPONENT ProductCard {
 COMPONENT ProductListScreen {
   uses = [ProductCard]
   render = ProductListView
+}
+
+DATA ProductCatalog {
+  PRODUCT id=1 name="AI 노트" price="19000"
+  PRODUCT id=2 name="FreeLang 키트" price="29000"
+  PRODUCT id=3 name="Codex 플래너" price="39000"
 }

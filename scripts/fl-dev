@@ -6,6 +6,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
 WEB_DIR="$ROOT_DIR/web"
 
 cd "$WEB_DIR"
+"$ROOT_DIR/scripts/flp-compile" "$WEB_DIR/pages"
 exec env \
   FL_GIT_REPO="${FL_GIT_REPO:-$ROOT_DIR}" \
   PORT="${PORT:-40850}" \

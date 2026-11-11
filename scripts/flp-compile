@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+RUNNER="${FREELANG_AFJ_RUNNER:-/home/kim/kim/platform/freelang-afj/bootstrap.js}"
+SOURCE_DIR="${1:-$ROOT/web/pages}"
+
+"$ROOT/scripts/fl-check" "$SOURCE_DIR/products.flp"
+"$ROOT/scripts/fl-check" "$SOURCE_DIR/products/[id].flp"
+output="$(FLP_SOURCE_DIR="$SOURCE_DIR" FLP_OUTPUT="$SOURCE_DIR/_flp-generated.flx" node "$RUNNER" run "$ROOT/tools/flp-compile.fl")"
+if printf '%s\n' "$output" | grep -q '^FLP_COMPILE_EXIT=1$'; then
+  printf '%s\n' "$output" | grep -v '^FLP_COMPILE_EXIT=' || true
+  exit 1
+fi
+printf '%s\n' "$output" | grep -v '^FLP_COMPILE_EXIT=' || true

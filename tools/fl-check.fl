@@ -162,13 +162,12 @@
       (fn [left]
         (let [path (route-path left)
               kind (get left "kind")
-              matches (filter (fn [right]
-                          (and (= (route-key path) (route-key (route-path right)))
-                               (= (get left "file") (get right "file"))
-                                     (or (= kind "PAGE") (= kind "ROUTE"))
-                                     (or (= (get right "kind") "PAGE") (= (get right "kind") "ROUTE"))))
-                              @blocks)]
-          (if (and (> (length path) 0) (> (length matches) 1))
+              occurrences (if (> (length path) 0)
+                           (str-count (file_read (get left "file")) path)
+                           0)]
+          (if (and (> (length path) 0)
+                   (or (= kind "PAGE") (= kind "ROUTE"))
+                   (> occurrences 1))
             (add-error errors (get left "file") (get left "line") "E_DUPLICATE_ROUTE"
               (str "주소 " path "가 중복 등록되었습니다.")
               "주소를 하나만 남기거나 다른 path를 사용하세요."))))

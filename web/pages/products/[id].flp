@@ -1,0 +1,18 @@
+PAGE ProductDetailPage {
+  path = "/products/[id]"
+  params = { id: ID }
+  load = Products.detail
+  render = ProductDetailScreen
+}
+
+API Products.detail {
+  method = GET
+  path = "/api/products/:id"
+  response = ProductDetailResult
+  fields = [id name price]
+}
+
+COMPONENT ProductDetailScreen {
+  props = { id: ID, name: String, price: Money }
+  render = ProductDetailView
+}
