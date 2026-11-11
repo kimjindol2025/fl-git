@@ -10,3 +10,7 @@ web/public/app.css
 web/.build-*
 web/data/*
 web/pages/_flp-generated.flx
+web/pages/products.flx
+web/pages/products/[id].flx
+web/pages/products/\[id\].flx
+web/pages/cart.flx

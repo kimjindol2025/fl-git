@@ -1,0 +1,8 @@
+PAGE BrokenButtonPage {
+  path = "/check/button-api"
+}
+
+BUTTON BrokenButton {
+  action = MissingCartApi
+  sends = [id quantity]
+}

@@ -30,7 +30,7 @@
 
 (defn new-block [kind name file line]
   {"kind" kind "name" name "file" file "line" line "path" ""
-   "params" [] "fields" [] "submit" "" "source_count" 1})
+   "params" [] "fields" [] "input_fields" [] "submit" "" "source_count" 1})
 
 (defn route-path [block]
   (str-trim (str (get block "path"))))
@@ -58,6 +58,7 @@
                      (regex_match line "^API") "API"
                      (regex_match line "^COMPONENT") "COMPONENT"
                      (regex_match line "^FORM") "FORM"
+                     (regex_match line "^BUTTON") "BUTTON"
                      (regex_match line "^ROUTE") "ROUTE"
                      true "")]
           (reset! line-no n)
@@ -71,8 +72,10 @@
                 (cond
                   (text-has? line "path") (reset! current (assoc @current "path" (property-value line)))
                   (text-has? line "params") (reset! current (assoc @current "params" (list-values (property-value line))))
+                  (text-has? line "input") (reset! current (assoc @current "input_fields" (list-values (property-value line))))
                   (text-has? line "fields") (reset! current (assoc @current "fields" (list-values (property-value line))))
-                  (text-has? line "submit") (reset! current (assoc @current "submit" (clean-token (property-value line))))
+                  (or (text-has? line "submit") (text-has? line "action")) (reset! current (assoc @current "submit" (clean-token (property-value line))))
+                  (text-has? line "sends") (reset! current (assoc @current "params" (list-values (property-value line))))
                   true nil))))))
       source-lines)]
       (length visited))
@@ -93,6 +96,10 @@
         (and (= (get block "kind") "API")
              (text-has? value (str (get block "name") "."))))
       @blocks)))
+
+(defn fields-match? [sent received]
+  (and (= (length sent) (length received))
+       (= (length (filter (fn [item] (contains-name? received item)) sent)) (length sent))))
 
 (defn validate-lines [blocks lines errors]
   (let [visited
@@ -148,6 +155,18 @@
             (add-error errors file line "E_FORM_CONTRACT"
               "FORM에 submit API가 없습니다."
               "FORM의 submit을 등록된 API 이름으로 지정하세요.")
+          (and (= kind "BUTTON") (not (api-exists? blocks (get block "submit"))))
+            (add-error errors file line "E_BUTTON_API_NOT_FOUND"
+              (str "BUTTON이 호출하는 API " (get block "submit") "이 등록되지 않았습니다.")
+              "등록된 API 이름을 action에 지정하세요.")
+          (and (= kind "BUTTON") (api-exists? blocks (get block "submit")))
+            (let [api (first (filter (fn [item]
+                                       (and (= (get item "kind") "API")
+                                            (= (get item "name") (get block "submit")))) @blocks))]
+              (if (not (fields-match? (get block "params") (get api "input_fields")))
+                (add-error errors file line "E_BUTTON_INPUT_MISMATCH"
+                  "BUTTON이 보내는 값과 API input 계약이 다릅니다."
+                  "sends와 API input 필드를 같은 이름으로 맞추세요.")))
           (and (or (= kind "PAGE") (= kind "ROUTE")) (text-has? path "["))
             (let [raw (if (text-has? path "[id]") "id" (if (text-has? path "[slug]") "slug" ""))]
               (if (and (not (= raw nil)) (not (contains-name? params raw)))

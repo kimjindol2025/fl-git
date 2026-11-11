@@ -31,42 +31,51 @@
        (get product "id") "\">" (get product "name")
        "</a></h2><p>" (get product "price") "원</p></article>"))
 
-(defn product-detail-html [product]
-  (str "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>"
-       (get product "name") "</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product{border:1px solid #ddd;border-radius:12px;padding:24px}</style></head><body><main class=\"product\"><p><a href=\"/products\">상품 목록</a></p><h1>"
-       (get product "name") "</h1><p>상품 번호: " (get product "id")
-       "</p><strong>" (get product "price") "원</strong></main></body></html>"))
-
-(defn detail-clause [product]
-  (str "      (= id " (json_stringify (get product "id")) ") (server_html "
-       (json_stringify (product-detail-html product)) ")\n"))
-
-(defn generated-source [products]
+(defn generated-list-source [products]
   (let [cards (str-join (map product-card products) "")
-        clauses (str-join (map detail-clause products) "")
-        list-html (str "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>상품 목록</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product-card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}.product-card a{color:#2457c5}</style></head><body><main><h1>상품 목록</h1>" cards "</main></body></html>")]
+        list-html (str "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>상품 목록</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product-card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}.product-card a{color:#2457c5}</style></head><body><main><p><a href=\"/cart\">장바구니</a></p><h1>상품 목록</h1>" cards "</main></body></html>")]
     (str "; generated from .flp — do not edit\n"
-         "(defn flp-products-page [req]\n  (server_html " (json_stringify list-html) "))\n"
-         "(defn flp-product-detail-page [req]\n  (let [id (server_req_param req \"id\")]\n    (cond\n"
-         clauses
-         "      true (server_status 404 \"상품을 찾을 수 없습니다.\"))))\n"
-         "(server-get \"/products\" \"flp-products-page\")\n"
-         "(server-get \"/products/:id\" \"flp-product-detail-page\")\n")))
+         "(defn render [req]\n  (server_html " (json_stringify list-html) "))\n")))
+
+(defn generated-detail-source []
+  (str "; generated from .flp — do not edit\n"
+       "(defn render [req]\n  (let [id (server_req_param req \"id\")\n        product (fl-cart-product id)]\n    (if (= product nil)\n      (server_status 404 {\"error\" \"상품을 찾을 수 없습니다.\"})\n      (server_html (str \"<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>\" (get product \"name\") \"</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.product{border:1px solid #ddd;border-radius:12px;padding:24px}</style></head><body><main class='product'><p><a href='/products'>상품 목록</a> · <a href='/cart'>장바구니</a></p><h1>\" (get product \"name\") \"</h1><p>상품 번호: \" id \"</p><strong>\" (get product \"price\") \"원</strong><div id='cart-island-slot' data-product-id='\" id \"'>\" \"ISLAND_PLACEHOLDER_0\" \"</div>\" \"ISLAND_SCRIPTS\" \"</main></body></html>\")))))\n"
+       "(island CartButton []\n  (let [count (atom 0)\n        add (fn []\n              (let [slot (.getElementById document \"cart-island-slot\")\n                    id (.getAttribute slot \"data-product-id\")]\n                (fetch-post! \"/api/cart/add\" {\"id\" id \"quantity\" 1}\n                  (fn [res]\n                    (let [data (get res \"data\")]\n                      (reset! count (get data \"count\")))))))]\n    (h \"section\" {}\n      (h \"p\" {} (str \"장바구니 개수: \" @count))\n      (h \"button\" {\"id\" \"cart-add\" :on-click add} \"담기\"))))\n"))
+
+(defn generated-cart-source []
+  (str "; generated from .flp — do not edit\n"
+       "(defn render [req]\n  (server_html (str \"<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>장바구니</title><style>body{font-family:system-ui;max-width:720px;margin:40px auto;padding:0 20px}.cart-row{border-bottom:1px solid #ddd;padding:12px 0}</style></head><body><main><p><a href='/products'>상품 목록</a></p><h1>장바구니</h1>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</main></body></html>\")))\n"
+       "(island CartPage []\n  (let [items (atom [])\n        total (atom 0)\n        loaded (atom false)\n        load (fn []\n               (if (= @loaded false)\n                 (do (reset! loaded true)\n                     (fetch! \"/api/cart\"\n                       (fn [res]\n                         (reset! items (or (get res \"items\") []))\n                         (reset! total (or (get res \"total\") 0)))))\n                 nil))]\n    (load)\n    (h \"section\" {}\n      (h \"div\" {\"id\" \"cart-items\"}\n        (if (= (length @items) 0)\n          (h \"p\" {} \"장바구니가 비어 있습니다.\")\n          (map (fn [item] (h \"article\" {\"class\" \"cart-row\"}\n                              (str (get item \"name\") \" · \" (get item \"quantity\") \"개 · \" (get item \"line_total\") \"원\"))) @items)))\n      (h \"h2\" {} (str \"합계: \" @total \"원\")))))\n"))
 
 (let [source-dir (or (shell_env "FLP_SOURCE_DIR") "web/pages")
       list-file (str source-dir "/products.flp")
       detail-file (str source-dir "/products/[id].flp")
+      cart-file (str source-dir "/cart.flp")
+      list-output (str source-dir "/products.flx")
+      detail-output (str source-dir "/products/[id].flx")
+      cart-output (str source-dir "/cart.flx")
       output (or (shell_env "FLP_OUTPUT") (str source-dir "/_flp-generated.flx"))]
-  (if (and (file_exists list-file) (file_exists detail-file))
+  (if (and (file_exists list-file) (file_exists detail-file) (file_exists cart-file))
     (let [list-source (file_read list-file)
           detail-source (file_read detail-file)
+          cart-source (file_read cart-file)
           products (map product-record (product-lines list-source))]
       (if (and (= (length products) 3)
                (has? list-source "PAGE ProductListPage")
                (has? detail-source "PAGE ProductDetailPage")
-               (has? detail-source "path = \"/products/[id]\""))
-        (if (file_write output (generated-source products))
+               (has? detail-source "path = \"/products/[id]\"")
+               (has? cart-source "PAGE CartPage"))
+        (if (and (file_write list-output (generated-list-source products))
+                 (file_write detail-output
+                             (str-replace-in
+                               (str-replace-in (generated-detail-source)
+                                               "(get data \"count\")"
+                                               "(get res \"count\")")
+                               "__PRODUCT_ID__" ""))
+                 (file_write cart-output (generated-cart-source)))
+          (do (file_delete output)
           (println "FLP_COMPILE_EXIT=0")
+          )
           (println "FLP_COMPILE_EXIT=1"))
         (do (file_delete output) (println "FLP_COMPILE_EXIT=1"))))
     (do (file_delete output) (println "FLP_COMPILE_EXIT=1"))))

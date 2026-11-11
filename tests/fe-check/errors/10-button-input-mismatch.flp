@@ -1,0 +1,10 @@
+API Cart.add {
+  method = POST
+  path = "/api/cart/add"
+  input = [id quantity]
+}
+
+BUTTON BrokenButton {
+  action = Cart.add
+  sends = [id count]
+}

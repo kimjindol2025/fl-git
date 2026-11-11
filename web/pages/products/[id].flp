@@ -12,6 +12,20 @@ API Products.detail {
   fields = [id name price]
 }
 
+API Cart.add {
+  method = POST
+  path = "/api/cart/add"
+  input = [id quantity]
+  response = CartResult
+  fields = [count total]
+}
+
+BUTTON AddToCartButton {
+  action = Cart.add
+  sends = [id quantity]
+  success = [cart-count cart-total]
+}
+
 COMPONENT ProductDetailScreen {
   props = { id: ID, name: String, price: Money }
   render = ProductDetailView

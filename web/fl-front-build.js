@@ -165,6 +165,7 @@ const FL_FRONT_HELPERS = new Set([
   'defn','define','let','if','do','when','str','get','get_in','get-in',
   'first','last','rest','map','filter','reduce','length','push',
   'assoc','dissoc','nil?','not','and','or','=','not=','>','<','>=','<=',
+  'number?','integer?',
   'println','try','catch','fn','inc','dec','swap!','reset!','atom','deref',
   'server_start','server-start','server_html','server-html',
   'server_json','server-json','server_redirect','server-redirect',

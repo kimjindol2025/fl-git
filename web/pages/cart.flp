@@ -1,0 +1,22 @@
+PAGE CartPage {
+  path = "/cart"
+  load = Cart.get
+  render = CartScreen
+}
+
+API Cart.get {
+  method = GET
+  path = "/api/cart"
+  response = CartResult
+  fields = [items count total]
+}
+
+COMPONENT CartScreen {
+  uses = [CartRow]
+  render = CartView
+}
+
+COMPONENT CartRow {
+  props = { id: ID, name: String, quantity: Int, line_total: Money }
+  render = CartRowView
+}

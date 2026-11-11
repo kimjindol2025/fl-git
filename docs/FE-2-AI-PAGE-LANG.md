@@ -89,6 +89,20 @@ ROUTE ProductDetail {
 }
 ```
 
+### ACTION / BUTTON
+
+브라우저 버튼과 서버 API 연결은 BUTTON 블록 하나로 선언한다. `action`은 등록된 API 이름이어야 하고, `sends`는 API의 `input` 필드와 같아야 한다. `success`는 성공 응답으로 갱신할 화면 값이다.
+
+```text
+BUTTON AddToCartButton {
+  action = Cart.add
+  sends = [id quantity]
+  success = [cart-count cart-total]
+}
+```
+
+컴파일러는 존재하지 않는 API를 부르는 버튼과 `sends`·API `input`이 다른 버튼을 오류로 막는다. 브라우저에서는 성공 응답을 선언된 값에 반영하며 페이지를 다시 불러오지 않는다.
+
 ## 4. 상품 목록 예시
 
 파일: `pages/products.flp`
@@ -161,6 +175,8 @@ PAGE ProductDetailPage {
 6. 쓰지 않는 컴포넌트: 선언됐지만 어떤 PAGE의 `uses`에도 도달하지 않는 COMPONENT
 7. 동적 주소 변수 불일치: `[id]`, `:id`, `params.id` 이름이나 타입이 다름
 8. 폼 제출 계약 불일치: FORM 필드와 API 입력 또는 결과 타입이 다름
+9. 버튼 API 미등록: BUTTON이 존재하지 않는 API를 호출
+10. 버튼 입력 불일치: BUTTON의 `sends`와 API의 `input` 필드가 다름
 
 ## 7. AI용 오류 형식
 
