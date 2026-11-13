@@ -2,7 +2,18 @@
 ; 구현 언어: FreeLang. 출력은 JSON 한 줄 진단이며, 종료 표식은 launcher가 처리한다.
 
 (defn text-has? [text needle]
-  (> (str-count (str text) (str needle)) 0))
+  (>= (str-index-of (str text) (str needle)) 0))
+
+(defn count-substring [text needle]
+  (let [source (str text)
+        token (str needle)
+        token-length (length token)
+        position (str-index-of source token)]
+    (if (or (= token-length 0) (< position 0))
+      0
+      (+ 1 (count-substring
+             (str-slice source (+ position token-length) (length source))
+             token)))))
 
 (defn clean-token [value]
   (let [s (str-trim (str value))]
@@ -291,7 +302,7 @@
         (let [path (route-path left)
               kind (get left "kind")
               occurrences (if (> (length path) 0)
-                           (str-count (file_read (get left "file")) path)
+                           (count-substring (file_read (get left "file")) path)
                            0)]
           (if (and (> (length path) 0)
                    (or (= kind "PAGE") (= kind "ROUTE"))
@@ -336,15 +347,17 @@
 (defn check-js-growth [root errors]
   (let [baseline (js-baseline-total root)
         paths (js-files-in root)
-        current (reduce (fn [sum path] (+ sum (str-count (or (file_read path) "") "\n"))) 0 paths)]
+        current (reduce (fn [sum path]
+                          (+ sum (- (length (regex_split (or (file_read path) "") "\n")) 1)))
+                        0 paths)]
     (if (or (= baseline nil) (> current baseline))
       (add-error errors (str root "/docs/FE-10-JS-BASELINE.md") 1 "E_JS_GROWTH"
         (if (= baseline nil) "JavaScript 줄 수 기준선을 읽을 수 없습니다."
           (str "JavaScript 줄 수가 기준선 " baseline "보다 많은 " current "입니다."))
         "기준선 파일과 실제 JavaScript 줄 수를 확인하세요."))))
 
-(let [target (or (shell_env "FL_CHECK_TARGET") "pages")
-      root (or (shell_env "FL_CHECK_ROOT") (shell_cwd))
+(let [target (or (env-get "FL_CHECK_TARGET") "pages")
+      root (or (env-get "FL_CHECK_ROOT") (process-cwd))
       files (if (file_is_file target)
               (let [site-path (str-replace target "/products/[id].flp" "/site.flp")]
                 (if (file_exists site-path)
