@@ -1,0 +1,135 @@
+; AdminProductsPage contract: admin/products.flp
+(defn render [req]
+  (server_html
+    (fl-layout "관리자 상품 관리" "관리자 상품 추가와 수정"
+      (str "<style>.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px}.admin-product{display:flex;gap:14px;align-items:center}.admin-product img{width:120px;aspect-ratio:8/5;object-fit:cover;border-radius:8px}.admin-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}.admin-fields input,.admin-fields textarea{box-sizing:border-box;width:100%;padding:11px;border:1px solid #bbb;border-radius:8px}.admin-error{color:#b42318}.admin-actions{display:flex;gap:10px;flex-wrap:wrap}</style><h1>관리자 상품 관리</h1><p>관리자 암호로 인증한 뒤 상품을 추가하거나 수정하세요. 사진이 없으면 기본 그림을 표시합니다.</p><div id='admin-products-root'>"
+           "ISLAND_PLACEHOLDER_0" "</div>" "ISLAND_SCRIPTS"))))
+
+(island AdminProductForm []
+  (let [authorized (atom false)
+        password (atom "")
+        products (atom [])
+        message (atom "")
+        product-id (atom "")
+        name (atom "")
+        price (atom "")
+        description (atom "")
+        photo (atom "")
+        stock (atom "")
+        clear-form (fn []
+                     (reset! product-id "")
+                     (reset! name "")
+                     (reset! price "")
+                     (reset! description "")
+                     (reset! photo "")
+                     (reset! stock ""))
+        login (fn []
+                (let [candidate (.-value (.getElementById document "admin-password"))]
+                  (fetch-admin! "POST" "/api/admin/products" {} candidate
+                    (fn [result]
+                      (let [data (get result "data")]
+                        (if (= (get result "ok") true)
+                          (do
+                            (reset! password candidate)
+                            (reset! products (or (get data "products") []))
+                            (reset! authorized true)
+                            (reset! message "인증되었습니다."))
+                          (do
+                            (.reset (.getElementById document "admin-login-form"))
+                            (reset! message (or (get data "error") "인증에 실패했습니다.")))))))))
+        edit (fn [product]
+               (reset! product-id (str (get product "id")))
+               (reset! name (str (get product "name")))
+               (reset! price (str (get product "price")))
+               (reset! description (str (or (get product "description") "")))
+               (reset! photo (str (or (get product "photo") "")))
+               (reset! stock (str (get product "stock")))
+               (reset! message "상품을 수정한 뒤 저장하세요."))
+        save (fn []
+               (let [current-id @product-id
+                     current-name (.-value (.getElementById document "admin-name"))
+                     current-price (.-value (.getElementById document "admin-price"))
+                     current-description (.-value (.getElementById document "admin-description"))
+                     current-photo (.-value (.getElementById document "admin-photo"))
+                     current-stock (.-value (.getElementById document "admin-stock"))
+                     payload {"name" current-name
+                              "price" (if (= current-price "") nil (str-to-num current-price))
+                              "description" current-description
+                              "photo" current-photo
+                              "stock" (if (= current-stock "") nil (str-to-num current-stock))}
+                     path (if (= current-id "") "/api/admin/product" (str "/api/admin/product/" current-id))
+                     method (if (= current-id "") "POST" "PUT")]
+                 (if (= (str-trim current-name) "")
+                   (do
+                     (reset! name current-name)
+                     (reset! price current-price)
+                     (reset! description current-description)
+                     (reset! photo current-photo)
+                     (reset! stock current-stock)
+                     (reset! message "상품 이름은 필수입니다."))
+                   (fetch-admin! method path payload @password
+                     (fn [result]
+                       (let [data (get result "data")
+                             product (get data "product")]
+                         (if (= (get result "ok") true)
+                           (do
+                             (if (= current-id "")
+                               (reset! products (push @products product))
+                               (reset! products (map (fn [item]
+                                                       (if (= (str (get item "id")) current-id) product item)) @products)))
+                             (clear-form)
+                             (reset! message "상품을 저장했습니다."))
+                           (let [errors (get data "errors")
+                                 first-error (first errors)]
+                             (reset! name current-name)
+                             (reset! price current-price)
+                             (reset! description current-description)
+                             (reset! photo current-photo)
+                             (reset! stock current-stock)
+                             (reset! message (or (get first-error "message")
+                                                 (get data "error")
+                                                 "상품을 저장하지 못했습니다."))))))))))
+        logout (fn []
+                 (reset! password "")
+                 (reset! products [])
+                 (reset! authorized false)
+                 (clear-form)
+                 (reset! message "로그아웃했습니다."))]
+    (if (not @authorized)
+      (h "section" {"class" "card"}
+        (h "h2" {} "관리자 인증")
+        (h "p" {} "관리자 암호를 입력하면 상품 목록을 불러옵니다.")
+        (h "form" {"id" "admin-login-form" "autocomplete" "off"}
+          (h "label" {"for" "admin-password"} "관리자 암호")
+          (h "input" {"id" "admin-password" "type" "password" "autocomplete" "current-password" "required"})
+          (h "button" {"type" "button" :on-click login} "인증"))
+        (if (= @message "") "" (h "p" {"class" "admin-error" "role" "status"} @message)))
+      (h "section" {}
+        (h "div" {"class" "admin-actions"}
+          (h "h2" {} "상품 목록")
+          (h "button" {"type" "button" "id" "admin-new" :on-click (fn [] (clear-form) (reset! message "새 상품을 입력하세요."))} "새 상품")
+          (h "button" {"type" "button" "id" "admin-logout" :on-click logout} "로그아웃"))
+        (if (= (length @products) 0)
+          (h "p" {} "등록된 상품이 없습니다.")
+          (h "div" {"class" "admin-grid" "id" "admin-products-list"}
+            (map (fn [product]
+                   (h "article" {"class" "admin-product card"}
+                     (h "img" {"src" (fl-product-photo product) "alt" (str (get product "name") " 상품 사진") "loading" "lazy"})
+                     (h "div" {}
+                       (h "strong" {} (get product "name"))
+                       (h "p" {} (str "가격: " (get product "price") "원 · 재고: " (get product "stock") "개"))
+                       (h "p" {} (or (get product "description") ""))
+                       (h "button" {"type" "button" "class" "admin-edit" :on-click (fn [] (edit product))} "수정"))))
+                 @products)))
+        (h "section" {"class" "card" "id" "admin-product-form"}
+          (h "h2" {} (if (= @product-id "") "상품 추가" (str "상품 수정: " @product-id)))
+          (h "div" {"class" "admin-fields"}
+            (h "label" {} "상품 이름" (h "input" {"id" "admin-name" "name" "name" "value" @name "required" "maxlength" "100"}))
+            (h "label" {} "가격" (h "input" {"id" "admin-price" "name" "price" "type" "number" "min" "0" "step" "any" "value" @price "required"}))
+            (h "label" {} "설명" (h "textarea" {"id" "admin-description" "name" "description"} @description))
+            (h "label" {} "사진 경로" (h "input" {"id" "admin-photo" "name" "photo" "placeholder" "/public/photo.jpg" "value" @photo}))
+            (h "label" {} "재고" (h "input" {"id" "admin-stock" "name" "stock" "type" "number" "min" "0" "step" "1" "value" @stock "required"})))
+          (if (= @message "") "" (h "p" {"class" (if (or (= @message "상품을 저장했습니다.") (= @message "새 상품을 입력하세요.")) "" "admin-error") "role" "status"} @message))
+          (h "div" {"class" "admin-actions"}
+            (h "button" {"type" "button" "id" "admin-save" :on-click save} "저장")
+            (h "button" {"type" "button" "id" "admin-clear" :on-click (fn [] (clear-form) (reset! message "입력을 초기화했습니다."))} "입력 초기화")))))))

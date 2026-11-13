@@ -148,6 +148,30 @@ BUTTON AddToCartButton {
 
 컴파일러는 존재하지 않는 API를 부르는 버튼과 `sends`·API `input`이 다른 버튼을 오류로 막는다. 브라우저에서는 성공 응답을 선언된 값에 반영하며 페이지를 다시 불러오지 않는다.
 
+### 보호된 관리자 화면
+
+관리자 주소와 관리자 API는 계약에 `protected = true`를 명시한다. 런타임은 환경변수에 설정된 관리자 암호와 요청 헤더 또는 폼 값을 비교하고, 값이 없거나 틀리면 401을 반환한다. 암호 자체는 페이지 파일·로그·보고서에 넣지 않는다.
+
+```text
+PAGE AdminProductsPage {
+  path = "/admin/products"
+  protected = true
+}
+
+API AdminProduct.create {
+  method = POST
+  path = "/api/admin/product"
+  protected = true
+  input = [name price description photo stock]
+}
+```
+
+`/admin`으로 시작하는 PAGE·ROUTE·API에 보호 표시가 없으면 `E_ADMIN_ROUTE_UNPROTECTED`로 컴파일을 중단한다.
+
+### 상품 저장과 사진
+
+상품 데이터는 `data/products.json` 한 파일을 계약의 저장소로 사용한다. `photo`가 비어 있으면 런타임이 로컬 기본 그림으로 대체하며, 외부 이미지 서버를 필요로 하지 않는다. 관리자 FORM의 추가는 POST, 기존 상품 수정은 PUT으로 구분한다.
+
 ## 4. 상품 목록 예시
 
 파일: `pages/products.flp`

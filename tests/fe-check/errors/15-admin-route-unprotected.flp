@@ -1,0 +1,15 @@
+LAYOUT StoreLayout {
+}
+
+PAGE BrokenAdminPage {
+  path = "/admin/broken"
+  layout = StoreLayout
+  title = "오류"
+  description = "오류 예제"
+}
+
+API BrokenAdminApi {
+  method = POST
+  path = "/api/admin/broken"
+  input = [name]
+}

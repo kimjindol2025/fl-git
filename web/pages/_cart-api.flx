@@ -2,12 +2,7 @@
 (define fl-cart-state (atom {}))
 
 (defn fl-cart-product [id]
-  (let [key (str id)]
-    (cond
-      (= key "1") {"id" "1" "name" "AI 노트" "price" 19000}
-      (= key "2") {"id" "2" "name" "FreeLang 키트" "price" 29000}
-      (= key "3") {"id" "3" "name" "Codex 플래너" "price" 39000}
-      true nil)))
+  (fl-products-find id))
 
 (defn fl-cart-quantity [id]
   (or (get @fl-cart-state (str id)) 0))
@@ -20,10 +15,7 @@
 
 (defn fl-cart-summary []
   (let [rows (filter (fn [row] (> (get row "quantity") 0))
-                     (map fl-cart-row
-                          [{"id" "1" "name" "AI 노트" "price" 19000}
-                           {"id" "2" "name" "FreeLang 키트" "price" 29000}
-                           {"id" "3" "name" "Codex 플래너" "price" 39000}]))
+                     (map fl-cart-row (fl-products-load)))
         total (reduce (fn [sum row] (+ sum (get row "line_total"))) 0 rows)
         count (reduce (fn [sum row] (+ sum (get row "quantity"))) 0 rows)]
     {"items" rows "count" count "total" total}))

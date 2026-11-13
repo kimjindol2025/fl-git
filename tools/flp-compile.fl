@@ -20,22 +20,26 @@
 (defn product-record [line]
   {"id" (field-value line "id")
    "name" (field-value line "name")
-   "price" (field-value line "price")})
+   "price" (field-value line "price")
+   "description" (field-value line "description")
+   "photo" (field-value line "photo")})
 
 (defn product-lines [source]
   (filter (fn [line] (regex_match (str-trim line) "^PRODUCT"))
           (regex_split source "\n")))
 
 (defn product-card [product]
-  (str "<article class=\"product-card\"><h2><a href=\"/products/"
-       (get product "id") "\">" (get product "name")
-       "</a></h2><p>" (get product "price") "원</p></article>"))
+  (str "<article class=\"product-card\"><img src=\"" (fl-product-photo product)
+       "\" alt=\"" (fl-product-html-escape (get product "name"))
+       " 상품 사진\" style=\"width:100%;aspect-ratio:8/5;object-fit:cover;border-radius:10px\"><h2><a href=\"/products/"
+       (fl-product-html-escape (get product "id")) "\">" (fl-product-html-escape (get product "name"))
+       "</a></h2><p>" (fl-product-html-escape (get product "price")) "원</p><p>"
+       (fl-product-html-escape (get product "description")) "</p></article>"))
 
 (defn generated-list-source [products]
-  (let [cards (str-join (map product-card products) "")
-        list-html (str "<h1>상품 목록</h1>" cards)]
-    (str "; generated from .flp — do not edit\n"
-         "(defn render [req]\n  (server_html (fl-layout \"상품 목록\" \"프리랭 상점의 상품 목록과 온라인 주문 상품을 확인하세요.\" " (json_stringify list-html) ")))\n")))
+  (str "; generated from .flp — do not edit\n"
+       "(defn fl-render-product-card [product]\n  (str \"<article class='product-card'><img src='\" (fl-product-photo product) \"' alt='\" (fl-product-html-escape (get product \"name\")) \" 상품 사진' style='width:100%;aspect-ratio:8/5;object-fit:cover;border-radius:10px'><h2><a href='/products/\" (fl-product-html-escape (get product \"id\")) \"'>\" (fl-product-html-escape (get product \"name\")) \"</a></h2><p>\" (fl-product-html-escape (get product \"price\")) \"원</p><p>\" (fl-product-html-escape (get product \"description\")) \"</p></article>\"))\n"
+       "(defn render [req]\n  (server_html (fl-layout \"상품 목록\" \"프리랭 상점의 상품 목록과 온라인 주문 상품을 확인하세요.\" (str \"<h1>상품 목록</h1>\" (str-join (map fl-render-product-card (fl-products-load)) \"\")))))\n"))
 
 (defn generated-detail-source []
   (str "; generated from .flp — do not edit\n"
@@ -44,7 +48,7 @@
 
 (defn generated-detail-source-v2 []
   (str "; generated from .flp — do not edit\n"
-       "(defn render [req]\n  (let [id (server_req_param req \"id\")\n        product (fl-cart-product id)]\n    (if (= product nil)\n      (server_status 404 {\"error\" \"상품을 찾을 수 없습니다.\"})\n      (server_html (fl-layout (get product \"name\") \"상품 상세 정보와 온라인 주문 안내를 확인하세요.\" (str \"<div class='product'><p>상품 번호: \" id \"</p><h1>\" (get product \"name\") \"</h1><strong>\" (get product \"price\") \"원</strong><div id='cart-island-slot' data-product-id='\" id \"'>\" \"ISLAND_PLACEHOLDER_0\" \"</div>\" \"ISLAND_SCRIPTS\" \"</div>\"))))))\n"
+       "(defn render [req]\n  (let [id (server_req_param req \"id\")\n        product (fl-cart-product id)]\n    (if (= product nil)\n      (server_status 404 {\"error\" \"상품을 찾을 수 없습니다.\"})\n      (server_html (fl-layout (fl-product-html-escape (get product \"name\")) \"상품 상세 정보와 온라인 주문 안내를 확인하세요.\" (str \"<div class='product'><img src='\" (fl-product-photo product) \"' alt='\" (fl-product-html-escape (get product \"name\")) \" 상품 사진' style='width:100%;max-width:800px;aspect-ratio:8/5;object-fit:cover;border-radius:10px'><p>상품 번호: \" (fl-product-html-escape id) \"</p><h1>\" (fl-product-html-escape (get product \"name\")) \"</h1><p>\" (fl-product-html-escape (get product \"description\")) \"</p><strong>\" (fl-product-html-escape (get product \"price\")) \"원</strong><div id='cart-island-slot' data-product-id='\" (fl-product-html-escape id) \"'>\" \"ISLAND_PLACEHOLDER_0\" \"</div>\" \"ISLAND_SCRIPTS\" \"</div>\"))))))\n"
        "(island CartButton []\n  (let [count (atom 0)\n        add (fn []\n              (let [slot (.getElementById document \"cart-island-slot\")\n                    id (.getAttribute slot \"data-product-id\")]\n                (fetch-post! \"/api/cart/add\" {\"id\" id \"quantity\" 1}\n                  (fn [res]\n                    (let [data (get res \"data\")]\n                      (reset! count (get data \"count\")))))))]\n    (h \"section\" {}\n      (h \"p\" {} (str \"장바구니 개수: \" @count))\n      (h \"button\" {\"id\" \"cart-add\" :on-click add} \"담기\"))))\n"))
 
 (defn generated-cart-source []
@@ -62,6 +66,7 @@
       detail-file (str source-dir "/products/[id].flp")
       cart-file (str source-dir "/cart.flp")
       checkout-file (str source-dir "/checkout.flp")
+      admin-file (str source-dir "/admin/products.flp")
       list-output (str source-dir "/products.flx")
       detail-output (str source-dir "/products/[id].flx")
       cart-output (str source-dir "/cart.flx")
@@ -72,6 +77,7 @@
           detail-source (file_read detail-file)
           cart-source (file_read cart-file)
           checkout-source (file_read checkout-file)
+          admin-source (file_read admin-file)
           products (map product-record (product-lines list-source))]
       (if (and (= (length products) 3)
                (has? list-source "PAGE ProductListPage")
@@ -79,7 +85,12 @@
                (has? detail-source "path = \"/products/[id]\"")
                (has? cart-source "PAGE CartPage")
                (has? checkout-source "PAGE CheckoutPage")
-               (has? checkout-source "FORM OrderForm"))
+               (has? checkout-source "FORM OrderForm")
+               (has? admin-source "PAGE AdminProductsPage")
+               (has? admin-source "path = \"/admin/products\"")
+               (has? admin-source "protected = true")
+               (has? admin-source "path = \"/api/admin/product\"")
+               (has? admin-source "path = \"/api/admin/product/:id\""))
                  (if (and (file_write list-output (generated-list-source products))
                  (file_write detail-output
                              (str-replace-in (generated-detail-source-v2)
@@ -94,7 +105,8 @@
                                  "주문하기\"))))"
                                  "주문하기\")))))")
                                "(and (= @recipient-error \"\") (= @phone-error \"\") (= @address-error \"\") (= @note-error \"\"))"
-                               "(and (>= (length recipient) 2) (<= (length recipient) 50) (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone) (>= (length address) 5) (<= (length address) 200) (<= (length note) 200))")))
+                               "(and (>= (length recipient) 2) (<= (length recipient) 50) (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone) (>= (length address) 5) (<= (length address) 200) (<= (length note) 200))"))
+                 true)
           (do (file_delete output)
           (println "FLP_COMPILE_EXIT=0")
           )

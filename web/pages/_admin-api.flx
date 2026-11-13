@@ -1,0 +1,62 @@
+; FE-8 관리자 상품 API — 암호 값은 환경변수와 요청을 비교만 하고 저장·출력하지 않는다.
+(defn fl-admin-authorized [req]
+  (let [expected (shell_env "FL_ADMIN_PASSWORD")
+        provided (or (server_req_header req "x-admin-password") "")]
+    (and (not (= expected nil)) (> (length (str expected)) 0) (= (str provided) (str expected)))))
+
+(defn fl-admin-error-list [body]
+  (let [name (str-trim (str (or (get body "name") "")))
+        price (get body "price")
+        stock (get body "stock")
+        photo (str-trim (str (or (get body "photo") "")))
+        errors (atom [])]
+    (if (= name "") (reset! errors (concat @errors [{"field" "name" "message" "상품 이름은 필수입니다."}])) nil)
+    (if (or (not (number? price)) (< price 0))
+      (reset! errors (concat @errors [{"field" "price" "message" "가격은 0 이상의 숫자여야 합니다."}])) nil)
+    (if (or (not (number? stock)) (< stock 0) (not (integer? stock)))
+      (reset! errors (concat @errors [{"field" "stock" "message" "재고는 0 이상의 정수여야 합니다."}])) nil)
+    (if (and (not (= photo "")) (or (not (regex_match photo "^/public/[A-Za-z0-9._/-]+$")) (str-includes photo "..")))
+      (reset! errors (concat @errors [{"field" "photo" "message" "사진은 /public/ 아래의 경로여야 합니다."}])) nil)
+    @errors))
+
+(defn fl-admin-product-from-body [body id]
+  {"id" (str id)
+   "name" (str-trim (str (or (get body "name") "")))
+   "price" (get body "price")
+   "description" (str (or (get body "description") ""))
+   "photo" (str (or (get body "photo") ""))
+   "stock" (get body "stock")})
+
+(defn fl-admin-create-product [req]
+  (let [body (server_req_json req)]
+    (if (not (fl-admin-authorized req))
+      (server_status 401 {"error" "관리자 인증이 필요합니다."})
+      (let [errors (fl-admin-error-list body)]
+        (if (> (length errors) 0)
+          (server_status 400 {"errors" errors})
+          (let [product (fl-admin-product-from-body body (str (now_ms)))]
+            (fl-products-upsert product)
+            (server_json {"product" product})))))))
+
+(defn fl-admin-update-product [req]
+  (let [body (server_req_json req)
+        id (server_req_param req "id")]
+    (if (not (fl-admin-authorized req))
+      (server_status 401 {"error" "관리자 인증이 필요합니다."})
+      (if (= (fl-products-find id) nil)
+        (server_status 404 {"error" "상품을 찾을 수 없습니다."})
+        (let [errors (fl-admin-error-list body)]
+          (if (> (length errors) 0)
+            (server_status 400 {"errors" errors})
+            (let [product (fl-admin-product-from-body body id)]
+              (fl-products-upsert product)
+              (server_json {"product" product}))))))))
+
+(defn fl-admin-list [req]
+  (if (not (fl-admin-authorized req))
+    (server_status 401 {"error" "관리자 인증이 필요합니다."})
+    (server_json {"products" (fl-products-load)})))
+
+(server-post "/api/admin/products" "fl-admin-list")
+(server-post "/api/admin/product" "fl-admin-create-product")
+(server-put "/api/admin/product/:id" "fl-admin-update-product")

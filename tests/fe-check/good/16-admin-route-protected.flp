@@ -1,0 +1,17 @@
+LAYOUT StoreLayout {
+}
+
+PAGE ProtectedAdminPage {
+  path = "/admin/good"
+  layout = StoreLayout
+  protected = true
+  title = "관리자"
+  description = "보호된 관리자 예제"
+}
+
+API ProtectedAdminApi {
+  method = POST
+  path = "/api/admin/good"
+  protected = true
+  input = [name]
+}

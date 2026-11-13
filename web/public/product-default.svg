@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#e8edf7"/>
+  <path d="M190 350l130-150 95 105 70-80 125 125H190z" fill="#3157d5" opacity=".75"/>
+  <circle cx="530" cy="155" r="42" fill="#f4b860"/>
+  <text x="400" y="430" text-anchor="middle" font-family="system-ui,sans-serif" font-size="34" fill="#172033">FreeLang Shop</text>
+</svg>

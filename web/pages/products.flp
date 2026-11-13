@@ -12,7 +12,7 @@ API Products.list {
   method = GET
   path = "/api/products"
   response = ProductListResult
-  fields = [id name price]
+  fields = [id name price description photo stock]
 }
 
 ROUTE ProductDetailPage {
@@ -24,7 +24,7 @@ ROUTE ProductDetailPage {
 }
 
 COMPONENT ProductCard {
-  props = { id: ID, name: String, price: Money }
+  props = { id: ID, name: String, price: Money, description: String, photo: Path, stock: Integer }
   render = ProductCardView
 }
 

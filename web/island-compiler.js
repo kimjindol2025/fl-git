@@ -173,6 +173,8 @@ function emitList(node, ctx) {
   // fetch! / fetch-post! — Island 내부 비동기 API 호출
   if (head?.sym === 'fetch!')        return `_fl.fetch(${emit(args[0],ctx)}, ${emit(args[1],ctx)})`;
   if (head?.sym === 'fetch-post!')   return `_fl.fetch_post(${emit(args[0],ctx)}, ${emit(args[1],ctx)}, ${emit(args[2],ctx)})`;
+  if (head?.sym === 'fetch-put!')    return `_fl.fetch_put(${emit(args[0],ctx)}, ${emit(args[1],ctx)}, ${emit(args[2],ctx)})`;
+  if (head?.sym === 'fetch-admin!')  return `_fl.fetch_admin(${emit(args[0],ctx)}, ${emit(args[1],ctx)}, ${emit(args[2],ctx)}, ${emit(args[3],ctx)}, ${emit(args[4],ctx)})`;
   if (head?.sym === 'fetch-delete!') return `_fl.fetch_delete(${emit(args[0],ctx)}, ${emit(args[1],ctx)})`;
   if (head?.sym === 'read-file-dataurl!') return `_fl.read_file_dataurl(${emit(args[0],ctx)}, ${emit(args[1],ctx)})`;
   // Clojure interop: (.-prop obj) → (obj).prop  — DOM 이벤트 값 접근 등
@@ -396,6 +398,19 @@ const _fl={
       .then(data=>{ try{ cb(data); }catch(e){ _fl._err('fetch-post!',e,'callback'); } })
       .catch(err=>{ _fl._err('fetch-post!',new Error('POST '+url+' → '+err),'request'); });
   },
+  // fetch-put! — PUT JSON → Island 콜백
+  fetch_put:(url,body,cb)=>{
+    fetch(url,{method:'PUT',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)})
+      .then(r=>r.ok?r.json():Promise.reject(r.status))
+      .then(data=>{ try{ cb(data); }catch(e){ _fl._err('fetch-put!',e,'callback'); } })
+      .catch(err=>{ _fl._err('fetch-put!',new Error('PUT '+url+' → '+err),'request'); });
+  },
+  // 관리자 요청 — 암호는 전용 헤더로만 보내고 비정상 상태·JSON도 UI 콜백에 전달한다.
+  fetch_admin:(method,url,body,password,cb)=>{
+    fetch(url,{method,headers:{'Content-Type':'application/json','Accept':'application/json','X-Admin-Password':String(password||'')},body:JSON.stringify(body||{})})
+      .then(async r=>{let data={};try{data=await r.json();}catch{};try{cb({ok:r.ok,status:r.status,data});}catch(e){_fl._err('fetch-admin!',e,'callback');}})
+      .catch(()=>{try{cb({ok:false,status:0,data:{error:'요청을 완료하지 못했습니다.'}});}catch(e){_fl._err('fetch-admin!',e,'request');}});
+  },
   read_file_dataurl:(file,cb)=>{
     if(!file){cb(null);return;}
     const r=new FileReader();
@@ -483,6 +498,7 @@ const str_slice=(s,start,end)=>String(s??'').slice(start,end);
 const str_trim=(s)=>String(s??'').trim();
 const str_split=(s,sep)=>String(s??'').split(sep);
 const str_count=(s,sub)=>{const text=String(s??''), needle=String(sub??'');if(!needle)return 0;let count=0,pos=0;while((pos=text.indexOf(needle,pos))!==-1){count++;pos+=needle.length;}return count;};
+const str_to_num=(s)=>{const n=Number(s);return Number.isNaN(n)?null:n;};
 // Front의 str-split이 생성하는 내부 이름과 직접 호출된 alias를 모두 지원한다.
 const regex_split=(s,sep)=>String(s??'').split(sep);
 const js_prompt=(msg,def)=>window.prompt(msg,def??'');

@@ -1,0 +1,48 @@
+PAGE AdminProductsPage {
+  path = "/admin/products"
+  layout = StoreLayout
+  protected = true
+  title = "관리자 상품 관리"
+  description = "관리자 상품 추가와 수정"
+  render = AdminProductsScreen
+}
+
+API AdminProduct.create {
+  method = POST
+  path = "/api/admin/product"
+  protected = true
+  input = [name price description photo stock]
+  response = AdminProductResult
+  fields = [product]
+}
+
+API AdminProduct.update {
+  method = PUT
+  path = "/api/admin/product/:id"
+  protected = true
+  input = [name price description photo stock]
+  response = AdminProductResult
+  fields = [product]
+}
+
+FORM AdminProductForm {
+  fields = [name price description photo stock]
+  submit = AdminProduct.create
+  rule name = required min-length=1 max-length=100
+  rule price = numeric
+  rule stock = numeric
+}
+
+COMPONENT AdminProductsScreen {
+  uses = [AdminProductForm]
+  render = AdminProductsView
+}
+
+API AdminProduct.list {
+  method = POST
+  path = "/api/admin/products"
+  protected = true
+  input = []
+  response = AdminProductListResult
+  fields = [products]
+}

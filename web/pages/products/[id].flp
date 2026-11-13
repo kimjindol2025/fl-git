@@ -12,7 +12,7 @@ API Products.detail {
   method = GET
   path = "/api/products/:id"
   response = ProductDetailResult
-  fields = [id name price]
+  fields = [id name price description photo stock]
 }
 
 API Cart.add {
@@ -30,6 +30,6 @@ BUTTON AddToCartButton {
 }
 
 COMPONENT ProductDetailScreen {
-  props = { id: ID, name: String, price: Money }
+  props = { id: ID, name: String, price: Money, description: String, photo: Path, stock: Integer }
   render = ProductDetailView
 }

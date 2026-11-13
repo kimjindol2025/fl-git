@@ -1,0 +1,5 @@
+[
+  {"id":"1","name":"AI 노트","price":19000,"description":"AI 작업을 정리하는 노트","photo":"","stock":20},
+  {"id":"2","name":"FreeLang 키트","price":29000,"description":"FreeLang 개발 입문 키트","photo":"","stock":12},
+  {"id":"3","name":"Codex 플래너","price":39000,"description":"프로젝트 실행 계획 플래너","photo":"","stock":8}
+]

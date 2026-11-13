@@ -31,10 +31,17 @@
 (defn new-block [kind name file line]
   {"kind" kind "name" name "file" file "line" line "path" ""
    "params" [] "fields" [] "input_fields" [] "submit" "" "layout" ""
-   "design" "" "title" "" "description" "" "source_count" 1})
+   "design" "" "title" "" "description" "" "protected" "" "source_count" 1})
 
 (defn route-path [block]
   (str-trim (str (get block "path"))))
+
+(defn admin-path? [path]
+  (let [clean (str-replace-in path "\"" "")]
+    (or (= clean "/admin")
+        (str-starts-with clean "/admin/")
+        (= clean "/api/admin")
+        (str-starts-with clean "/api/admin/"))))
 
 (defn route-key [path]
   (str path))
@@ -86,6 +93,7 @@
                   (text-has? line "design") (reset! current (assoc @current "design" (clean-token (property-value line))))
                   (text-has? line "title") (reset! current (assoc @current "title" (str-trim (property-value line))))
                   (text-has? line "description") (reset! current (assoc @current "description" (str-trim (property-value line))))
+                  (text-has? line "protected") (reset! current (assoc @current "protected" (clean-token (property-value line))))
                   (or (text-has? line "submit") (text-has? line "action")) (reset! current (assoc @current "submit" (clean-token (property-value line))))
                   (text-has? line "sends") (reset! current (assoc @current "params" (list-values (property-value line))))
                   true nil))))))
@@ -205,6 +213,16 @@
             (add-error errors file line "E_DESIGN_TOKEN_NOT_FOUND"
               (str "디자인 값 " (get block "design") "이 선언되지 않았습니다.")
               "DESIGN 블록을 선언하거나 정확한 이름을 사용하세요.")
+          (and (= kind "API") (admin-path? path)
+               (not (= (get block "protected") "true")))
+            (add-error errors file line "E_ADMIN_ROUTE_UNPROTECTED"
+              "관리자 API에 보호 표시가 없습니다."
+              "protected = true를 추가하세요.")
+          (and (or (= kind "PAGE") (= kind "ROUTE")) (admin-path? path)
+               (not (= (get block "protected") "true")))
+            (add-error errors file line "E_ADMIN_ROUTE_UNPROTECTED"
+              "관리자 경로에 보호 표시가 없습니다."
+              "protected = true를 추가하세요.")
           (and (or (= kind "PAGE") (= kind "ROUTE")) (text-has? path "["))
             (let [raw (if (text-has? path "[id]") "id" (if (text-has? path "[slug]") "slug" ""))]
               (if (and (> (length raw) 0) (not (contains-name? params raw)))
@@ -275,15 +293,21 @@
 
 (let [target (or (shell_env "FL_CHECK_TARGET") "pages")
       files (if (file_is_file target)
-              (if (file_exists "web/pages/site.flp")
-                [target "web/pages/site.flp"]
-                [target])
+              (let [site-path (str-replace target "/products/[id].flp" "/site.flp")]
+                (if (file_exists site-path)
+                  [target site-path]
+                  [target]))
               (let [top (map (fn [name] (str target "/" name))
                              (filter (fn [name] (and (regex_match name "\\.flp$") (file_is_file (str target "/" name))))
                                      (dir_list target)))]
                 (if (file_exists (str target "/products/[id].flp"))
-                  (concat top [(str target "/products/[id].flp")])
-                  top)))
+                  (let [with-detail (concat top [(str target "/products/[id].flp")])]
+                    (if (file_exists (str target "/admin/products.flp"))
+                      (concat with-detail [(str target "/admin/products.flp")])
+                      with-detail))
+                  (if (file_exists (str target "/admin/products.flp"))
+                    (concat top [(str target "/admin/products.flp")])
+                    top))))
       blocks (atom [])
       lines (atom [])
       errors (atom [])

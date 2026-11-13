@@ -1,0 +1,49 @@
+; FE-8 파일 상품 저장소 — DB 없이 data/products.json 하나를 사용한다.
+(define FL-PRODUCTS-FALLBACK
+  [{"id" "1" "name" "AI 노트" "price" 19000 "description" "AI 작업을 정리하는 노트" "photo" "" "stock" 20}
+   {"id" "2" "name" "FreeLang 키트" "price" 29000 "description" "FreeLang 개발 입문 키트" "photo" "" "stock" 12}
+   {"id" "3" "name" "Codex 플래너" "price" 39000 "description" "프로젝트 실행 계획 플래너" "photo" "" "stock" 8}])
+
+(defn fl-products-path []
+  (str (or (shell_env "FL_GIT_REPO") ".") "/data/products.json"))
+
+(defn fl-products-load []
+  (let [raw (file_read (fl-products-path))]
+    (if (or (= raw nil) (= (str-trim raw) ""))
+      FL-PRODUCTS-FALLBACK
+      (let [parsed (json_parse raw)]
+        (if (= parsed nil) FL-PRODUCTS-FALLBACK parsed)))))
+
+(defn fl-products-save [products]
+  (file_write (fl-products-path) (json_stringify products)))
+
+(defn fl-products-find [id]
+  (first (filter (fn [product] (= (str (get product "id")) (str id))) (fl-products-load))))
+
+(defn fl-product-photo [product]
+  (let [photo (str-trim (str (or (get product "photo") "")))]
+    (if (or (= photo "") (not (regex_match photo "^/public/[A-Za-z0-9._/-]+$")) (str-includes photo ".."))
+      "/public/product-default.svg"
+      photo)))
+
+(defn fl-product-html-escape [value]
+  (str-replace-in
+    (str-replace-in
+      (str-replace-in
+        (str-replace-in
+          (str-replace-in (str (or value "")) "&" "&amp;")
+          "<" "&lt;")
+        ">" "&gt;")
+      "\"" "&quot;")
+    "'" "&#39;"))
+
+(defn fl-products-upsert [product]
+  (let [id (str (get product "id"))
+        products (fl-products-load)
+        replaced (map (fn [item] (if (= (str (get item "id")) id) product item)) products)
+        exists (> (length (filter (fn [item] (= (str (get item "id")) id)) products)) 0)]
+    (if exists
+      (do (fl-products-save replaced) product)
+      (do (fl-products-save (concat products [product])) product))))
+
+(server_static (if (file_exists "public/product-default.svg") "public" "web/public") "/public")
