@@ -30083,7 +30083,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
       res.end(String(body ?? ""));
     }
   }
-  function createFlRequest(method, path19, query, headers, body, params, requestId) {
+  function createFlRequest(method, path19, query, headers, body, params, requestId, clientIp) {
     return {
       __fl_request: true,
       method,
@@ -30092,6 +30092,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
       headers,
       body: body || void 0,
       params,
+      remote_ip: clientIp,
       request_id: requestId,
       csp_nonce: currentNonce,
       timestamp: Date.now()
@@ -30304,7 +30305,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
           res.write("retry: 400\n\n");
           return;
         }
-        const baseReq = createFlRequest(method, path19, query, headers, body, {}, requestId);
+        const baseReq = createFlRequest(method, path19, query, headers, body, {}, requestId, clientIp);
         for (const mw of middlewares) {
           if (!mw.pattern.exec(path19)) continue;
           try {
@@ -30331,8 +30332,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
           }
         }
         let matched = false;
-        for (const route of routes) {
-          if (route.method !== method) continue;
+        for (const route of routes.filter(route => route.method === method).sort((a, b) => (a.path.includes("*") ? 1 : 0) - (b.path.includes("*") ? 1 : 0) || a.params.length - b.params.length)) {
           const match = route.pattern.exec(path19);
           if (!match) continue;
           matched = true;
@@ -30342,7 +30342,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
             for (let i = 0; i < route.params.length; i++) {
               params[route.params[i]] = match[i + 1];
             }
-            const flReq = createFlRequest(method, path19, query, headers, body, params, requestId);
+            const flReq = createFlRequest(method, path19, query, headers, body, params, requestId, clientIp);
             let rawResult;
             if (typeof route.handler === "string") {
               rawResult = callFn(route.handler, [flReq]);
@@ -30859,6 +30859,7 @@ function createHttpServerModule(callFn, callFunctionValue2) {
       if (Array.isArray(value)) return value[0];
       return value;
     },
+    "server_req_client_ip": (req) => req.remote_ip || "unknown",
     // server_req_headers req -> object (전체 헤더 맵)
     "server_req_headers": (req) => {
       const result = {};

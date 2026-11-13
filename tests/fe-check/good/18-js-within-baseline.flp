@@ -1,0 +1,4 @@
+JS_GROWTH_TEST WithinBaseline {
+  baseline_lines = 101
+  current_lines = 101
+}

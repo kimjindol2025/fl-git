@@ -11,7 +11,7 @@
         orders (atom [])
         message (atom "")
         reload (fn []
-                 (fetch-admin! "GET" "/api/admin/orders" {} @password
+                 (fetch! "GET" "/api/admin/orders" nil {"X-Admin-Password" @password}
                    (fn [result]
                      (let [data (get result "data")]
                        (if (= (get result "ok") true)
@@ -21,7 +21,7 @@
                          (reset! message (or (get data "error") "주문 목록을 불러오지 못했습니다.")))))))
         login (fn []
                 (let [candidate (.-value (.getElementById document "admin-order-password"))]
-                  (fetch-admin! "GET" "/api/admin/orders" {} candidate
+                  (fetch! "GET" "/api/admin/orders" nil {"X-Admin-Password" candidate}
                     (fn [result]
                       (let [data (get result "data")]
                         (if (= (get result "ok") true)
@@ -44,7 +44,7 @@
                         status (next-status (get order "status"))]
                     (if (= status "")
                       (reset! message "완료된 주문입니다.")
-                      (fetch-admin! "PUT" (str "/api/admin/order/" id) {"status" status} @password
+                      (fetch! "PUT" (str "/api/admin/order/" id) {"status" status} {"X-Admin-Password" @password}
                         (fn [result]
                           (let [data (get result "data")]
                             (if (= (get result "ok") true)

@@ -1,0 +1,5 @@
+API Order.track {
+  method = POST
+  path = "/api/order/track"
+  fields = [status created_at recipient phone address total]
+}

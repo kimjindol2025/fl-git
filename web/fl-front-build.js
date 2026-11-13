@@ -245,7 +245,7 @@ const FL_FRONT_HELPERS = new Set([
   'server-req-body','server_req_body',
   'server-req-cookie','server_req_cookie',
   'server-req-header','server_req_header',
-  'server-req-param','server_req_param',
+  'server-req-param','server_req_param','server-req-client-ip','server_req_client_ip',
   'server-req-method','server_req_method',
   'server-req-path','server_req_path',
   'server-status','server_status',

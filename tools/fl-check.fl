@@ -31,7 +31,8 @@
 (defn new-block [kind name file line]
   {"kind" kind "name" name "file" file "line" line "path" ""
    "params" [] "fields" [] "input_fields" [] "submit" "" "layout" ""
-   "design" "" "title" "" "description" "" "protected" "" "price_source" "" "source_count" 1})
+   "design" "" "title" "" "description" "" "protected" "" "price_source" ""
+   "baseline_lines" "" "current_lines" "" "source_count" 1})
 
 (defn route-path [block]
   (str-trim (str (get block "path"))))
@@ -75,6 +76,7 @@
                      (regex_match line "^DESIGN") "DESIGN"
                      (regex_match line "^BUTTON") "BUTTON"
                      (regex_match line "^ROUTE") "ROUTE"
+                     (regex_match line "^JS_GROWTH_TEST") "JS_GROWTH_TEST"
                      true "")]
           (reset! line-no n)
           (if (> (length kind) 0)
@@ -95,6 +97,8 @@
                   (text-has? line "description") (reset! current (assoc @current "description" (str-trim (property-value line))))
                   (text-has? line "protected") (reset! current (assoc @current "protected" (clean-token (property-value line))))
                   (text-has? line "price_source") (reset! current (assoc @current "price_source" (clean-token (property-value line))))
+                  (text-has? line "baseline_lines") (reset! current (assoc @current "baseline_lines" (clean-token (property-value line))))
+                  (text-has? line "current_lines") (reset! current (assoc @current "current_lines" (clean-token (property-value line))))
                   (or (text-has? line "submit") (text-has? line "action")) (reset! current (assoc @current "submit" (clean-token (property-value line))))
                   (text-has? line "sends") (reset! current (assoc @current "params" (list-values (property-value line))))
                   true nil))))))
@@ -225,6 +229,20 @@
             (add-error errors file line "E_PRICE_FROM_CLIENT"
               "주문 API 가격 기준이 상품 저장소로 선언되지 않았거나 입력에 가격이 포함되어 있습니다."
               "상품 ID와 수량만 받고 price_source = products로 선언하세요.")
+          (and (= kind "API") (= (str-replace-in path "\"" "") "/api/order/track")
+               (or (contains-name? (get block "fields") "name")
+                   (contains-name? (get block "fields") "recipient")
+                   (contains-name? (get block "fields") "phone")
+                   (contains-name? (get block "fields") "full_phone")
+                   (contains-name? (get block "fields") "address")))
+            (add-error errors file line "E_TRACK_LEAKS_PII"
+              "주문 조회 응답 계약에 구매자 개인정보 필드가 있습니다."
+              "상태, 시각, 상품, 합계 필드만 응답에 선언하세요.")
+          (and (= kind "JS_GROWTH_TEST")
+               (> (str-to-num (get block "current_lines")) (str-to-num (get block "baseline_lines"))))
+            (add-error errors file line "E_JS_GROWTH"
+              "JavaScript 줄 수가 기준선보다 늘었습니다."
+              "페이지 언어로 옮기거나 기준 이하로 줄이세요.")
           (and (or (= kind "PAGE") (= kind "ROUTE")) (admin-path? path)
                (not (= (get block "protected") "true")))
             (add-error errors file line "E_ADMIN_ROUTE_UNPROTECTED"
@@ -298,7 +316,35 @@
     (filter (fn [block] (= (get block "kind") "COMPONENT")) @blocks))]
     (length checked)))
 
+(defn js-files-in [dir]
+  (reduce
+    (fn [found name]
+      (let [path (str dir "/" name)]
+        (if (file_is_file path)
+          (if (regex_match name "\\.js$") (concat found [path]) found)
+          (if (contains-name? [".git" "node_modules" "dist" "build" "coverage" ".next" ".cache"] name)
+            found
+            (concat found (js-files-in path)))))
+    []
+    (dir_list dir))))
+
+(defn js-baseline-total [root]
+  (let [baseline (file_read (str root "/docs/FE-10-JS-BASELINE.md"))
+        row (first (filter (fn [line] (str-starts-with line "JS_TOTAL ")) (regex_split baseline "\n")))]
+    (if (= row nil) nil (str-to-num (get (regex_split row " +") 1)))))
+
+(defn check-js-growth [root errors]
+  (let [baseline (js-baseline-total root)
+        paths (js-files-in root)
+        current (reduce (fn [sum path] (+ sum (str-count (or (file_read path) "") "\n"))) 0 paths)]
+    (if (or (= baseline nil) (> current baseline))
+      (add-error errors (str root "/docs/FE-10-JS-BASELINE.md") 1 "E_JS_GROWTH"
+        (if (= baseline nil) "JavaScript 줄 수 기준선을 읽을 수 없습니다."
+          (str "JavaScript 줄 수가 기준선 " baseline "보다 많은 " current "입니다."))
+        "기준선 파일과 실제 JavaScript 줄 수를 확인하세요."))))
+
 (let [target (or (shell_env "FL_CHECK_TARGET") "pages")
+      root (or (shell_env "FL_CHECK_ROOT") (shell_cwd))
       files (if (file_is_file target)
               (let [site-path (str-replace target "/products/[id].flp" "/site.flp")]
                 (if (file_exists site-path)
@@ -318,6 +364,7 @@
   (map (fn [file] (parse-file file blocks lines errors)) files)
   (validate-lines blocks lines errors)
   (validate-blocks blocks lines errors warnings)
+  (check-js-growth root errors)
   (map (fn [warning] (println (json_stringify warning))) @warnings)
   (map (fn [error] (println (json_stringify error))) @errors)
   (println (str "FL_CHECK_EXIT=" (if (> (length @errors) 0) "1" "0"))))

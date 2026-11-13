@@ -1,0 +1,4 @@
+JS_GROWTH_TEST OverBaseline {
+  baseline_lines = 100
+  current_lines = 101
+}

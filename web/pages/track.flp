@@ -1,0 +1,27 @@
+PAGE OrderTrackPage {
+  path = "/order/track"
+  layout = StoreLayout
+  title = "주문 조회"
+  description = "주문번호와 연락처 뒤 네 자리로 주문 상태를 확인합니다."
+  render = OrderTrackScreen
+}
+
+API Order.track {
+  method = POST
+  path = "/api/order/track"
+  input = [order_id phone_last4]
+  response = OrderTrackResult
+  fields = [status created_at items total]
+}
+
+FORM OrderTrackForm {
+  fields = [order_id phone_last4]
+  submit = Order.track
+  rule order_id = required
+  rule phone_last4 = required min-length=4 max-length=4
+}
+
+COMPONENT OrderTrackScreen {
+  uses = [OrderTrackForm]
+  render = OrderTrackView
+}

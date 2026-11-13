@@ -25,7 +25,7 @@
                      (reset! stock ""))
         login (fn []
                 (let [candidate (.-value (.getElementById document "admin-password"))]
-                  (fetch-admin! "POST" "/api/admin/products" {} candidate
+                  (fetch! "POST" "/api/admin/products" {} {"X-Admin-Password" candidate}
                     (fn [result]
                       (let [data (get result "data")]
                         (if (= (get result "ok") true)
@@ -53,10 +53,10 @@
                      current-photo (.-value (.getElementById document "admin-photo"))
                      current-stock (.-value (.getElementById document "admin-stock"))
                      payload {"name" current-name
-                              "price" (if (= current-price "") nil (str-to-num current-price))
+                              "price" (if (= current-price "") nil (Number current-price))
                               "description" current-description
                               "photo" current-photo
-                              "stock" (if (= current-stock "") nil (str-to-num current-stock))}
+                              "stock" (if (= current-stock "") nil (Number current-stock))}
                      path (if (= current-id "") "/api/admin/product" (str "/api/admin/product/" current-id))
                      method (if (= current-id "") "POST" "PUT")]
                  (if (= (str-trim current-name) "")
@@ -67,7 +67,7 @@
                      (reset! photo current-photo)
                      (reset! stock current-stock)
                      (reset! message "상품 이름은 필수입니다."))
-                   (fetch-admin! method path payload @password
+                   (fetch! method path payload {"X-Admin-Password" @password}
                      (fn [result]
                        (let [data (get result "data")
                              product (get data "product")]

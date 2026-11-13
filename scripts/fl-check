@@ -6,7 +6,7 @@ ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
 RUNNER="${FREELANG_AFJ_RUNNER:-/home/kim/kim/platform/freelang-afj/bootstrap.js}"
 TARGET="${1:-$ROOT/web/pages}"
 
-output="$(FL_CHECK_TARGET="$TARGET" node "$RUNNER" run "$ROOT/tools/fl-check.fl")"
+output="$(FL_CHECK_ROOT="$ROOT" FL_CHECK_TARGET="$TARGET" node "$RUNNER" run "$ROOT/tools/fl-check.fl")"
 status=0
 if printf '%s\n' "$output" | grep -q '^FL_CHECK_EXIT=1$'; then status=1; fi
 printf '%s\n' "$output" | grep -v '^FL_CHECK_EXIT=' || true

@@ -1,0 +1,43 @@
+; 주문번호와 연락처 뒤 네 자리만 제출하고, 조회 결과에는 주문자 정보를 넣지 않는다.
+(defn render [req]
+  (server_html
+    (fl-layout "주문 조회" "주문번호와 연락처 뒤 네 자리로 주문 상태를 확인합니다."
+      (str "<style>.track-form{display:grid;gap:12px;max-width:520px}.track-form input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #bbb;border-radius:8px}.track-result{margin-top:20px}.track-error{color:#b42318}</style><h1>주문 조회</h1><div id='order-track-root'>"
+           "ISLAND_PLACEHOLDER_0" "</div>" "ISLAND_SCRIPTS"))))
+
+(island OrderTrack []
+  (let [result (atom nil)
+        message (atom "")
+        lookup (fn []
+                 (let [order-id (.-value (.getElementById document "track-order-id"))
+                       last4 (.-value (.getElementById document "track-phone-last4"))]
+                   (fetch! "POST" "/api/order/track" {"order_id" order-id "phone_last4" last4} {}
+                     (fn [response]
+                       (if (= (get response "ok") true)
+                         (do
+                           (reset! result (get response "data"))
+                           (reset! message ""))
+                         (do
+                           (reset! result nil)
+                           (reset! message (if (= (get response "status") 429)
+                                             "조회 요청이 많습니다. 잠시 후 다시 시도하세요."
+                                             "주문 정보를 확인할 수 없습니다."))))))))]
+    (h "section" {}
+      (h "div" {"class" "track-form"}
+        (h "label" {"for" "track-order-id"} "주문번호")
+        (h "input" {"id" "track-order-id" "autocomplete" "off" "required" "required" "placeholder" "ORD-..."})
+        (h "label" {"for" "track-phone-last4"} "연락처 뒤 네 자리")
+        (h "input" {"id" "track-phone-last4" "inputmode" "numeric" "maxlength" "4" "pattern" "[0-9]{4}" "required" "required"})
+        (h "button" {"type" "button" "id" "track-submit" :on-click lookup} "주문 조회"))
+      (if (= @message "") "" (h "p" {"class" "track-error" "id" "track-error" "role" "status"} @message))
+      (if (= @result nil)
+        ""
+        (h "section" {"class" "track-result card" "id" "track-result"}
+          (h "h2" {} (str "주문 상태: " (get @result "status")))
+          (h "p" {} (str "주문 시각: " (get @result "created_at")))
+          (h "h3" {} "상품")
+          (h "ul" {}
+            (map (fn [item]
+                   (h "li" {} (str (get item "name") " × " (get item "quantity") " — " (get item "line_total") "원")))
+                 (get @result "items")))
+          (h "strong" {} (str "합계: " (get @result "total") "원")))))))
