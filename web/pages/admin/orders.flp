@@ -1,0 +1,30 @@
+PAGE AdminOrdersPage {
+  path = "/admin/orders"
+  layout = StoreLayout
+  protected = true
+  title = "관리자 주문 관리"
+  description = "주문 내역과 처리 상태 관리"
+  render = AdminOrdersScreen
+}
+
+API AdminOrders.list {
+  method = GET
+  path = "/api/admin/orders"
+  protected = true
+  input = []
+  response = AdminOrderListResult
+  fields = [orders]
+}
+
+API AdminOrders.update {
+  method = PUT
+  path = "/api/admin/order/:id"
+  protected = true
+  input = [status]
+  response = AdminOrderUpdateResult
+  fields = [order_id status]
+}
+
+COMPONENT AdminOrdersScreen {
+  render = AdminOrdersView
+}

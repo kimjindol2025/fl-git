@@ -7,6 +7,13 @@ PAGE CheckoutPage {
   render = CheckoutScreen
 }
 
+ROUTE OrderDoneRoute {
+  path = "/order/done"
+  layout = StoreLayout
+  title = "주문 완료"
+  description = "주문 접수 결과"
+}
+
 API Cart.get {
   method = GET
   path = "/api/cart"
@@ -17,13 +24,14 @@ API Cart.get {
 API Order.create {
   method = POST
   path = "/api/order"
-  input = [recipient phone address note]
+  input = [items recipient phone address note]
+  price_source = products
   response = OrderResult
   fields = [order_id total]
 }
 
 FORM OrderForm {
-  fields = [recipient phone address note]
+  fields = [items recipient phone address note]
   submit = Order.create
   rule recipient = required min-length=2 max-length=50
   rule phone = required phone

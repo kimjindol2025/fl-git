@@ -31,7 +31,7 @@
 (defn new-block [kind name file line]
   {"kind" kind "name" name "file" file "line" line "path" ""
    "params" [] "fields" [] "input_fields" [] "submit" "" "layout" ""
-   "design" "" "title" "" "description" "" "protected" "" "source_count" 1})
+   "design" "" "title" "" "description" "" "protected" "" "price_source" "" "source_count" 1})
 
 (defn route-path [block]
   (str-trim (str (get block "path"))))
@@ -94,6 +94,7 @@
                   (text-has? line "title") (reset! current (assoc @current "title" (str-trim (property-value line))))
                   (text-has? line "description") (reset! current (assoc @current "description" (str-trim (property-value line))))
                   (text-has? line "protected") (reset! current (assoc @current "protected" (clean-token (property-value line))))
+                  (text-has? line "price_source") (reset! current (assoc @current "price_source" (clean-token (property-value line))))
                   (or (text-has? line "submit") (text-has? line "action")) (reset! current (assoc @current "submit" (clean-token (property-value line))))
                   (text-has? line "sends") (reset! current (assoc @current "params" (list-values (property-value line))))
                   true nil))))))
@@ -218,6 +219,12 @@
             (add-error errors file line "E_ADMIN_ROUTE_UNPROTECTED"
               "관리자 API에 보호 표시가 없습니다."
               "protected = true를 추가하세요.")
+          (and (= kind "API") (= (str-replace-in path "\"" "") "/api/order")
+               (or (contains-name? (get block "input_fields") "price")
+                   (not (= (get block "price_source") "products"))))
+            (add-error errors file line "E_PRICE_FROM_CLIENT"
+              "주문 API 가격 기준이 상품 저장소로 선언되지 않았거나 입력에 가격이 포함되어 있습니다."
+              "상품 ID와 수량만 받고 price_source = products로 선언하세요.")
           (and (or (= kind "PAGE") (= kind "ROUTE")) (admin-path? path)
                (not (= (get block "protected") "true")))
             (add-error errors file line "E_ADMIN_ROUTE_UNPROTECTED"
@@ -299,15 +306,11 @@
                   [target]))
               (let [top (map (fn [name] (str target "/" name))
                              (filter (fn [name] (and (regex_match name "\\.flp$") (file_is_file (str target "/" name))))
-                                     (dir_list target)))]
-                (if (file_exists (str target "/products/[id].flp"))
-                  (let [with-detail (concat top [(str target "/products/[id].flp")])]
-                    (if (file_exists (str target "/admin/products.flp"))
-                      (concat with-detail [(str target "/admin/products.flp")])
-                      with-detail))
-                  (if (file_exists (str target "/admin/products.flp"))
-                    (concat top [(str target "/admin/products.flp")])
-                    top))))
+                                     (dir_list target)))
+                    detail (if (file_exists (str target "/products/[id].flp")) [(str target "/products/[id].flp")] [])
+                    admin-products (if (file_exists (str target "/admin/products.flp")) [(str target "/admin/products.flp")] [])
+                    admin-orders (if (file_exists (str target "/admin/orders.flp")) [(str target "/admin/orders.flp")] [])]
+                (concat (concat (concat (concat top detail) admin-products) admin-orders))))
       blocks (atom [])
       lines (atom [])
       errors (atom [])

@@ -4,6 +4,7 @@
 .env
 .env.*
 !.env.example
+/data/orders.json
 web/_app.fl
 web/AGENTS.md
 web/public/app.css

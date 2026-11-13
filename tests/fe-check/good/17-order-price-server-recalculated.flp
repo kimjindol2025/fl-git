@@ -1,0 +1,6 @@
+API Order.create {
+  method = POST
+  path = "/api/order"
+  input = [items recipient phone address]
+  price_source = products
+}
