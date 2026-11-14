@@ -1,6 +1,9 @@
 ; FE-5 장바구니 API — 프로세스 메모리만 사용한다.
 (define fl-cart-state (atom {}))
 
+(defn fl-cart-clear! []
+  (reset! fl-cart-state {}))
+
 (defn fl-cart-product [id]
   (fl-products-find id))
 

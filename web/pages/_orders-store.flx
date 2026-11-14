@@ -1,6 +1,6 @@
 ; FE-9 주문 파일 저장소. data/orders.json은 로컬 런타임 자료이며 커밋하지 않는다.
 (defn fl-orders-path []
-  (str (or (shell_env "FL_GIT_REPO") ".") "/data/orders.json"))
+  (str (or (env-get "FL_GIT_REPO") ".") "/data/orders.json"))
 
 (defn fl-orders-load []
   (let [path (fl-orders-path)]

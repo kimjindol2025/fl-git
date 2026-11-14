@@ -94,7 +94,7 @@
         (server_status 500 {"error" "재고를 저장하지 못했습니다."})
         (if (fl-orders-save (concat orders [order]))
           (do
-            (reset! fl-cart-state {})
+            (fl-cart-clear!)
             (server_json {"order_id" order-id "total" total}))
           (do
             (fl-products-save products)

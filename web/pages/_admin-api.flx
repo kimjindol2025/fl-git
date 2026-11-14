@@ -1,6 +1,6 @@
 ; FE-8 관리자 상품 API — 암호 값은 환경변수와 요청을 비교만 하고 저장·출력하지 않는다.
 (defn fl-admin-authorized [req]
-  (let [expected (shell_env "FL_ADMIN_PASSWORD")
+  (let [expected (env-get "FL_ADMIN_PASSWORD")
         provided (or (server_req_header req "x-admin-password") "")]
     (and (not (= expected nil)) (> (length (str expected)) 0) (= (str provided) (str expected)))))
 

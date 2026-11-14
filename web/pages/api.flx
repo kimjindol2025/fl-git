@@ -1,12 +1,12 @@
 ; fl-git 웹 API — 선택된 Git 저장소에서만 명령을 실행한다.
 
-(define fl-git-repo (atom (or (fl-env-get "FL_GIT_REPO") "/home/kim/kim/projects/fl-git")))
-(define fl-git-roots (or (fl-env-get "FL_GIT_ROOTS") "/home/kim/kim/projects"))
+(define fl-git-repo (atom (or (env-get "FL_GIT_REPO") "/home/kim/kim/projects/fl-git")))
+(define fl-git-roots (or (env-get "FL_GIT_ROOTS") "/home/kim/kim/projects"))
 (define fl-git-audit-log (atom []))
 (define fl-git-context-cache (atom {}))
 
 (defn api-role []
-  (let [configured (str-to-lower (str-trim (str (or (fl-env-get "FL_GIT_ROLE") ""))))]
+  (let [configured (str-to-lower (str-trim (str (or (env-get "FL_GIT_ROLE") ""))))]
     (if (or (= configured "viewer") (= configured "developer") (= configured "operator")) configured "developer")))
 
 (defn api-role-can? [action]
@@ -1016,14 +1016,14 @@
     @fl-git-context-cache))
 
 (defn api-ai-key []
-  (str-trim (str (or (fl-env-get "FL_AI_API_KEY") ""))))
+  (str-trim (str (or (env-get "FL_AI_API_KEY") ""))))
 
 (defn api-ai-model []
-  (let [configured (str-trim (str (or (fl-env-get "FL_AI_MODEL") "")))]
+  (let [configured (str-trim (str (or (env-get "FL_AI_MODEL") "")))]
     (if (= configured "") "gpt-4o-mini" configured)))
 
 (defn api-ai-base-url []
-  (let [configured (str-trim (str (or (fl-env-get "FL_AI_BASE_URL") "")))]
+  (let [configured (str-trim (str (or (env-get "FL_AI_BASE_URL") "")))]
     (if (= configured "") "https://api.openai.com/v1/chat/completions" configured)))
 
 (defn api-ai-provider-status []

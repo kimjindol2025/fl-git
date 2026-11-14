@@ -2,7 +2,7 @@
 ; HTML 문자열을 JS/TS로 만들지 않는다. 이 파일이 유일한 컴파일러 구현이다.
 
 (defn has? [text needle]
-  (> (str-count (str text) (str needle)) 0))
+  (not (= (str-index-of (str text) (str needle)) -1)))
 
 (defn field-value [line key]
   (if (= key "name")
@@ -61,7 +61,7 @@
        "(defn render [req]\n  (let [cart (fl-cart-summary)]\n    (if (= (length (get cart \"items\")) 0)\n      (server_redirect \"/cart\")\n      (server_html (fl-layout \"주문서\" \"장바구니 상품을 확인하고 온라인 주문 정보를 입력하세요.\" (str \"<div class='order'><h1>주문서</h1><p>주문 금액: \" (get cart \"total\") \"원</p>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</div>\")))))\n"
        "(island OrderForm []\n  (let [items (atom [])\n        loaded (atom false)\n        submit-error (atom \"\")\n        load (fn []\n               (if (= @loaded false)\n                 (do\n                   (reset! loaded true)\n                   (fetch! \"/api/cart\" (fn [res] (reset! items (map (fn [item] {\"id\" (get item \"id\") \"quantity\" (get item \"quantity\")}) (or (get res \"items\") []))))))\n                 nil))\n        recipient-error (atom \"\")\n        phone-error (atom \"\")\n        address-error (atom \"\")\n        note-error (atom \"\")\n        submit (fn []\n                 (let [recipient (.-value (.getElementById document \"recipient\"))\n                       phone (.-value (.getElementById document \"phone\"))\n                       address (.-value (.getElementById document \"address\"))\n                       note (.-value (.getElementById document \"note\"))]\n                   (do\n                     (reset! recipient-error (if (= recipient \"\") \"받는 사람은 필수입니다.\" (if (or (< (length recipient) 2) (> (length recipient) 50)) \"받는 사람은 2~50자여야 합니다.\" \"\")))\n                     (reset! phone-error (if (or (= phone \"\") (not (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone))) \"전화번호 형식이 아닙니다.\" \"\"))\n                     (reset! address-error (if (= address \"\") \"주소는 필수입니다.\" (if (or (< (length address) 5) (> (length address) 200)) \"주소는 5~200자여야 합니다.\" \"\")))\n                     (reset! note-error (if (> (length note) 200) \"요청사항은 200자 이하입니다.\" \"\"))\n                     (if (and (= @recipient-error \"\") (= @phone-error \"\") (= @address-error \"\") (= @note-error \"\"))\n                       (fetch-result! \"POST\" \"/api/order\" {\"items\" @items \"recipient\" recipient \"phone\" phone \"address\" address \"note\" note}\n                         (fn [result]\n                           (let [data (get result \"data\")\n                                 errors (get data \"errors\")\n                                 first-error (first errors)]\n                             (if (= (get result \"ok\") true)\n                               (.assign (.-location window) (str \"/order/done?order_id=\" (get data \"order_id\")))\n                               (reset! submit-error (or (get first-error \"message\") (get data \"error\") \"주문을 처리하지 못했습니다.\"))))))\n                       nil)))))]\n    (load)\n    (h \"section\" {}\n      (h \"label\" {} \"받는 사람\")\n      (h \"input\" {\"id\" \"recipient\" \"placeholder\" \"테스트 주문자\"})\n      (if (= @recipient-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @recipient-error))\n      (h \"label\" {} \"전화번호\")\n      (h \"input\" {\"id\" \"phone\" \"placeholder\" \"010-0000-0000\"})\n      (if (= @phone-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @phone-error))\n      (h \"label\" {} \"주소\")\n      (h \"input\" {\"id\" \"address\" \"placeholder\" \"테스트 주소 1\"})\n      (if (= @address-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @address-error))\n      (h \"label\" {} \"요청사항\")\n      (h \"textarea\" {\"id\" \"note\" \"placeholder\" \"요청사항\"})\n      (if (= @note-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @note-error))\n      (if (= @submit-error \"\") \"\" (h \"p\" {\"class\" \"error\" \"id\" \"order-submit-error\" \"role\" \"status\"} @submit-error))\n      (h \"button\" {\"id\" \"order-submit\" :on-click submit} \"주문하기\"))))\n"))
 
-(let [source-dir (or (shell_env "FLP_SOURCE_DIR") "web/pages")
+(let [source-dir (or (env-get "FLP_SOURCE_DIR") "web/pages")
       list-file (str source-dir "/products.flp")
       detail-file (str source-dir "/products/[id].flp")
       cart-file (str source-dir "/cart.flp")
@@ -71,7 +71,7 @@
       detail-output (str source-dir "/products/[id].flx")
       cart-output (str source-dir "/cart.flx")
       checkout-output (str source-dir "/checkout.flx")
-      output (or (shell_env "FLP_OUTPUT") (str source-dir "/_flp-generated.flx"))]
+      output (or (env-get "FLP_OUTPUT") (str source-dir "/_flp-generated.flx"))]
   (if (and (file_exists list-file) (file_exists detail-file) (file_exists cart-file) (file_exists checkout-file))
     (let [list-source (file_read list-file)
           detail-source (file_read detail-file)
