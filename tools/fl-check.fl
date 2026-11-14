@@ -117,6 +117,100 @@
       (length visited))
     (if (not (= @current nil)) (reset! blocks (concat @blocks [@current])))))
 
+(defn source-code-line-scan [line index in-string escaped output]
+  (if (>= index (length line))
+    output
+    (let [char (str-slice line index (+ index 1))]
+      (cond
+        (and in-string escaped)
+          (source-code-line-scan line (+ index 1) true false output)
+        (and in-string (= char "\\"))
+          (source-code-line-scan line (+ index 1) true true output)
+        (= char "\"")
+          (source-code-line-scan line (+ index 1) (not in-string) false output)
+        (and (not in-string) (= char ";")) output
+        in-string
+          (source-code-line-scan line (+ index 1) true false output)
+        true
+          (source-code-line-scan line (+ index 1) false false (str output char))))))
+
+(defn source-code-line [line]
+  (source-code-line-scan (str line) 0 false false ""))
+
+(defn source-has-browser-api? [line]
+  (or (text-has? line "document")
+      (text-has? line "window")
+      (text-has? line "fetch!")
+      (text-has? line "fetch-post!")
+      (text-has? line "fetch-result!")
+      (text-has? line ".getElementById")
+      (text-has? line ".querySelector")
+      (text-has? line ".addEventListener")
+      (text-has? line ":on-click")
+      (text-has? line ":on-input")
+      (text-has? line ":on-change")
+      (text-has? line ":on-submit")))
+
+(defn island-props-complex? [props]
+  (let [source (source-code-line (str props))
+        blocked ["(fn " "(defn " "lambda " "atom " "callback" "handler" "function"
+                 "connection" "conn-" "conn " "socket" "server" "database" "db-"
+                 "db " "request" "response" "req " "res " "stream" "file-handle"
+                 "file " "handle"]]
+    (> (length (filter (fn [token] (text-has? source token)) blocked)) 0)))
+
+(defn source-files-in [path]
+  (if (file_is_file path)
+    (if (str-ends-with path ".flx") [path] [])
+    (reduce
+      (fn [found name]
+        (let [child (str path "/" name)]
+          (if (file_is_file child)
+            (if (str-ends-with name ".flx") (concat found [child]) found)
+            (if (contains-name? [".git" "node_modules" "dist" "build" "coverage" ".next" ".cache"] name)
+              found
+              (concat found (source-files-in child)))))
+      []
+      (if (file_exists path) (dir_list path) [])))))
+
+(defn validate-source-file [file errors]
+  (let [source (file_read file)
+        source-lines (regex_split (or source "") "\n")
+        current-region (atom "server")
+        line-no (atom 0)
+        checked
+          (map
+            (fn [raw]
+              (let [n (+ @line-no 1)
+                    code (source-code-line raw)
+                    clean (str-trim code)
+                    island-line (str-starts-with clean "(island ")
+                    render-line (or (str-starts-with clean "(defn render ")
+                                    (str-starts-with clean "(defn render_post "))]
+                (reset! line-no n)
+                (if island-line (reset! current-region "island"))
+                (if render-line (reset! current-region "server"))
+                (if island-line
+                  (let [start (str-index-of code "[")
+                        rest (if (>= start 0) (str-slice code (+ start 1) (length code)) "")
+                        end (str-index-of rest "]")
+                        props (if (>= end 0) (str-slice rest 0 end) rest)]
+                    (if (and (>= start 0) (island-props-complex? props))
+                      (add-error errors file n "E_ISLAND_PASSES_COMPLEX"
+                        "Island 입력에 함수·연결 등 직렬화할 수 없는 값이 있습니다."
+                        "문자열·숫자·불리언·nil·배열·맵으로 이루어진 데이터만 전달하세요."))))
+                (if (and (= @current-region "server") (source-has-browser-api? code))
+                  (add-error errors file n "E_SERVER_USES_DOM"
+                    "서버 영역에서 브라우저 전용 DOM·이벤트 API를 사용했습니다."
+                    "브라우저 동작을 (island ...) 영역으로 옮기세요."))))
+            source-lines)]
+    (length checked)))
+
+(defn validate-source-boundaries [target errors]
+  (let [files (source-files-in target)]
+    (map (fn [file] (validate-source-file file errors)) files)
+    (length files)))
+
 (defn api-exists? [blocks name]
   (> (length (filter (fn [block] (and (= (get block "kind") "API") (= (get block "name") name))) @blocks)) 0))
 
@@ -358,6 +452,7 @@
 
 (let [target (or (env-get "FL_CHECK_TARGET") "pages")
       root (or (env-get "FL_CHECK_ROOT") (process-cwd))
+      source-target (or (env-get "FL_CHECK_SOURCE_TARGET") (str root "/web/pages"))
       files (if (file_is_file target)
               (let [site-path (str-replace target "/products/[id].flp" "/site.flp")]
                 (if (file_exists site-path)
@@ -377,6 +472,7 @@
   (map (fn [file] (parse-file file blocks lines errors)) files)
   (validate-lines blocks lines errors)
   (validate-blocks blocks lines errors warnings)
+  (validate-source-boundaries source-target errors)
   (check-js-growth root errors)
   (map (fn [warning] (println (json_stringify warning))) @warnings)
   (map (fn [error] (println (json_stringify error))) @errors)

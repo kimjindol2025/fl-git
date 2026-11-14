@@ -1,0 +1,6 @@
+(defn render [req]
+  "<main>document and window are text here</main>")
+
+(island RuleExample []
+  (let [node (.getElementById document "root")]
+    (h "button" {:on-click (fn [] nil)} "open")))

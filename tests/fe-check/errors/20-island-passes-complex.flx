@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>ready</main>")
+
+(island RuleExample [db-connection on-save]
+  (h "button" {:on-click on-save} "save"))

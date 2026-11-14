@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>safe</main>")
+
+(island RuleExample [{"name" "sample" "count" 2 "enabled" true "items" ["a" "b"]}]
+  (h "p" {} "simple data only"))

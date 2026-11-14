@@ -1,0 +1,5 @@
+(defn render [req]
+  (str "<main>" (.-title (.-document req)) "</main>"))
+
+(island RuleExample []
+  (h "button" {:on-click (fn [] nil)} "open"))
