@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>function prop rejected</main>")
+
+(island FunctionProp [(fn [] nil)]
+  (h "p" {} "function is not serializable"))

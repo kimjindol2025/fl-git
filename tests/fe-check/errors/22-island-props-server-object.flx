@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>server object rejected</main>")
+
+(island ServerObjectProp [db-connection]
+  (h "p" {} "server resources are not serializable"))

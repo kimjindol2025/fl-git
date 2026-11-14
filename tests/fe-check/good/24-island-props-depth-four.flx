@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>depth four</main>")
+
+(island DepthFour [[{"items" [1]}]]
+  (h "p" {} "depth four is allowed"))

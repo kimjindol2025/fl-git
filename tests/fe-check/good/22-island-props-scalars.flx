@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>scalar props</main>")
+
+(island ScalarProps [17 "item" true false nil]
+  (h "p" {} "scalar values"))

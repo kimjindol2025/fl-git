@@ -118,21 +118,22 @@
     (if (not (= @current nil)) (reset! blocks (concat @blocks [@current])))))
 
 (defn source-code-line-scan [line index in-string escaped output]
-  (if (>= index (length line))
-    output
-    (let [char (str-slice line index (+ index 1))]
-      (cond
-        (and in-string escaped)
-          (source-code-line-scan line (+ index 1) true false output)
-        (and in-string (= char "\\"))
-          (source-code-line-scan line (+ index 1) true true output)
-        (= char "\"")
-          (source-code-line-scan line (+ index 1) (not in-string) false output)
-        (and (not in-string) (= char ";")) output
-        in-string
-          (source-code-line-scan line (+ index 1) true false output)
-        true
-          (source-code-line-scan line (+ index 1) false false (str output char))))))
+  (loop [walk-line line walk-index index walk-in-string in-string walk-escaped escaped walk-output output]
+    (if (>= walk-index (length walk-line))
+      walk-output
+      (let [walk-char (str-slice walk-line walk-index (+ walk-index 1))]
+        (cond
+          [(and walk-in-string walk-escaped)
+            (recur walk-line (+ walk-index 1) true false walk-output)]
+          [(and walk-in-string (= walk-char "\\"))
+            (recur walk-line (+ walk-index 1) true true walk-output)]
+          [(= walk-char "\"")
+            (recur walk-line (+ walk-index 1) (not walk-in-string) false walk-output)]
+          [(and (not walk-in-string) (= walk-char ";")) walk-output]
+          [walk-in-string
+            (recur walk-line (+ walk-index 1) true false walk-output)]
+          [true
+            (recur walk-line (+ walk-index 1) false false (str walk-output walk-char))])))))
 
 (defn source-code-line [line]
   (source-code-line-scan (str line) 0 false false ""))
@@ -158,6 +159,70 @@
                  "db " "request" "response" "req " "res " "stream" "file-handle"
                  "file " "handle"]]
     (> (length (filter (fn [token] (text-has? source token)) blocked)) 0)))
+
+(defn props-number-scan [token index digits dot last-dot]
+  (if (>= index (length token))
+    (and digits (not last-dot))
+    (let [char (str-slice token index (+ index 1))]
+      (cond
+        (text-has? "0123456789" char)
+          (props-number-scan token (+ index 1) true dot false)
+        (and (= char "-") (= index 0) (> (length token) 1))
+          (props-number-scan token (+ index 1) digits dot last-dot)
+        (and (= char ".") (not dot) digits)
+          (props-number-scan token (+ index 1) digits true true)
+        true false))))
+
+(defn props-number? [token]
+  (props-number-scan (str token) 0 false false false))
+
+(defn props-token-valid? [token]
+  (or (= token "")
+      (= token "nil")
+      (= token "true")
+      (= token "false")
+      (props-number? token)))
+
+(defn island-props-shape-scan [props-source index stack token in-string escaped]
+  (loop [walk-props-source props-source walk-index index walk-stack stack walk-token token walk-in-string in-string walk-escaped escaped]
+    (if (>= walk-index (length walk-props-source))
+      false
+      (let [walk-char (str-slice walk-props-source walk-index (+ walk-index 1))
+            walk-next-index (+ walk-index 1)]
+        (cond
+          [walk-in-string
+            (cond
+              [walk-escaped (recur walk-props-source walk-next-index walk-stack walk-token true false)]
+              [(= walk-char "\\") (recur walk-props-source walk-next-index walk-stack walk-token true true)]
+              [(= walk-char "\"") (recur walk-props-source walk-next-index walk-stack "" false false)]
+              [true (recur walk-props-source walk-next-index walk-stack walk-token true false)])]
+          [(= walk-char "\"")
+            (if (props-token-valid? walk-token)
+              (recur walk-props-source walk-next-index walk-stack "" true false)
+              false)]
+          [(or (= walk-char " ") (= walk-char ","))
+            (if (props-token-valid? walk-token)
+              (recur walk-props-source walk-next-index walk-stack "" false false)
+              false)]
+          [(or (= walk-char "[") (= walk-char "{"))
+            (if (and (props-token-valid? walk-token) (< (length walk-stack) 4))
+              (recur walk-props-source walk-next-index
+                (concat [(if (= walk-char "[") "]" "}")] walk-stack) "" false false)
+              false)]
+          [(or (= walk-char "]") (= walk-char "}"))
+            (if (and (props-token-valid? walk-token) (= walk-char (first walk-stack)))
+              (if (= (length walk-stack) 1)
+                true
+                (recur walk-props-source walk-next-index (rest walk-stack) "" false false))
+              false)]
+          [(= walk-char ";") false]
+          [true
+            (recur walk-props-source walk-next-index walk-stack (str walk-token walk-char) false false)])))))
+
+(defn island-props-shape-valid? [source-line]
+  (let [start (str-index-of source-line "[")]
+    (and (>= start 0)
+         (island-props-shape-scan source-line (+ start 1) ["]"] "" false false))))
 
 (defn source-files-in [path]
   (if (file_is_file path)
@@ -198,7 +263,11 @@
                     (if (and (>= start 0) (island-props-complex? props))
                       (add-error errors file n "E_ISLAND_PASSES_COMPLEX"
                         "Island 입력에 함수·연결 등 직렬화할 수 없는 값이 있습니다."
-                        "문자열·숫자·불리언·nil·배열·맵으로 이루어진 데이터만 전달하세요."))))
+                        "문자열·숫자·불리언·nil·배열·맵으로 이루어진 데이터만 전달하세요."))
+                    (if (and (>= start 0) (not (island-props-shape-valid? raw)))
+                      (add-error errors file n "E_ISLAND_PROPS_SHAPE"
+                        "Island 입력은 깊이 4 이하의 단순 직렬화 값이어야 합니다."
+                        "숫자·문자열·불리언·nil·목록·맵 리터럴만 사용하세요."))))
                 (if (and (= @current-region "server") (source-has-browser-api? code))
                   (add-error errors file n "E_SERVER_USES_DOM"
                     "서버 영역에서 브라우저 전용 DOM·이벤트 API를 사용했습니다."

@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>nested props</main>")
+
+(island NestedProps [{"name" "item" "values" [1 "two" false nil]}]
+  (h "p" {} "nested values"))

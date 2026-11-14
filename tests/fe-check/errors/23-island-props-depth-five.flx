@@ -1,0 +1,5 @@
+(defn render [req]
+  "<main>depth five rejected</main>")
+
+(island DepthFive [[[[[1]]]]]
+  (h "p" {} "depth five is rejected"))
