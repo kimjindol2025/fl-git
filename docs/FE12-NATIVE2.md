@@ -62,7 +62,7 @@ The frontend build source already extracts each `(island ...)` block and emits i
 
 The original eleven direct Native failures remain grouped as runtime/API names 3, browser DOM or page aggregation 6, and generated-C/shared-state 2. The API-name cases for `flp-compile` and `api.flx` are resolved by using Native-supported FreeLang names. `_order-api.flx` now compiles, links, and runs after cart reset was moved behind a real cart API function. The TUI `tty-raw-leave!` gap remains FX-owned. Browser `document`/`window` and cross-page Island symbols still need a server/browser bundling boundary. `index.flx` now passes the CSS string point but standalone compilation still fails on `FlGitApp`, which belongs to the bundle.
 
-The full generated `_app.fl` bundle was attempted once under `flock -o /tmp/fl-heavy.lock` with a 2 GiB virtual-memory limit. The Native compiler stopped before C output with `text allocation failed` while reading the 315,480-byte generated source. No app binary was linked, no server was started, and ports 40850/40851 remained unused. The same large-bundle compile was not retried.
+The full generated `_app.fl` bundle was attempted once under the shared heavy-work lock with a 2 GiB virtual-memory limit. The Native compiler stopped before C output with `text allocation failed` while reading the 315,480-byte generated source. No app binary was linked, no server was started, and ports 40850/40851 remained unused. The same large-bundle compile was not retried.
 
 The Native fl-check comparison uses raw-to-raw output: both executions return the same 16-byte `FL_CHECK_EXIT=0` line. An intermediate comparison had removed the marker only on the Native side; that normalization mismatch was corrected and is not a checker difference. The existing Node test runner was used only for the requested regression checks; no JavaScript build ran.
 
@@ -76,4 +76,4 @@ An initial link attempt was made before acquiring the shared lock and failed bef
 
 ## Final result
 
-**Final:** `FE12=보류`. The Native second tool, checker parity, and unit regressions pass, but the 20/26 threshold and Native `/order/track` flow/screenshots are blocked by the full-bundle compiler allocation failure. Working tree remains uncommitted on `feat/fe-12-native2`; no push was requested or made.
+**Final:** `FE12=보류`. The Native second tool, checker parity, and unit regressions pass, but the 20/26 threshold and Native `/order/track` flow/screenshots are blocked by the full-bundle compiler allocation failure. FE-12 was preserved in commit `d6e9817a98223105d395b1320bb9f67cb3cd087b`, pushed to GitHub, and verified clean with matching remote HEAD. FE-13 starts from this commit.
