@@ -1,0 +1,12 @@
+(island CartPage []
+  (let [node (.getElementById document "cart-island-data")
+        cart (if (= node nil) {} (.parse JSON (.-textContent node)))
+        items (or (get cart "items") [])
+        total (or (get cart "total") 0)]
+    (h "section" {}
+      (h "div" {"id" "cart-items"}
+        (if (= (length items) 0)
+          (h "p" {} "장바구니가 비어 있습니다.")
+          (map (fn [item] (h "article" {"class" "cart-row"}
+                              (str (get item "name") " · " (get item "quantity") "개 · " (get item "line_total") "원"))) items)))
+      (h "h2" {} (str "합계: " total "원")))))

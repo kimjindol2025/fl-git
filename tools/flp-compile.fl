@@ -39,7 +39,8 @@
 (defn generated-list-source [products]
   (str "; generated from .flp — do not edit\n"
        "(defn fl-render-product-card [product]\n  (str \"<article class='product-card'><img src='\" (fl-product-photo product) \"' alt='\" (fl-product-html-escape (get product \"name\")) \" 상품 사진' style='width:100%;aspect-ratio:8/5;object-fit:cover;border-radius:10px'><h2><a href='/products/\" (fl-product-html-escape (get product \"id\")) \"'>\" (fl-product-html-escape (get product \"name\")) \"</a></h2><p>\" (fl-product-html-escape (get product \"price\")) \"원</p><p>\" (fl-product-html-escape (get product \"description\")) \"</p></article>\"))\n"
-       "(defn render [req]\n  (server_html (fl-layout \"상품 목록\" \"프리랭 상점의 상품 목록과 온라인 주문 상품을 확인하세요.\" (str \"<h1>상품 목록</h1>\" (str-join (map fl-render-product-card (fl-products-load)) \"\")))))\n"))
+       "(defn render [req]\n  (let [products (fl-products-load)\n        island-json (fl-json-script-safe products)]\n    (server_html (fl-layout \"상품 목록\" \"프리랭 상점의 상품 목록과 온라인 주문 상품을 확인하세요.\" (str \"<h1>상품 목록</h1><div id='product-island-slot'>ISLAND_PLACEHOLDER_0</div><script type='application/json' id='product-island-data'>\" island-json \"</script>\" (str-join (map fl-render-product-card products) \"\") \"ISLAND_SCRIPTS\")))))\n"
+       "(island ProductList []\n  (let [node (.getElementById document \"product-island-data\")\n        products (if (= node nil) [] (.parse JSON (.-textContent node)))]\n    (h \"span\" {\"class\" \"product-count\" \"aria-label\" \"상품 개수\"} (str (length products) \"개\"))))\n"))
 
 (defn generated-detail-source []
   (str "; generated from .flp — do not edit\n"
@@ -53,8 +54,8 @@
 
 (defn generated-cart-source []
   (str "; generated from .flp — do not edit\n"
-       "(defn render [req]\n  (server_html (fl-layout \"장바구니\" \"담은 상품과 온라인 주문 합계를 확인하세요.\" (str \"<h1>장바구니</h1>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\"))))\n"
-       "(island CartPage []\n  (let [items (atom [])\n        total (atom 0)\n        loaded (atom false)\n        load (fn []\n               (if (= @loaded false)\n                 (do (reset! loaded true)\n                     (fetch! \"/api/cart\"\n                       (fn [res]\n                         (reset! items (or (get res \"items\") []))\n                         (reset! total (or (get res \"total\") 0)))))\n                 nil))]\n    (load)\n    (h \"section\" {}\n      (h \"div\" {\"id\" \"cart-items\"}\n        (if (= (length @items) 0)\n          (h \"p\" {} \"장바구니가 비어 있습니다.\")\n          (map (fn [item] (h \"article\" {\"class\" \"cart-row\"}\n                              (str (get item \"name\") \" · \" (get item \"quantity\") \"개 · \" (get item \"line_total\") \"원\"))) @items)))\n      (h \"h2\" {} (str \"합계: \" @total \"원\")))))\n"))
+       "(defn render [req]\n  (let [cart (fl-cart-summary)\n        island-json (fl-json-script-safe cart)]\n    (server_html (fl-layout \"장바구니\" \"담은 상품과 온라인 주문 합계를 확인하세요.\" (str \"<h1>장바구니</h1><script type='application/json' id='cart-island-data'>\" island-json \"</script>ISLAND_PLACEHOLDER_0ISLAND_SCRIPTS\")))))\n"
+       "(island CartPage []\n  (let [node (.getElementById document \"cart-island-data\")\n        cart (if (= node nil) {} (.parse JSON (.-textContent node)))\n        items (or (get cart \"items\") [])\n        total (or (get cart \"total\") 0)]\n    (h \"section\" {}\n      (h \"div\" {\"id\" \"cart-items\"}\n        (if (= (length items) 0)\n          (h \"p\" {} \"장바구니가 비어 있습니다.\")\n          (map (fn [item] (h \"article\" {\"class\" \"cart-row\"}\n                              (str (get item \"name\") \" · \" (get item \"quantity\") \"개 · \" (get item \"line_total\") \"원\"))) items)))\n      (h \"h2\" {} (str \"합계: \" total \"원\")))))\n"))
 
 (defn generated-checkout-source []
   (str "; generated from .flp — do not edit\n"
@@ -102,11 +103,13 @@
                (has? admin-source "path = \"/api/admin/product/:id\""))
                  (do (dir_create island-dir)
                      (dir_create (str island-dir "/products"))
-                 (if (and (file_write list-output (generated-list-source products))
+                 (if (and (write-island-page list-output (str island-dir "/products.flx")
+                                  (generated-list-source products))
                  (write-island-page detail-output (str island-dir "/products/[id].flx")
                              (str-replace-in (generated-detail-source-v2)
                                              "__PRODUCT_ID__" ""))
-                 (file_write cart-output (generated-cart-source))
+                 (write-island-page cart-output (str island-dir "/cart.flx")
+                   (generated-cart-source))
                  (write-island-page checkout-output (str island-dir "/checkout.flx")
                    (str-replace-in
                      (str-replace-in (generated-checkout-source) "nil)))))]" "nil))))]")

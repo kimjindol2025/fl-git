@@ -17,6 +17,14 @@
 (defn fl-products-save [products]
   (file_write (fl-products-path) (json_stringify products)))
 
+; script raw-text 경계에서 태그로 해석될 수 있는 문자를 JSON escape로 보낸다.
+(defn fl-json-script-safe [value]
+  (str-replace-in
+    (str-replace-in
+      (str-replace-in (json_stringify value) "<" "\\u003c")
+      ">" "\\u003e")
+    "&" "\\u0026"))
+
 (defn fl-products-find [id]
   (first (filter (fn [product] (= (str (get product "id")) (str id))) (fl-products-load))))
 

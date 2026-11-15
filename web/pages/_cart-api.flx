@@ -18,7 +18,7 @@
 
 (defn fl-cart-summary []
   (let [rows (filter (fn [row] (> (get row "quantity") 0))
-                     (map fl-cart-row (fl-products-load)))
+                     (map (fn [product] (fl-cart-row product)) (fl-products-load)))
         total (reduce (fn [sum row] (+ sum (get row "line_total"))) 0 rows)
         count (reduce (fn [sum row] (+ sum (get row "quantity"))) 0 rows)]
     {"items" rows "count" count "total" total}))

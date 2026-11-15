@@ -1,0 +1,4 @@
+(island ProductList []
+  (let [node (.getElementById document "product-island-data")
+        products (if (= node nil) [] (.parse JSON (.-textContent node)))]
+    (h "span" {"class" "product-count" "aria-label" "상품 개수"} (str (length products) "개"))))
