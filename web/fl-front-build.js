@@ -68,13 +68,21 @@ function saveCache(cache) {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), 'utf8'); } catch {}
 }
 function fileHash(p) {
-  try { return crypto.createHash('md5').update(fs.readFileSync(p)).digest('hex').slice(0, 8); }
+  try { return crypto.createHash('md5').update(p.endsWith('.flx') ? readPageSource(p) : fs.readFileSync(p)).digest('hex').slice(0, 8); }
   catch { return ''; }
 }
 
 const PAGES_DIR   = path.join(__dirname, 'pages');
-
-// (style ...) 블록을 괄호 깊이 추적으로 정확히 제거
+function readPageSource(file) {
+  const server = fs.readFileSync(file, 'utf8'), rel = path.relative(PAGES_DIR, file);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return server;
+  const client = path.join(__dirname, 'islands', rel);
+  if (!fs.existsSync(client)) return server;
+  const source = fs.readFileSync(client, 'utf8'), blocks = islandCompiler.extractIslands(source); let rest = source;
+  for (const { block } of blocks) rest = rest.replace(block, '');
+  if (!blocks.length || rest.replace(/;[^\n]*/g, '').trim()) throw new Error(`Island source must contain only island blocks: ${rel}`);
+  return `${server.trimEnd()}\n${source}`;
+}
 function removeStyleBlocks(src) {
   let result = '';
   let i = 0;
@@ -333,7 +341,7 @@ function validateFunctions(routes, helpers, bindings) {
   // 1패스: 모든 .flx 파일에서 defn/define/server-fn 수집 + (load ...) 파일 추적
   const defined = new Set();
   for (const f of allFiles) {
-    const src = fs.readFileSync(f, 'utf8');
+    const src = readPageSource(f);
     for (const m of src.matchAll(/\(defn\s+([\w-]+)/g))       defined.add(m[1]);
     for (const m of src.matchAll(/\(define\s+([\w-]+)/g))     defined.add(m[1]);
     for (const m of src.matchAll(/\(server-fn\s+([\w-]+)/g))  defined.add(m[1]);
@@ -369,7 +377,7 @@ function validateFunctions(routes, helpers, bindings) {
   // 2패스: 각 원본 .flx 파일에서 미정의 함수 감지
   const issues = [];
   for (const f of allFiles) {
-    let src = fs.readFileSync(f, 'utf8');
+    let src = readPageSource(f);
     const fileName = path.basename(f);
     // island 블록 제거 — 내부는 island-compiler 가 별도 검증하므로 서버 함수 검사 대상 아님.
     // (let 바인딩 로컬 함수 add/chg 등이 미정의로 오탐되는 것 방지). 라인 번호는 공백 치환으로 보존.
@@ -424,7 +432,7 @@ function scanTypeAnnotations(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => ({ file: r.file, label: r.file }))];
   for (const { file, label } of allFiles) {
     try {
-      const src = fs.readFileSync(file, 'utf8');
+      const src = readPageSource(file);
       for (const m of src.matchAll(/^;\s*@type\s+(.+)$/gm)) {
         types.push({ file: path.basename(file), annotation: m[1].trim() });
       }
@@ -437,7 +445,7 @@ function scanHelperFunctions(helpers) {
   const sections = [];
   for (const helperPath of helpers) {
     try {
-      const src = fs.readFileSync(helperPath, 'utf8');
+      const src = readPageSource(helperPath);
       const lines = src.split('\n');
       const fns = [];
       for (let i = 0; i < lines.length; i++) {
@@ -874,7 +882,7 @@ function scanContracts(routes, helpers) {
   const contracts = [];
   for (const f of allFiles) {
     try {
-      const src = fs.readFileSync(f, 'utf8');
+      const src = readPageSource(f);
       const lines = src.split('\n');
       let block = null;
       for (const line of lines) {
@@ -1190,7 +1198,7 @@ function generate(routes, bindings = [], helpers = [], appCss = '') {
   if (helpers.length > 0) {
     lines.push('; ── 레이아웃·헬퍼 함수 ──');
     for (const helperPath of helpers) {
-      let raw = fs.readFileSync(helperPath, 'utf8').trim();
+      let raw = readPageSource(helperPath).trim();
       // _layout.flx: GLOBAL-CSS 앞에 모던 CSS 토큰 주입 + app.css 병합
       if (path.basename(helperPath) === '_layout.flx') {
         const BASE_CSS = `
@@ -1352,7 +1360,7 @@ dialog[open]{opacity:1;transform:scale(1) translateY(0)}
 
   // 각 페이지 함수 인라인 — (style/island/server-fn ...) 블록 처리 후 삽입
   for (const r of routes) {
-    const raw = fs.readFileSync(r.file, 'utf8').trim();
+    const raw = readPageSource(r.file).trim();
     // 0) (server-fn name [] body) → (defn name [] body)
     let src = raw.replace(
       /\(server-fn\s+([\w-]+)\s+\[([^\]]*)\]/,
@@ -1388,14 +1396,6 @@ dialog[open]{opacity:1;transform:scale(1) translateY(0)}
     src = src.trim();
     // 2b) HTML placeholder 교체 (ISLAND_PLACEHOLDER → <div> 마운트 포인트)
     if (islands.length > 0) {
-      const { scripts } = islandCompiler.compileFileIslands(
-        islands.map(i => i.block).join('\n')
-      );
-      const divs = islands.map((_, idx) => {
-        const ast = islandCompiler.extractIslands(islands[idx].block);
-        return `<div id='island-${idx}'></div>`;
-      }).join('');
-      // island id는 compileFileIslands가 생성한 것 사용
       const { scripts: compiledScripts } = islandCompiler.compileFileIslands(
         islands.map(i => i.block).join('\n')
       );
@@ -1406,7 +1406,7 @@ dialog[open]{opacity:1;transform:scale(1) translateY(0)}
       }).join('\n');
       // defstore 초기값 — island 런타임 로드 직후 store 초기화
       const storeInitJs = (() => {
-        const allSrc = [...helpers, r.file].map(f => { try { return fs.readFileSync(f,'utf8'); } catch { return ''; } }).join('\n');
+        const allSrc = [...helpers, r.file].map(f => { try { return readPageSource(f); } catch { return ''; } }).join('\n');
         const inits = [];
         for (const m of allSrc.matchAll(/\(defstore\s+:?([\w-]+)\s+([^)]+)\)/g)) {
           const key = m[1], rawInit = m[2].trim();
@@ -1461,7 +1461,7 @@ dialog[open]{opacity:1;transform:scale(1) translateY(0)}
     lines.push(`(defn ${r.fnName} [req]`);
     lines.push(`  (try (${r.fnName}__inner req)`);
     lines.push(`    (catch $err (dev-error-page "${r.route}" (str $err)))))`);
-    const rawSrcCheck = fs.readFileSync(r.file, 'utf8');
+    const rawSrcCheck = readPageSource(r.file);
     if (rawSrcCheck.includes('(defn render_post [req]')) {
       lines.push(`(defn ${r.fnName}_post [req]`);
       lines.push(`  (try (${r.fnName}_post__inner req)`);
@@ -1475,7 +1475,7 @@ dialog[open]{opacity:1;transform:scale(1) translateY(0)}
   // server-get/server-post 라우트 등록
   for (const r of routes) {
     lines.push(`(server-get "${r.route}" "${r.fnName}")`);
-    const rawSrc = fs.readFileSync(r.file, 'utf8');
+    const rawSrc = readPageSource(r.file);
     if (rawSrc.includes('(defn render_post [req]')) {
       lines.push(`(server-post "${r.route}" "${r.fnName}_post")`);
     }
@@ -1568,7 +1568,7 @@ function detectDangerousPatterns(routes, helpers) {
   const issues = [];
   const allFiles = [...routes.map(r => r.file), ...helpers];
   for (const f of allFiles) {
-    const src = fs.readFileSync(f, 'utf8');
+    const src = readPageSource(f);
     const name = f.replace(PAGES_DIR + '/', '');
     // 빈 벡터 catch
     if (/\(catch\s+\$\w+\s+\[\]/.test(src))
@@ -1594,7 +1594,7 @@ function checkAllParens(routes, helpers) {
   const close = { ')': '(', ']': '[', '}': '{' };
   const errors = [];
   for (const f of allFiles) {
-    const src = fs.readFileSync(f, 'utf8');
+    const src = readPageSource(f);
     const lineOf = idx => src.slice(0, idx).split('\n').length;
     const st = [];
     let err = null;
@@ -1636,7 +1636,7 @@ function validateHAttributes(routes, helpers, bindings) {
   const issues = [];
 
   for (const f of allFiles) {
-    const src = fs.readFileSync(f, 'utf8');
+    const src = readPageSource(f);
     const name = path.basename(f);
     // let 바인딩 변수명 수집 — {:class var-name}에서 var-name이 변수면 건너뜀
     const letVars = new Set([...src.matchAll(/\[([a-z][a-z0-9-]*)\s+/g)].map(m => m[1]));
@@ -1678,7 +1678,7 @@ function validateIslandJs(routes) {
   const errors = [];
   for (const r of routes) {
     let src;
-    try { src = fs.readFileSync(r.file, 'utf8'); } catch { continue; }
+    try { src = readPageSource(r.file); } catch { continue; }
     const islands = islandCompiler.extractIslands(src);
     if (!islands.length) continue;
     try {
@@ -1704,7 +1704,7 @@ function validateStoreKeys(routes, helpers) {
   // 1패스: (defstore :key init) 선언 수집
   const declared = new Map(); // key → {file, init}
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     for (const m of src.matchAll(/\(defstore\s+:?([\w-]+)\s+([^)]+)\)/g)) {
       const key = m[1], init = m[2].trim(), base = path.basename(f);
       if (!declared.has(key)) declared.set(key, { file: base, init });
@@ -1715,7 +1715,7 @@ function validateStoreKeys(routes, helpers) {
   // 2패스: island 블록 내 dispatch/get-store 호출에서 키 수집
   const issues = [];
   for (const r of routes) {
-    let src; try { src = fs.readFileSync(r.file, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(r.file); } catch { continue; }
     const islands = islandCompiler.extractIslands(src);
     for (const { block } of islands) {
       // dispatch "key" / get-store "key" 패턴
@@ -1799,7 +1799,7 @@ function validateArity(routes, helpers) {
   // 삼중/일반 문자열 안 JS(function(f){…}, appendChild(badge)) 를 FL 호출로 오인하지 않게 마스킹
   const sigs = new Map(); // name → {arity, file, variadic}
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const noComments = maskStringsPreserveLines(stripComments(src));
     for (const m of noComments.matchAll(/\(defn\s+([\w-]+)\s+\[([^\]]*)\]/g)) {
       const name = m[1];
@@ -1818,7 +1818,7 @@ function validateArity(routes, helpers) {
     'try','catch','str','map','filter','reduce','island','defstore','cond','case']);
 
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const noComments = maskStringsPreserveLines(stripComments(src));
     const base = path.basename(f);
     let i = 0;
@@ -1922,7 +1922,7 @@ const SERVER_ONLY = new Set([
 function validateIslandBoundary(routes) {
   const issues = [];
   for (const r of routes) {
-    let src; try { src = fs.readFileSync(r.file, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(r.file); } catch { continue; }
     const islands = islandCompiler.extractIslands(src);
     for (const { block } of islands) {
       const noStr = block.replace(/"[^"]*"/g, '""'); // 문자열 안 함수명 제외
@@ -2017,7 +2017,7 @@ function detectNameCollisions(routes, helpers) {
   // 각 파일의 defn 목록 (로드된 파일 포함)
   const fnMap = new Map(); // fnName → [file, ...]
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const base = path.basename(f);
     // (ns ...) 있으면 해당 파일은 접두사로 격리됨 — 충돌 없음
     if (/^\s*\(ns\s+[\w-]+\s*\)/m.test(src)) continue;
@@ -2093,7 +2093,7 @@ function checkReservedWords(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const hits = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src);
     const base = path.basename(f);
     for (const m of code.matchAll(/\((?:defn|define)\s+([\w$-]+)/g))
@@ -2155,7 +2155,7 @@ function checkBuiltinArity(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const issues = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = maskStringsPreserveLines(stripComments(src));
     const base = path.basename(f);
     let i = 0;
@@ -2188,7 +2188,7 @@ function checkCommentedDefn(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const hits = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const base = path.basename(f);
     let i = 0, line = 1;
     while (i < src.length) {
@@ -2232,7 +2232,7 @@ function checkCommentedDefn(routes, helpers) {
 function collectShortHelperNames(helpers) {
   const names = new Set([...KNOWN_STDLIB].filter(n => /^[a-z]$/i.test(n) || n === 'h!'));
   for (const f of helpers) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     for (const m of src.matchAll(/\(defn\s+([a-zA-Z!$][\w$!?-]*)/g)) {
       const n = m[1];
       if (/^[a-z]$/i.test(n) || n === 'h!' || n === 's') names.add(n);
@@ -2248,7 +2248,7 @@ function checkSingleCharShadow(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const hits = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src);
     const base = path.basename(f);
     for (const m of code.matchAll(/\((?:defn\s+[\w$-]+|fn)\s+\[([^\]]*)\]/g))
@@ -2357,7 +2357,7 @@ function checkHelperLetShadow(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const hits = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = maskStringsPreserveLines(stripComments(src));
     const base = path.basename(f);
     let searchFrom = 0;
@@ -2410,7 +2410,7 @@ function checkJsonParseHyphen(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const hits = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src);
     const base = path.basename(f);
     for (const m of code.matchAll(/\(json-parse\b/g))
@@ -2432,7 +2432,7 @@ function checkUpperHyphenIdent(routes, helpers) {
   const hits = [];
   const re = /\((?:define|defn)\s+([A-Z][A-Za-z0-9]*-[A-Za-z0-9-]+)/g;
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src);
     const base = path.basename(f);
     for (const m of code.matchAll(re)) {
@@ -2459,7 +2459,7 @@ function checkFlHttpAllow(routes, helpers) {
   let needsAllow = false;
   let evidence = '';
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     if (/\bafldb-/.test(src) || /https?:\/\/127\.0\.0\.1\b/.test(src) || /https?:\/\/localhost\b/.test(src)) {
       needsAllow = true;
       evidence = path.basename(f);
@@ -2516,7 +2516,7 @@ function checkReqKeyCollision(routes, helpers) {
     { re: /:name\s+"text"/g, kind: ':name "text"' },
   ];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src);
     const base = path.basename(f);
     for (const { re, kind } of patterns) {
@@ -2617,7 +2617,7 @@ function checkDbRowMutation(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const issues = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src);
     const base = path.basename(f);
 
@@ -2701,7 +2701,7 @@ function checkNullableConsumption(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const issues = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src); const base = path.basename(f);
     walkCalls(code, ({ head, ancestors, idx }) => {
       const parent = ancestors[ancestors.length - 1];
@@ -2726,7 +2726,7 @@ function checkLoopStrConcat(routes, helpers) {
   const allFiles = [...helpers, ...routes.map(r => r.file)];
   const issues = [];
   for (const f of allFiles) {
-    let src; try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let src; try { src = readPageSource(f); } catch { continue; }
     const code = stripComments(src); const base = path.basename(f);
     walkCalls(code, ({ head, ancestors, idx, getArgc }) => {
       if (head !== 'str') return;

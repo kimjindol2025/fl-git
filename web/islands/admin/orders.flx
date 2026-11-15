@@ -1,0 +1,82 @@
+(island AdminOrders []
+  (let [authorized (atom false)
+        password (atom "")
+        orders (atom [])
+        message (atom "")
+        reload (fn []
+                 (fetch! "GET" "/api/admin/orders" nil {"X-Admin-Password" @password}
+                   (fn [result]
+                     (let [data (get result "data")]
+                       (if (= (get result "ok") true)
+                         (do
+                           (reset! orders (or (get data "orders") []))
+                           (reset! message "주문 목록을 불러왔습니다."))
+                         (reset! message (or (get data "error") "주문 목록을 불러오지 못했습니다.")))))))
+        login (fn []
+                (let [candidate (.-value (.getElementById document "admin-order-password"))]
+                  (fetch! "GET" "/api/admin/orders" nil {"X-Admin-Password" candidate}
+                    (fn [result]
+                      (let [data (get result "data")]
+                        (if (= (get result "ok") true)
+                          (do
+                            (reset! password candidate)
+                            (reset! orders (or (get data "orders") []))
+                            (reset! authorized true)
+                            (reset! message "인증되었습니다."))
+                          (do
+                            (.reset (.getElementById document "admin-order-login"))
+                            (reset! message (or (get data "error") "인증에 실패했습니다.")))))))))
+        next-status (fn [status]
+                      (if (= status "접수")
+                        "준비중"
+                        (if (= status "준비중")
+                          "발송"
+                          (if (= status "발송") "완료" ""))))
+        advance (fn [order]
+                  (let [id (get order "order_id")
+                        status (next-status (get order "status"))]
+                    (if (= status "")
+                      (reset! message "완료된 주문입니다.")
+                      (fetch! "PUT" (str "/api/admin/order/" id) {"status" status} {"X-Admin-Password" @password}
+                        (fn [result]
+                          (let [data (get result "data")]
+                            (if (= (get result "ok") true)
+                              (do
+                                (reset! orders (map (fn [item]
+                                                      (if (= (get item "order_id") id)
+                                                        (assoc item "status" (get data "status"))
+                                                        item)) @orders))
+                                (reset! message "주문 상태를 변경했습니다."))
+                              (reset! message (or (get data "error") "상태 변경에 실패했습니다.")))))))))
+        logout (fn []
+                 (reset! password "")
+                 (reset! orders [])
+                 (reset! authorized false)
+                 (reset! message "로그아웃했습니다."))]
+    (if (not @authorized)
+      (h "section" {"class" "card"}
+        (h "h2" {} "관리자 인증")
+        (h "form" {"id" "admin-order-login" "autocomplete" "off"}
+          (h "label" {"for" "admin-order-password"} "관리자 암호")
+          (h "input" {"id" "admin-order-password" "type" "password" "autocomplete" "current-password" "required"})
+          (h "button" {"type" "button" :on-click login} "인증"))
+        (if (= @message "") "" (h "p" {"class" "order-error" "role" "status"} @message)))
+      (h "section" {}
+        (h "div" {"class" "admin-actions"}
+          (h "button" {"type" "button" "id" "orders-reload" :on-click reload} "새로고침")
+          (h "button" {"type" "button" "id" "orders-logout" :on-click logout} "로그아웃"))
+        (if (= (length @orders) 0)
+          (h "p" {"class" "card"} "접수된 주문이 없습니다.")
+          (h "div" {"class" "order-grid" "id" "admin-orders-list"}
+            (map (fn [order]
+                   (h "article" {"class" "order-row card"}
+                     (h "span" {} (str "주문번호 " (get order "order_id")))
+                     (h "span" {} (get order "created_at"))
+                     (h "span" {} (get order "recipient"))
+                     (h "span" {} (str (get order "total") "원 · " (get order "status")))
+                     (if (= (next-status (get order "status")) "")
+                       (h "span" {} "처리 완료")
+                       (h "button" {"type" "button" "class" "order-advance" :on-click (fn [] (advance order))}
+                         (str (next-status (get order "status")) "으로 변경")))))
+                 @orders)))
+        (if (= @message "") "" (h "p" {"class" "order-error" "role" "status"} @message))))))

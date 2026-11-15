@@ -58,10 +58,19 @@
 
 (defn generated-checkout-source []
   (str "; generated from .flp — do not edit\n"
-       "(defn render [req]\n  (let [cart (fl-cart-summary)]\n    (if (= (length (get cart \"items\")) 0)\n      (server_redirect \"/cart\")\n      (server_html (fl-layout \"주문서\" \"장바구니 상품을 확인하고 온라인 주문 정보를 입력하세요.\" (str \"<div class='order'><h1>주문서</h1><p>주문 금액: \" (get cart \"total\") \"원</p>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</div>\")))))\n"
+       "(defn render [req]\n  (let [cart (fl-cart-summary)]\n    (if (= (length (get cart \"items\")) 0)\n      (server_redirect \"/cart\")\n      (server_html (fl-layout \"주문서\" \"장바구니 상품을 확인하고 온라인 주문 정보를 입력하세요.\" (str \"<div class='order'><h1>주문서</h1><p>주문 금액: \" (get cart \"total\") \"원</p>\" \"ISLAND_PLACEHOLDER_0\" \"\" \"ISLAND_SCRIPTS\" \"</div>\"))))))\n"
        "(island OrderForm []\n  (let [items (atom [])\n        loaded (atom false)\n        submit-error (atom \"\")\n        load (fn []\n               (if (= @loaded false)\n                 (do\n                   (reset! loaded true)\n                   (fetch! \"/api/cart\" (fn [res] (reset! items (map (fn [item] {\"id\" (get item \"id\") \"quantity\" (get item \"quantity\")}) (or (get res \"items\") []))))))\n                 nil))\n        recipient-error (atom \"\")\n        phone-error (atom \"\")\n        address-error (atom \"\")\n        note-error (atom \"\")\n        submit (fn []\n                 (let [recipient (.-value (.getElementById document \"recipient\"))\n                       phone (.-value (.getElementById document \"phone\"))\n                       address (.-value (.getElementById document \"address\"))\n                       note (.-value (.getElementById document \"note\"))]\n                   (do\n                     (reset! recipient-error (if (= recipient \"\") \"받는 사람은 필수입니다.\" (if (or (< (length recipient) 2) (> (length recipient) 50)) \"받는 사람은 2~50자여야 합니다.\" \"\")))\n                     (reset! phone-error (if (or (= phone \"\") (not (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone))) \"전화번호 형식이 아닙니다.\" \"\"))\n                     (reset! address-error (if (= address \"\") \"주소는 필수입니다.\" (if (or (< (length address) 5) (> (length address) 200)) \"주소는 5~200자여야 합니다.\" \"\")))\n                     (reset! note-error (if (> (length note) 200) \"요청사항은 200자 이하입니다.\" \"\"))\n                     (if (and (= @recipient-error \"\") (= @phone-error \"\") (= @address-error \"\") (= @note-error \"\"))\n                       (fetch-result! \"POST\" \"/api/order\" {\"items\" @items \"recipient\" recipient \"phone\" phone \"address\" address \"note\" note}\n                         (fn [result]\n                           (let [data (get result \"data\")\n                                 errors (get data \"errors\")\n                                 first-error (first errors)]\n                             (if (= (get result \"ok\") true)\n                               (.assign (.-location window) (str \"/order/done?order_id=\" (get data \"order_id\")))\n                               (reset! submit-error (or (get first-error \"message\") (get data \"error\") \"주문을 처리하지 못했습니다.\"))))))\n                       nil)))))]\n    (load)\n    (h \"section\" {}\n      (h \"label\" {} \"받는 사람\")\n      (h \"input\" {\"id\" \"recipient\" \"placeholder\" \"테스트 주문자\"})\n      (if (= @recipient-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @recipient-error))\n      (h \"label\" {} \"전화번호\")\n      (h \"input\" {\"id\" \"phone\" \"placeholder\" \"010-0000-0000\"})\n      (if (= @phone-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @phone-error))\n      (h \"label\" {} \"주소\")\n      (h \"input\" {\"id\" \"address\" \"placeholder\" \"테스트 주소 1\"})\n      (if (= @address-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @address-error))\n      (h \"label\" {} \"요청사항\")\n      (h \"textarea\" {\"id\" \"note\" \"placeholder\" \"요청사항\"})\n      (if (= @note-error \"\") \"\" (h \"p\" {\"class\" \"error\"} @note-error))\n      (if (= @submit-error \"\") \"\" (h \"p\" {\"class\" \"error\" \"id\" \"order-submit-error\" \"role\" \"status\"} @submit-error))\n      (h \"button\" {\"id\" \"order-submit\" :on-click submit} \"주문하기\"))))\n"))
+; A generated page is server-only; the matching browser source keeps the entire Island.
+(defn write-island-page [server-path client-path source]
+  (let [start (str-index-of source "\n(island ")]
+    (if (< start 0)
+      false
+      (and (file_write server-path (str (str-slice source 0 start) "\n"))
+           (file_write client-path (str-slice source (+ start 1) (length source)))))))
+
 
 (let [source-dir (or (env-get "FLP_SOURCE_DIR") "web/pages")
+      island-dir (str (str-slice source-dir 0 (- (length source-dir) (length (last (regex_split source-dir "/"))))) "islands")
       list-file (str source-dir "/products.flp")
       detail-file (str source-dir "/products/[id].flp")
       cart-file (str source-dir "/cart.flp")
@@ -91,25 +100,22 @@
                (has? admin-source "protected = true")
                (has? admin-source "path = \"/api/admin/product\"")
                (has? admin-source "path = \"/api/admin/product/:id\""))
+                 (do (dir_create island-dir)
+                     (dir_create (str island-dir "/products"))
                  (if (and (file_write list-output (generated-list-source products))
-                 (file_write detail-output
+                 (write-island-page detail-output (str island-dir "/products/[id].flx")
                              (str-replace-in (generated-detail-source-v2)
                                              "__PRODUCT_ID__" ""))
                  (file_write cart-output (generated-cart-source))
-                 (file_write checkout-output
-                             (str-replace-in
-                               (str-replace-in
-                                 (str-replace-in (generated-checkout-source)
-                                                 "nil)))))]"
-                                                 "nil))))]")
-                                 "주문하기\"))))"
-                                 "주문하기\")))))")
-                               "(and (= @recipient-error \"\") (= @phone-error \"\") (= @address-error \"\") (= @note-error \"\"))"
-                               "(and (>= (length recipient) 2) (<= (length recipient) 50) (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone) (>= (length address) 5) (<= (length address) 200) (<= (length note) 200))"))
+                 (write-island-page checkout-output (str island-dir "/checkout.flx")
+                   (str-replace-in
+                     (str-replace-in (generated-checkout-source) "nil)))))]" "nil))))]")
+                     "(and (= @recipient-error \"\") (= @phone-error \"\") (= @address-error \"\") (= @note-error \"\"))"
+                     "(and (>= (length recipient) 2) (<= (length recipient) 50) (.test (RegExp \"^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$\") phone) (>= (length address) 5) (<= (length address) 200) (<= (length note) 200))"))
                  true)
           (do (file_delete output)
           (println "FLP_COMPILE_EXIT=0")
           )
-          (println "FLP_COMPILE_EXIT=1"))
+          (println "FLP_COMPILE_EXIT=1")))
         (do (file_delete output) (println "FLP_COMPILE_EXIT=1"))))
     (do (file_delete output) (println "FLP_COMPILE_EXIT=1"))))

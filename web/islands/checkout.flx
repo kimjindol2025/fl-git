@@ -1,0 +1,50 @@
+(island OrderForm []
+  (let [items (atom [])
+        loaded (atom false)
+        submit-error (atom "")
+        load (fn []
+               (if (= @loaded false)
+                 (do
+                   (reset! loaded true)
+                   (fetch! "/api/cart" (fn [res] (reset! items (map (fn [item] {"id" (get item "id") "quantity" (get item "quantity")}) (or (get res "items") []))))))
+                 nil))
+        recipient-error (atom "")
+        phone-error (atom "")
+        address-error (atom "")
+        note-error (atom "")
+        submit (fn []
+                 (let [recipient (.-value (.getElementById document "recipient"))
+                       phone (.-value (.getElementById document "phone"))
+                       address (.-value (.getElementById document "address"))
+                       note (.-value (.getElementById document "note"))]
+                   (do
+                     (reset! recipient-error (if (= recipient "") "받는 사람은 필수입니다." (if (or (< (length recipient) 2) (> (length recipient) 50)) "받는 사람은 2~50자여야 합니다." "")))
+                     (reset! phone-error (if (or (= phone "") (not (.test (RegExp "^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$") phone))) "전화번호 형식이 아닙니다." ""))
+                     (reset! address-error (if (= address "") "주소는 필수입니다." (if (or (< (length address) 5) (> (length address) 200)) "주소는 5~200자여야 합니다." "")))
+                     (reset! note-error (if (> (length note) 200) "요청사항은 200자 이하입니다." ""))
+                     (if (and (>= (length recipient) 2) (<= (length recipient) 50) (.test (RegExp "^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$") phone) (>= (length address) 5) (<= (length address) 200) (<= (length note) 200))
+                       (fetch-result! "POST" "/api/order" {"items" @items "recipient" recipient "phone" phone "address" address "note" note}
+                         (fn [result]
+                           (let [data (get result "data")
+                                 errors (get data "errors")
+                                 first-error (first errors)]
+                             (if (= (get result "ok") true)
+                               (.assign (.-location window) (str "/order/done?order_id=" (get data "order_id")))
+                               (reset! submit-error (or (get first-error "message") (get data "error") "주문을 처리하지 못했습니다."))))))
+                       nil))))]
+    (load)
+    (h "section" {}
+      (h "label" {} "받는 사람")
+      (h "input" {"id" "recipient" "placeholder" "테스트 주문자"})
+      (if (= @recipient-error "") "" (h "p" {"class" "error"} @recipient-error))
+      (h "label" {} "전화번호")
+      (h "input" {"id" "phone" "placeholder" "010-0000-0000"})
+      (if (= @phone-error "") "" (h "p" {"class" "error"} @phone-error))
+      (h "label" {} "주소")
+      (h "input" {"id" "address" "placeholder" "테스트 주소 1"})
+      (if (= @address-error "") "" (h "p" {"class" "error"} @address-error))
+      (h "label" {} "요청사항")
+      (h "textarea" {"id" "note" "placeholder" "요청사항"})
+      (if (= @note-error "") "" (h "p" {"class" "error"} @note-error))
+      (if (= @submit-error "") "" (h "p" {"class" "error" "id" "order-submit-error" "role" "status"} @submit-error))
+      (h "button" {"id" "order-submit" :on-click submit} "주문하기"))))
