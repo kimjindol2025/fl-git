@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+NATIVE_TOOL="${FREELANG_NATIVE_FLGIT:-}"
 if [[ "${1:-}" == "tui" ]]; then
   NATIVE_TUI="${FREELANG_NATIVE_FLGIT_TUI:-}"
   if [[ -z "$NATIVE_TUI" || ! -x "$NATIVE_TUI" ]]; then
@@ -8,11 +9,15 @@ if [[ "${1:-}" == "tui" ]]; then
     echo "CAUSE=Set FREELANG_NATIVE_FLGIT_TUI to the verified Native TUI executable." >&2
     exit 2
   fi
+  if [[ -z "$NATIVE_TOOL" || ! -x "$NATIVE_TOOL" ]]; then
+    echo "FL_GIT_NATIVE=BLOCKED" >&2
+    echo "CAUSE=Set FREELANG_NATIVE_FLGIT to the verified Native fl-git executable with TTY host support." >&2
+    exit 2
+  fi
   shift
-  exec "$NATIVE_TUI" "$@"
+  exec "$NATIVE_TOOL" __native-tui-host "$NATIVE_TUI" "$@"
 fi
 
-NATIVE_TOOL="${FREELANG_NATIVE_FLGIT:-}"
 if [[ -z "$NATIVE_TOOL" || ! -x "$NATIVE_TOOL" ]]; then
   echo "FL_GIT_NATIVE=BLOCKED" >&2
   echo "CAUSE=Set FREELANG_NATIVE_FLGIT to the verified Native fl-git executable." >&2

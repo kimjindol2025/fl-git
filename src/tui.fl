@@ -20,23 +20,23 @@
   (print "\x1b[?1000l\x1b[?1006l"))
 
 (defn tui-drain-csi []
-  (let [b (tty-read-byte)]
+  (let [b (tty-read-byte 100)]
     (cond
       (nil? b) nil
       (and (>= b 64) (<= b 126)) nil
       true (tui-drain-csi))))
 
 (defn tui-read-sgr-body [acc]
-  (let [b (tty-read-byte)]
+  (let [b (tty-read-byte 100)]
     (cond
       (nil? b) (tui-parse-sgr acc "")
       (or (= b 77) (= b 109)) (tui-parse-sgr acc (char-from-code b))
       true (tui-read-sgr-body (str acc (char-from-code b))))))
 
 (defn tui-read-x10-body []
-  (let [cb (tty-read-byte)
-        cx (tty-read-byte)
-        cy (tty-read-byte)]
+  (let [cb (tty-read-byte 100)
+        cx (tty-read-byte 100)
+        cy (tty-read-byte 100)]
     (if (or (nil? cb) (nil? cx) (nil? cy))
       {"type" "none"}
       {"type" "mouse"
@@ -46,17 +46,18 @@
        "press" true})))
 
 (defn tui-read-escape []
-  (let [b1 (tty-read-byte)]
+  (let [b1 (tty-read-byte 100)]
     (cond
       (nil? b1) {"type" "key" "code" 27}
       (not (= b1 91)) {"type" "key" "code" 27}
       true
-        (let [b2 (tty-read-byte)]
+        (let [b2 (tty-read-byte 100)]
           (cond
             (nil? b2) {"type" "key" "code" 27}
             (= b2 60) (tui-read-sgr-body "")
             (= b2 77) (tui-read-x10-body)
-            true (do (tui-drain-csi) {"type" "none"}))))))
+            true (do (if (and (>= b2 64) (<= b2 126)) nil (tui-drain-csi))
+                     {"type" "none"}))))))
 
 (defn tui-read-event []
   (let [b (tty-read-byte)]

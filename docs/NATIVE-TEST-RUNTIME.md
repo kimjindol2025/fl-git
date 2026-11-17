@@ -18,7 +18,9 @@ scripts/fl-test runner were preserved.
 
 Each file is compiled separately to C by the verified Native FX compiler,
 syntax checked during GCC compilation, linked with that compiler's runtime
-and executed with the original runner's ten-second bound. The validation
+and executed with the Native evidence harness's ten-second bound. The
+original scripts/fl-test performs Node-based check and run calls without
+setting that timeout itself. The validation
 checks exit status, stderr, the actual passing summary and absence of FAILED.
 The process trace records zero Node/npm/npx/bun/deno executions. Compilation
 and execution use the shared heavy-work lock and two-GiB virtual-memory cap.
@@ -43,12 +45,31 @@ reference interpreter's entire static-check behavior. Current Node parity,
 browser flows, web builder/dev-server migration and the supported Native test
 launcher remain pending. New JS files: 0; JS line changes: 0.
 
+The preserved runner invokes reference `check` before `run`. Source inspection
+of that check command confirms a wider contract than C compilation alone:
+
+| Check component | Required Native migration evidence |
+|---|---|
+| Lexing and parsing | Reject malformed delimiters and unterminated literals with a real diagnostic |
+| Function metadata | Preserve missing :context/:returns diagnostics |
+| Effects | Preserve declared-effect and pure-function diagnostics and the command mode's exit behavior |
+| Types | Preserve type errors, warnings and failure exit status |
+| JSON mode | Preserve freelang.diagnostic.v1 fields and severity/status behavior |
+
+The current self parser's delimiter-consumption helpers tolerate missing
+closing delimiters; the string reader also accepts end-of-file. These need
+independent negative syntax coverage before the Native compiler is used as
+the syntax-check replacement. The reference text and JSON modes differ in
+their pure-effect failure exit behavior; this difference must be measured
+and documented rather than silently normalized. None of these pending checks
+is counted as completed by the 71 executed unit assertions.
+
 Reproduction records are retained privately under evidence identifier
 native-test-forms.idxwvm; host paths and owners are <가림>. Compiler hashes,
 fixed-point comparisons and release limitations are also recorded in the FX
 docs/COMMERCIAL-NATIVE-WORKLOG.md.
 
-Final artifact receipt (2026-11-18 KST):
+Earlier testing-form receipt (2026-11-18 KST):
 
 - FX source commit:
   bdf96424b2200a15d85b131ccc9219a8b5fd9959.
@@ -65,3 +86,22 @@ Final artifact receipt (2026-11-18 KST):
   The seed was not replaced or regenerated. The protected official verifier
   still pins an earlier input and is NOT_RUN; the exact Native stage
   comparisons above use a separate evidence harness with the existing recipe.
+
+The latest terminal/value milestone regenerated the compiler and original test
+programs from the current FX source: frontend 71/71, CLI 22/22, FX regressions
+11/11 and checker 32/32 plus default pages all passed, exit 0. Exact Stage
+2/3/4 C SHA-256 is
+69ec33d69ea93079296fa5723cc84e4b5b50e4466a6bd43d379385056bc72999;
+Stage 3 ELF is
+54d85380a55275e5ecce727e2e491e8acfb5fe015d701f2cc21ae0a217bf1d88.
+The same pass includes original DB cases 7/13/36/40 and zero Node-family
+executions in collected traces. Full DB 71-case rerun remains NOT_RUN.
+
+Native syntax, metadata/effect and best-effort type components now exist in
+FreeLang, but CLI diagnostic integration is incomplete. Independent checks
+exposed and corrected non-tail call values escaping as trampoline requests,
+flat cond branches disappearing inside loops and quadratic character splits.
+The original syntax contract including a 100k-character literal passes 5/5;
+the split/Unicode/NUL contract passes 6/6. Final metadata/type verification passed 7/7 and 10/10 with the same
+verified compiler and runtime, exit 0. These module checks are not the complete reference
+check contract or a Node parity result. Existing Node runners remain intact.

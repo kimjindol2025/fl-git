@@ -25,6 +25,8 @@
   (cond
   (= cli_command "help") (help)
   (= cli_command "--help") (help)
+  (= cli_command "__native-tui-host")
+    (process-exit (tty-run first-arg (slice args 2 (length args)) "\x1b[?1000l\x1b[?1006l"))
   (= cli_command "status") (git-status)
   (= cli_command "diff") (git-diff)
   (= cli_command "log") (git-log)
