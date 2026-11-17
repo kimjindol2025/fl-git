@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+TEST_ROOT="${FREELANG_TEST_ROOT:-$ROOT/tests}"
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+RUNTIME_ARCHIVE="${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}"
+RUNTIME_INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
+NATIVE_CC="${CC:-gcc}"
+ARTIFACTS="${FREELANG_NATIVE_TEST_ARTIFACTS:-}"
+
+blocked() {
+  echo "FREELANG_TEST=BLOCKED"
+  printf 'CAUSE=%s\n' "$1" >&2
+  exit 2
+}
+
+[[ -n "$COMPILER" && -x "$COMPILER" ]] ||
+  blocked "Set FREELANG_NATIVE_COMPILER to the verified Native FX compiler."
+[[ -n "$RUNTIME_ARCHIVE" && -f "$RUNTIME_ARCHIVE" ]] ||
+  blocked "Set FREELANG_NATIVE_RUNTIME_ARCHIVE to its matching Native runtime archive."
+[[ -n "$RUNTIME_INCLUDE" && -f "$RUNTIME_INCLUDE/runtime.h" ]] ||
+  blocked "Set FREELANG_NATIVE_RUNTIME_INCLUDE to its matching runtime headers."
+command -v "$NATIVE_CC" >/dev/null 2>&1 ||
+  blocked "The configured C compiler is unavailable."
+[[ -d "$TEST_ROOT" ]] || blocked "Test directory does not exist."
+TEST_ROOT="$(cd -- "$TEST_ROOT" && pwd -P)"
+
+if [[ -n "$ARTIFACTS" ]]; then
+  [[ -d "$ARTIFACTS" ]] || blocked "Native test artifact directory does not exist."
+  RUN_DIR="$(mktemp -d -- "$ARTIFACTS/fl-test-native.XXXXXX")"
+else
+  RUN_DIR="$(mktemp -d -- "${TMPDIR:-/tmp}/fl-test-native.XXXXXX")"
+  trap 'rm -rf -- "$RUN_DIR"' EXIT
+fi
+
+if ! find "$TEST_ROOT" -type f -name '*.test.fl' -print0 | sort -z >"$RUN_DIR/test-files"; then
+  blocked "Unable to enumerate test files."
+fi
+mapfile -d '' -t TEST_FILES <"$RUN_DIR/test-files"
+if [[ "${#TEST_FILES[@]}" -eq 0 ]]; then
+  echo "FREELANG_TEST=NO_TESTS"
+  exit 0
+fi
+
+index=0
+for test_file in "${TEST_FILES[@]}"; do
+  relative="${test_file#"$ROOT/"}"
+  echo "[fl-test-native] check $relative"
+  "$COMPILER" --check "$test_file"
+
+  case_dir="$RUN_DIR/case-$index"
+  mkdir -- "$case_dir"
+  echo "[fl-test-native] run $relative"
+  if ! "$COMPILER" "$test_file" "$case_dir/test.c" >"$case_dir/generate.log" 2>&1 ||
+     grep -q '\[CGC-ERR\]' "$case_dir/generate.log"; then
+    cat "$case_dir/generate.log"
+    echo "FREELANG_TEST=FAIL"
+    exit 1
+  fi
+  if ! "$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-declaration \
+      -I "$RUNTIME_INCLUDE" -o "$case_dir/test" "$case_dir/test.c" \
+      -Wl,--whole-archive "$RUNTIME_ARCHIVE" -Wl,--no-whole-archive \
+      -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$case_dir/build.log" 2>&1; then
+    cat "$case_dir/build.log"
+    echo "FREELANG_TEST=FAIL"
+    exit 1
+  fi
+  if ! "$case_dir/test" >"$case_dir/output.log" 2>&1; then
+    cat "$case_dir/output.log"
+    echo "FREELANG_TEST=FAIL"
+    exit 1
+  fi
+  cat "$case_dir/output.log"
+  if ! grep -Eq '^Test Results: [0-9]+/[0-9]+ passed$' "$case_dir/output.log" ||
+     grep -q 'FAILED' "$case_dir/output.log"; then
+    printf '[fl-test-native] missing passing summary: %s\n' "$relative" >&2
+    echo "FREELANG_TEST=FAIL"
+    exit 1
+  fi
+  index=$((index + 1))
+done
+
+echo "FREELANG_TEST=PASS"

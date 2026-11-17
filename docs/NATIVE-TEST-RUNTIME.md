@@ -1,4 +1,88 @@
-# Native unit execution evidence
+# Native test launcher
+
+scripts/fl-test-native checks, compiles and executes the existing FreeLang
+unit files without Node fallback. The original scripts/fl-test, tests,
+assertions and expected values remain unchanged. The default Node launcher
+has not yet been migrated.
+
+Set the following to artifacts from the same verified Native FX build:
+
+- FREELANG_NATIVE_COMPILER: executable compiler with --check support.
+- FREELANG_NATIVE_RUNTIME_ARCHIVE: matching runtime archive.
+- FREELANG_NATIVE_RUNTIME_INCLUDE: directory containing its runtime.h.
+- CC: optional C compiler executable, default gcc.
+- FREELANG_TEST_ROOT: optional test directory, default repository tests.
+- FREELANG_NATIVE_TEST_ARTIFACTS: optional existing directory for retained logs.
+
+~~~sh
+scripts/fl-test-native
+~~~
+
+The caller supplies the approved dependency environment. Temporary curl
+include/link/runtime paths are supplied only through process environment
+variables, never embedded in the launcher. There is no system installation,
+binary search, download or Node fallback. Host paths and owners: <가림>.
+
+Each discovered *.test.fl file is checked first with the Native --check text
+command, compiled to C, linked with the supplied runtime and executed. A
+compiler error or [CGC-ERR] stops before GCC. Process failure, missing test
+summary or a FAILED marker fails the entry. Missing tools/inputs and failed
+discovery report BLOCKED; an empty suite reports NO_TESTS. Generated programs
+run in the caller's working directory, preserving existing test behavior.
+The entry adds no timeout; the caller retains the existing execution policy.
+
+## Current verification
+
+| Evidence | Result |
+|---|---|
+| Existing seven test files | 71/71, exit 0 |
+| Native source check before run | 7/7 |
+| Assertion failure and missing summary controls | Fail, exit 1 |
+| Malformed source and unsupported Native block controls | Fail, exit 1; no GCC invocation |
+| Empty discovery control | NO_TESTS, exit 0 |
+| Missing compiler and unreadable discovery controls | BLOCKED, exit 2 |
+| Native entry traces | 0 Node-family executions, 0 network request syscalls |
+| Reference source-check comparison on the seven files | JSON/text 14/14 identical stdout, stderr and exit |
+| Fresh compiler fixed point | Stage 2 = Stage 3 = Stage 4, exact C bytes |
+| Latest core coverage | CLI 22/22, FX 11/11, page checker 32/32 plus defaults |
+| Fresh terminal coverage | raw/owner, character 4/4, 18 host markers, Enter/menu restoration |
+
+The reference was used only for diagnostic comparison, with no Node build
+stage. Synthetic checks matched 26/27 JSON payloads, 26/27 text outputs and
+53/54 exits. The one difference is an effect inside an array in a declared
+pure function: Native detects the violation missed by the reference. This
+stricter result is retained. All source grammar, arbitrary IO errors and
+type-system completeness are not established by these counts.
+
+Generated Stage 2/3/4 C SHA-256:
+4e589203e96b1cbfa8e4983439df33ab9a471daa3c95f5d4d89f99573c139c7e.
+Verified Stage 3 ELF SHA-256:
+24355a87f854de32775c65773663f32050f4cc5c0b2e156b964966ea356f7fa3.
+Generation took 38.80 / 39.58 seconds with peak RSS
+1,514,012 / 1,515,368 KiB under the unchanged two-GiB cap.
+Seed before/after:
+0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767.
+No seed was replaced or regenerated. The protected bootstrap verifier pins
+an older seed and remains NOT_RUN.
+
+A private validation log used an incorrect record separator; its raw bytes
+were preserved and independently verified before downstream execution.
+The initial downstream gate failure ran no product tests. The corrected
+evidence harness then verified all 71 assertions and seven controls without
+changing product tests, outputs or limits.
+
+Receipts: native-check-fixedpoint.6o1yXU,
+native-check-command-final.nSZaNo, native-check-core-final.dtc39N,
+native-test-launcher-v2.Gs7UX1 and native-terminal-check-build.ZgoNCk.
+FX implementation commit: 2e402673dc0fc5b30450c316934e8bd4d7ae492c.
+
+Browser/app flows, web build/dev server, default entry migration, full Native
+API coverage and production dependency packaging remain pending. Full DB95
+71-case rerun is NOT_RUN. New JS files: 0; JS line changes: 0.
+
+## Historical implementation receipts
+
+# Earlier Native unit execution evidence
 
 The seven existing tests/*.test.fl files can now compile and execute as
 Native programs with the FX testing forms and shell API implemented on
