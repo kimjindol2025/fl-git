@@ -7,12 +7,12 @@
 (load "./provider.fl")
 
 (defn provider-redact [text]
-  (let [step1 (regex-replace (str text) "Token: \\S+" "Token: [redacted]")
-        step2 (regex-replace step1 "GH_TOKEN=\\S+" "GH_TOKEN=[redacted]")
-        step3 (regex-replace step2 "GITHUB_TOKEN=\\S+" "GITHUB_TOKEN=[redacted]")
-        step4 (regex-replace step3 "gho_\\S+" "gho_[redacted]")
-        step5 (regex-replace step4 "ghp_\\S+" "ghp_[redacted]")
-        step6 (regex-replace step5 "glpat-\\S+" "glpat-[redacted]")]
+  (let [step1 (regex_replace (str text) "Token: \\S+" "Token: [redacted]")
+        step2 (regex_replace step1 "GH_TOKEN=\\S+" "GH_TOKEN=[redacted]")
+        step3 (regex_replace step2 "GITHUB_TOKEN=\\S+" "GITHUB_TOKEN=[redacted]")
+        step4 (regex_replace step3 "gho_\\S+" "gho_[redacted]")
+        step5 (regex_replace step4 "ghp_\\S+" "ghp_[redacted]")
+        step6 (regex_replace step5 "glpat-\\S+" "glpat-[redacted]")]
     step6))
 
 (defn provider-shell [command]
