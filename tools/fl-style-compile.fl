@@ -1,0 +1,59 @@
+; Native CSS entry. Compilation writes only the requested output directory.
+(load "./front-style.fl")
+
+(defn fl-style-read [file]
+  ; Use the existing no-follow file module for both page and directory input.
+  ; The result-style IO API follows symlinks unless FL_FILE_BASE is configured.
+  (file_read file))
+
+(defn fl-style-source-files [directory]
+  (let [entries (map (fn [entry] (get entry "name"))
+                    (arr-sort-by (map (fn [name] {"name" name}) (dir_list directory)) "name"))]
+    (reduce
+      (fn [found name]
+        (let [path (str directory "/" name)]
+          (if (file_is_file path)
+            (if (str-ends-with name ".flx") (push found path) found)
+            (concat found (fl-style-source-files path)))))
+      [] entries)))
+
+(defn fl-style-collect [files]
+  (reduce
+    (fn [state file]
+      (reduce
+        (fn [state parsed]
+          (let [name (get parsed "name")]
+            (if (has-key? (get state "values") name) state
+              {"names" (push (get state "names") name)
+               "values" (assoc (get state "values") name (fl-style-build name parsed))})))
+        state (fl-style-extract (fl-style-read file))))
+    {"names" [] "values" {}} files))
+
+(defn fl-style-compile [pages-directory output-directory]
+  (let [collected (fl-style-collect (fl-style-source-files pages-directory))
+        names (get collected "names")
+        values (get collected "values")
+        lines (concat ["/* FL-Front 자동 생성 — 직접 수정 금지 */"]
+                      (map (fn [name] (get (get values name) "css")) names))
+        css-path (str output-directory "/app.css")]
+    (dir_create output-directory)
+    (file_write css-path (str (str-join lines "\n") "\n"))
+    {"cssPath" css-path
+     "bindings" (map (fn [name] {"name" name "cls" (get (get values name) "cls")}) names)}))
+
+(defn fl-style-command [args]
+  (cond
+    [(and (= (length args) 2) (= (get args 0) "--page"))
+     (println (json-str (fl-style-page-css (fl-style-read (get args 1)))))]
+    [(and (= (length args) 3) (= (get args 0) "--compile"))
+     (println (json-str (fl-style-compile (get args 1) (get args 2))))]
+    [true
+     (do
+       (println "Usage: fl-style-compile-native --page <file> | --compile <pages-dir> <output-dir>")
+       (process-exit 2))]))
+
+(try
+  (fl-style-command (cli-args))
+  (catch e
+    (println (json-str {"schema" "fl-style/1" "status" "error" "error" (error-message e)}))
+    (process-exit 1)))

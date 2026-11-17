@@ -1,0 +1,181 @@
+; Native FL-Front style component. Module loading performs no IO.
+; Preserve the legacy declaration, JSON ordering and UTF-16 class hash.
+
+(define FL-STYLE-PROPS {"bg" "background" "bg-img" "background-image" "bg-size" "background-size" "color" "color" "size" "font-size" "weight" "font-weight" "font" "font-family" "align" "text-align" "decoration" "text-decoration" "lh" "line-height" "ws" "white-space" "p" "padding" "pt" "padding-top" "pb" "padding-bottom" "pl" "padding-left" "pr" "padding-right" "m" "margin" "mt" "margin-top" "mb" "margin-bottom" "ml" "margin-left" "mr" "margin-right" "width" "width" "height" "height" "min-w" "min-width" "max-w" "max-width" "min-h" "min-height" "max-h" "max-height" "radius" "border-radius" "border" "border" "border-top" "border-top" "border-color" "border-color" "outline" "outline" "shadow" "box-shadow" "display" "display" "flex" "flex" "flex-dir" "flex-direction" "flex-wrap" "flex-wrap" "items" "align-items" "justify" "justify-content" "gap" "gap" "position" "position" "top" "top" "bottom" "bottom" "left" "left" "right" "right" "z" "z-index" "inset" "inset" "overflow" "overflow" "cursor" "cursor" "opacity" "opacity" "transition" "transition" "transform" "transform" "aspect" "aspect-ratio" "object" "object-fit"})
+(define FL-STYLE-SHADOW
+  {"sm" "0 1px 3px rgba(0,0,0,.12)" "md" "0 4px 12px rgba(0,0,0,.15)"
+   "lg" "0 8px 24px rgba(0,0,0,.18)" "xl" "0 16px 40px rgba(0,0,0,.22)" "none" "none"})
+(define FL-STYLE-PSEUDOS
+  ["hover" "focus" "active" "visited" "disabled" "checked" "focus-within" "focus-visible" "placeholder"])
+(define FL-STYLE-BREAKPOINTS {"xl" "1280px" "lg" "1024px" "md" "768px" "sm" "640px"})
+
+(defn fl-style-unit-code [unit]
+  ; split("") supplies UTF-16 units in UTF-8/WTF-8 storage; the legacy
+  ; char-code-at API accesses bytes, so decode the stored unit explicitly.
+  (let [a (char-code-at unit 0)]
+    (cond
+      [(< a 128) a]
+      [(< a 224) (+ (* (bit-and a 31) 64) (bit-and (char-code-at unit 1) 63))]
+      [true (+ (* (bit-and a 15) 4096)
+               (* (bit-and (char-code-at unit 1) 63) 64)
+               (bit-and (char-code-at unit 2) 63))])))
+
+(defn fl-style-hex [number]
+  (if (= number 0) "0"
+    (loop [remaining number text ""]
+      (if (= remaining 0) text
+        (let [digit (mod remaining 16)]
+          (recur (math-floor (/ remaining 16))
+                 (str (str-slice "0123456789abcdef" digit (+ digit 1)) text)))))))
+
+(defn fl-style-hash [text]
+  (let [units (str-split text "")
+        value (reduce (fn [hash unit]
+                        (bit-and (bit-xor (* hash 33) (fl-style-unit-code unit)) 4294967295))
+                      5381 units)]
+    (str-slice (fl-style-hex value) 0 4)))
+
+(defn fl-style-key [pair]
+  (regex_find pair "^:[\\w-]+"))
+
+(defn fl-style-parse [block]
+  (let [prefix (regex_find block "^\\(style\\s+[\\w-]+")]
+    (if (= prefix nil) nil
+      (let [name (regex_replace prefix "^\\(style\\s+" "")
+            quoted (regex_find_all block "(:[\\w-]+)\\s+\"([^\"]+)\"")
+            numeric (regex_find_all block "(:[\\w-]+)\\s+(\\d[\\d.]*)")
+            strings (map (fn [pair]
+                           (let [at (str-index-of pair "\"")]
+                             [(fl-style-key pair) (str-slice pair (+ at 1) (- (length pair) 1))]))
+                         quoted)
+            pairs (reduce
+                    (fn [found pair]
+                      (let [key (fl-style-key pair)]
+                        (if (> (length (filter (fn [item] (= (get item 0) key)) found)) 0)
+                          found
+                          (push found [key (regex_replace pair "^:[\\w-]+\\s+" "")]))))
+                    strings numeric)]
+        (reduce
+          (fn [parsed pair]
+            (let [key (str-slice (get pair 0) 1 (length (get pair 0)))
+                  pseudo (first (filter (fn [pc] (str-starts-with key (str pc "-"))) FL-STYLE-PSEUDOS))
+                  breakpoint (first (filter (fn [bp] (str-starts-with key (str bp "-"))) ["sm" "md" "lg" "xl"]))]
+              (if (not (= pseudo nil))
+                (let [groups (get parsed "pseudo")
+                      prop (str-slice key (+ (length pseudo) 1) (length key))]
+                  (assoc parsed "pseudo" (assoc groups pseudo
+                    (push (or (get groups pseudo) []) [(str ":" prop) (get pair 1)]))))
+                (if (not (= breakpoint nil))
+                  (let [groups (get parsed "responsive")
+                        prop (str-slice key (+ (length breakpoint) 1) (length key))]
+                    (assoc parsed "responsive" (assoc groups breakpoint
+                      (push (or (get groups breakpoint) []) [(str ":" prop) (get pair 1)]))))
+                  (assoc parsed "base" (push (get parsed "base") pair))))))
+          {"name" name "base" [] "pseudo" {} "responsive" {} "warnings" []}
+          pairs)))))
+
+(defn fl-style-declaration [pair]
+  (let [key (str-slice (get pair 0) 1 (length (get pair 0)))
+        original (get pair 1)
+        value (if (= key "shadow") (or (get FL-STYLE-SHADOW original) original) original)
+        property (get FL-STYLE-PROPS key)]
+    (cond
+      [(= key "truncate") "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"]
+      [(= key "px") (str "padding-left:" value ";padding-right:" value ";")]
+      [(= key "py") (str "padding-top:" value ";padding-bottom:" value ";")]
+      [(= key "mx") (str "margin-left:" value ";margin-right:" value ";")]
+      [(= key "my") (str "margin-top:" value ";margin-bottom:" value ";")]
+      [(= key "cols") (str "grid-template-columns:repeat(" value ",1fr);")]
+      [(= key "col-span") (str "grid-column:span " value ";")]
+      [(= key "rows") (str "grid-template-rows:repeat(" value ",1fr);")]
+      [(= key "pointer") (str "pointer-events:" value ";")]
+      [(= key "select") (str "user-select:" value ";")]
+      [(not (= property nil)) (str property ":" value ";")]
+      [true ""])))
+
+(defn fl-style-declarations [pairs]
+  (str-join (map fl-style-declaration pairs) ""))
+
+(defn fl-style-build [name parsed]
+  (let [base (get parsed "base")
+        pseudo (get parsed "pseudo")
+        responsive (get parsed "responsive")
+        key (json-str {"base" base "pseudo" pseudo "responsive" responsive})
+        cls (str (str-replace-in name "-" "_") "__" (fl-style-hash (str name key)))
+        declarations (fl-style-declarations base)
+        rules (if (= declarations "") [] [(str "." cls "{" declarations "}")])
+        with-pseudo
+          (reduce (fn [found pc]
+                    (let [decls (fl-style-declarations (get pseudo pc))]
+                      (if (= decls "") found (push found (str "." cls ":" pc "{" decls "}")))))
+                  rules (keys pseudo))
+        with-responsive
+          (reduce (fn [found bp]
+                    (let [decls (fl-style-declarations (or (get responsive bp) []))]
+                      (if (= decls "") found
+                        (push found (str "@media(max-width:" (get FL-STYLE-BREAKPOINTS bp)
+                                         "){." cls "{" decls "}}")))))
+                  with-pseudo ["xl" "lg" "md" "sm"])]
+    {"cls" cls "css" (str-join with-responsive " ")}))
+
+(defn fl-style-triple? [units index]
+  (and (= (get units index) "\"")
+       (= (get units (+ index 1)) "\"")
+       (= (get units (+ index 2)) "\"")))
+
+(defn fl-style-string-end [units start]
+  (let [triple (fl-style-triple? units start)
+        width (if triple 3 1)]
+    (loop [index (+ start width)]
+      (cond
+        [(>= index (length units)) (throw "E_STYLE_STRING: unterminated string")]
+        [(and triple (fl-style-triple? units index)) (+ index 3)]
+        [(and (not triple) (= (get units index) "\"")) (+ index 1)]
+        [(and (not triple) (= (get units index) "\\")) (recur (+ index 2))]
+        [true (recur (+ index 1))]))))
+
+(defn fl-style-comment-end [units start]
+  (loop [index start]
+    (if (or (>= index (length units)) (= (get units index) "\n"))
+      index (recur (+ index 1)))))
+
+(defn fl-style-form-end [units start]
+  (loop [index (+ start 1) depth 1]
+    (if (>= index (length units)) (throw "E_STYLE_UNCLOSED: missing style close delimiter")
+      (let [char (get units index)]
+        (cond
+          [(= char "\"") (recur (fl-style-string-end units index) depth)]
+          [(= char ";") (recur (fl-style-comment-end units index) depth)]
+          [(= char "(") (recur (+ index 1) (+ depth 1))]
+          [(= char ")") (if (= depth 1) (+ index 1) (recur (+ index 1) (- depth 1)))]
+          [true (recur (+ index 1) depth)])))))
+
+(defn fl-style-extract [source]
+  (let [units (str-split source "")]
+    (loop [index 0 styles []]
+      (if (>= index (length units)) styles
+        (let [char (get units index)]
+          (cond
+            [(= char "\"") (recur (fl-style-string-end units index) styles)]
+            [(= char ";") (recur (fl-style-comment-end units index) styles)]
+            [(and (= char "(")
+                  (= (get units (+ index 1)) "s")
+                  (= (get units (+ index 2)) "t")
+                  (= (get units (+ index 3)) "y")
+                  (= (get units (+ index 4)) "l")
+                  (= (get units (+ index 5)) "e")
+                  (= (get units (+ index 6)) " "))
+             (let [end (fl-style-form-end units index)
+                   block (str-slice source index end)
+                   parsed (fl-style-parse block)]
+               (recur end (if (= parsed nil) styles
+                            (push styles (assoc (assoc (assoc parsed "block" block) "start" index) "end" end)))))]
+            [true (recur (+ index 1) styles)]))))))
+
+(defn fl-style-page-css [source]
+  (let [styles (fl-style-extract source)
+        built (map (fn [parsed] (assoc (fl-style-build (get parsed "name") parsed) "name" (get parsed "name"))) styles)
+        css (str-join (map (fn [item] (get item "css")) built) " ")]
+    {"css" (if (= (length styles) 0) "" (str "<style>" css "</style>"))
+     "bindings" (map (fn [item] {"name" (get item "name") "cls" (get item "cls")}) built)
+     "rawCss" css}))

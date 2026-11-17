@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+STYLE_TOOL="${FREELANG_NATIVE_STYLE_TOOL:-}"
+if [[ -z "$STYLE_TOOL" || ! -x "$STYLE_TOOL" ]]; then
+  echo "FL_STYLE_NATIVE_COMPILE=BLOCKED"
+  echo "CAUSE=Set FREELANG_NATIVE_STYLE_TOOL to the verified Native CSS compiler." >&2
+  exit 2
+fi
+exec "$STYLE_TOOL" "$@"
