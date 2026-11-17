@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+TARGET="${1:-$ROOT/web/pages}"
+NATIVE_TOOL="${FREELANG_NATIVE_FLCHECK:-}"
+
+if [[ -z "$NATIVE_TOOL" || ! -x "$NATIVE_TOOL" ]]; then
+  echo "FL_CHECK_NATIVE=BLOCKED" >&2
+  echo "CAUSE=Set FREELANG_NATIVE_FLCHECK to the verified Native fl-check executable." >&2
+  exit 2
+fi
+
+status=0
+output="$(FL_CHECK_ROOT="$ROOT" FL_CHECK_TARGET="$TARGET" "$NATIVE_TOOL")" || status=$?
+if [[ "$status" -eq 0 ]] &&
+   ! printf '%s\n' "$output" | grep -Eq '^FL_CHECK_EXIT=[01]$'; then
+  echo "FL_CHECK_NATIVE=BLOCKED" >&2
+  echo "CAUSE=Native fl-check did not return its FL_CHECK_EXIT marker." >&2
+  exit 2
+fi
+if printf '%s\n' "$output" | grep -q '^FL_CHECK_EXIT=1$'; then status=1; fi
+printf '%s\n' "$output" | grep -v '^FL_CHECK_EXIT=' || true
+exit "$status"
