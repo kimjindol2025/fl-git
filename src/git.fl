@@ -202,11 +202,10 @@
     (println (str "- continuity.hot: " (get (get packet "continuity") "hot")))
     (println "")
     (println "## 참조 카드")
-    (doall (map (fn [card]
-                  (do (println (str "### " (get card "number") " · " (get card "title") " [" (get card "key") "]"))
-                      (println (get card "content"))
-                      (println "")))
-                cards))
+    (doseq [card cards]
+      (println (str "### " (get card "number") " · " (get card "title") " [" (get card "key") "]"))
+      (println (get card "content"))
+      (println ""))
     (println "## 원격 (provider 분리)")
     (print (get packet "remote"))
     (println "## 상태")

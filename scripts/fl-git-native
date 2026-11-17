@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ "${1:-}" == "tui" ]]; then
+  NATIVE_TUI="${FREELANG_NATIVE_FLGIT_TUI:-}"
+  if [[ -z "$NATIVE_TUI" || ! -x "$NATIVE_TUI" ]]; then
+    echo "FL_GIT_NATIVE=BLOCKED" >&2
+    echo "CAUSE=Set FREELANG_NATIVE_FLGIT_TUI to the verified Native TUI executable." >&2
+    exit 2
+  fi
+  shift
+  exec "$NATIVE_TUI" "$@"
+fi
+
+NATIVE_TOOL="${FREELANG_NATIVE_FLGIT:-}"
+if [[ -z "$NATIVE_TOOL" || ! -x "$NATIVE_TOOL" ]]; then
+  echo "FL_GIT_NATIVE=BLOCKED" >&2
+  echo "CAUSE=Set FREELANG_NATIVE_FLGIT to the verified Native fl-git executable." >&2
+  exit 2
+fi
+
+OUTPUT_FILE="$(mktemp)"
+trap 'rm -f "$OUTPUT_FILE"' EXIT
+process_status=0
+"$NATIVE_TOOL" "$@" >"$OUTPUT_FILE" 2>&1 || process_status=$?
+sed '/^FL_GIT_EXIT:[0-9][0-9]*$/d' "$OUTPUT_FILE"
+if [[ "$process_status" -ne 0 ]]; then exit "$process_status"; fi
+
+status="$(sed -n 's/^FL_GIT_EXIT:\([0-9][0-9]*\)$/\1/p' "$OUTPUT_FILE" | tail -n 1)"
+if [[ ! "$status" =~ ^[0-9]{1,3}$ ]] || [[ "$((10#$status))" -gt 255 ]]; then
+  echo "FL_GIT_NATIVE=BLOCKED" >&2
+  echo "CAUSE=Native fl-git did not return a valid FL_GIT_EXIT status." >&2
+  exit 2
+fi
+exit "$((10#$status))"
