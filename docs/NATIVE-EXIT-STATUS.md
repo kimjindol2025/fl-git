@@ -13,7 +13,7 @@
 | CLI | fl-git-native, 기존 22개 통합 사례 통과 | 전체 provider 동작·기본 명령 전환 |
 | TUI | 별도 Native 실행 경로와 기존 터미널 검증 | Unicode 입력·파일 경로·모든 대화형 기능 확인 |
 | FLP / CSS / island | 별도 Native 도구; 실제 웹의 8개 모듈 생성 | 지원 범위를 넘는 계약·scope·store 동작 확인 |
-| 웹 빌드·서버 | fl-front-build-native / fl-web-run-native; 실제 HTTP·카트·Git 읽기 경로 통과 | 브라우저 실행·전체 앱 흐름·기본 실행 명령 전환 |
+| 웹 빌드·서버 | fl-front-build-native / fl-web-run-native; 실제 HTTP·카트·Git 읽기 경로 통과 | 8개 화면·카트·데이터·모바일 검증 완료; 전체 앱 흐름·기본 명령 전환 |
 | 개발 서버 | 기존 Node dev 경로 보존 | Native dev/HMR 구현과 동작 검증 |
 | 기존 종합 자동화 | 보호 스크립트·기대값 보존 | Native 대응 경로가 같은 사례를 검증한다는 근거 |
 | DB95 | 기존 Native 사례 7/13/36/40 통과 | 전체 71개, 체크포인트 장애 복구, 동시성·장기 부하·보안·운영 절차 |
@@ -29,11 +29,12 @@ NATIVE-WEB-BUILDER.md가 웹·런타임 연결의 최신 근거를 기록한다.
 시각·요청 IP와 JSON 응답 상태 수정은 새 bootstrap/core/HTTP 검증을 통과했다.
 FX의 NATIVE-TIME-PEER.md·NATIVE-JSON-STATUS.md와 웹 문서가 근거를 기록한다.
 
-실제 브라우저 DOM·이벤트·스크린샷은 NOT_RUN이다. 사용 가능한 브라우저 시작
-경로가 기존 제한 안에서 실패했으며, 설치·sandbox 우회·메모리 상한 변경은
-하지 않았다. 이후 올바른 격리 프론트 폴더를 기존 로컬 Orca에 등록하여 내장
-브라우저의 빈 탭·snapshot 연결까지 확인했다. 실제 앱 검증은 다음 단계이며,
-HTTP와 Native host-model 결과를 브라우저 통과로 합산하지 않는다.
+실제 브라우저 검증은 NATIVE-BROWSER-VERIFICATION.md에 기록했다. 기존 로컬
+Orca 내장 엔진에서 8개 섬 마운트, 실제 카트 클릭 1→2, 상품 3개의 값·이름
+UTF-8 바이트 차이 0, 스크립트 삽입 요소 없음, 콘솔 오류 0과 모바일 390px
+넘침 없음을 확인했다. 빌드·서버·단위 시험 경로의 Node 실행은 0이었다.
+관리자 변경·주문 저장·전체 Git UI·외부 provider 동작은 아직 NOT_RUN이다.
+이전 브라우저 시작 실패와 도중 발견한 실패 사례는 최종 통과와 구별한다.
 
 DB 전체 Native 기준의 기록값은 51 PASS / 20 FAIL이며 현재 전체 재실행은
 NOT_RERUN이다. 기존 Native 러너에는 미이식 JS/shell 사례를 명시적으로 실패로

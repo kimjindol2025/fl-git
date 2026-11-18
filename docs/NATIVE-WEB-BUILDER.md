@@ -79,13 +79,13 @@ registration/collision and advanced import/scope cases remain to be verified.
 | Evidence | Status |
 |---|---|
 | Real project Native bundle | 9 route registrations, 8 browser modules, linked ELF |
-| Final build-time wrapper/asset verification | PASS in native-web-build-v9.uxqe9u2a |
+| Final build-time wrapper/asset verification | PASS in native-web-build-v12.kttzqx4l |
 | Collected real-project build trace | Node 0; network requests 0 |
 | Fresh core | native-json-core.wcpd3881: frontend 71/71, CLI 22/22, FX 11/11 |
 | Page checker / original DB95 subset | 32/32 plus defaults; 7/13/36/40 exit 0 |
 | Current HTTP probe | PASS: 19 rows including request approval and a real UTC audit entry |
 | Generic project / cache/data controls | 10/10 in native-web-controls.jkt68oiw (before shell_capture SDK change) |
-| Browser DOM/console/events/screenshots | NOT_RUN |
+| Browser DOM/console/events/screenshots | Scoped PASS: 8 views, cart, data, desktop/mobile; see NATIVE-BROWSER-VERIFICATION.md |
 | Legacy full diagnostics/fix/contracts/dev/HMR/default migration | incomplete |
 | Full DB95 commercial gate | NOT_RERUN; commercial HOLD |
 
@@ -167,7 +167,7 @@ New authored JS files: 0; authored JS line changes: 0. Full DB95 remains
 NOT_RERUN with its recorded 51 PASS / 20 FAIL baseline and checkpoint recovery
 blocker. Commercial readiness HOLD; deployment NO.
 
-## Current runtime and application acceptance boundary
+## HTTP-only runtime and application checkpoint
 
 The current FX checkpoint is c2752e1dfb2aa486b766bbef34bfd91c59984b20.
 The matching fresh four-stage compiler ELF SHA-256 is
@@ -226,3 +226,41 @@ browser reference guides were read through orca skills get orca-cli.
 See NATIVE-EXIT-STATUS.md for the remaining default Node entries, dev/HMR,
 advanced framework/TTY/provider work and DB commercial gates. Commercial
 readiness remains HOLD; deployment NO. Host paths/owners: <가림>.
+
+## Actual browser and generated-client checkpoint
+
+The final Native application ELF SHA-256 is
+481f8ad66b861edce6892e02740fb4e019bbe3a5d57a638671a53c99765bb032.
+Native build native-web-build-v12.kttzqx4l and HTTP receipt
+native-web-runtime-v12.qfbma2qq pass with the same 19 HTTP observations.
+There are no unregistered literal call lookups; build/runtime traces contain
+zero Node executions and no build network/server outbound connect calls.
+
+Real local Orca browser receipt native-orca-web-v4.u5o8hbnf passes eight
+route mounts, actual cart clicks updating 1 then 2, three client-parsed
+product values with zero value/UTF-8 name-byte differences, absent injected
+script elements, zero console errors and a 390px cart without horizontal
+overflow. Browser capture has 78 same-origin 200 requests and no order POST.
+Current unchanged unit files pass 71/71 through the Native public entry.
+The final server stops within its unchanged lease, exit 0, leaving no owned
+processes and identical source/business files. Desktop/mobile screenshots
+were visually inspected. This supersedes the earlier browser NOT_RUN state
+for this bounded scope; full feature/provider/order flows are not accepted.
+
+Actual clicking exposed a bad application callback that unwrapped a data
+field from an already-parsed POST body. Editing only the paired .flx file
+was ineffective because FLP generation overwrote it. Both detail stencils
+in tools/flp-compile.fl and the paired client now read the body count directly.
+Before browser verification, a private check requires generated/source bytes
+to match and the module hash to differ from the failing artifact. The core
+fetch API contract and existing repository tests were preserved.
+
+The Git root's data: favicon caused a CSP console error. Its source now uses
+the existing same-origin product-default.svg. The policy was not relaxed.
+The prior widget failures, root CSP failure and an expired V3 server lease
+(exit 1 with complete cleanup) are retained. See NATIVE-BROWSER-VERIFICATION.md
+for exact scope, screenshots, receipt IDs and unrun workflows.
+
+Default Node command migration, dev/HMR, advanced framework/TTY/provider
+coverage and packaging remain unfinished. DB95 full validation/checkpoint
+recovery remains HOLD; deployment NO. Host paths/owners: <가림>.
