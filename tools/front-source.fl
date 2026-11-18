@@ -1,0 +1,73 @@
+; Source spelling for supported Native AST kinds. Pure data only; fail unknown fields.
+; Strings use source escapes; lone UTF-16 units remain escaped JSON data.
+(defn fl-source-name [name]
+  (if (and (string? name) (regex_match name "^[A-Za-z0-9_$?!/.<>=+*%&|^~:@-]+$"))
+    name (throw "E_WEB_SYMBOL: unsupported source name")))
+(defn fl-source-symbol [node]
+  (cond
+    [(= (get node "kind") "variable") (fl-source-name (get node "name"))]
+    [(and (= (get node "kind") "literal") (= (get node "type") "symbol"))
+     (fl-source-name (get node "value"))]
+    [true (throw "E_WEB_BINDING: symbol required")]))
+(defn fl-source-quote [text]
+  (str "\""
+    (str-join
+      (map (fn [unit]
+        (let [byte (char-code-at unit 0)]
+          (cond
+            [(= unit "\"") "\\\""] [(= unit "\\") "\\\\"]
+            [(< byte 32)
+             (str "\\x" (str-slice "0123456789abcdef" (math-floor (/ byte 16)) (+ (math-floor (/ byte 16)) 1))
+                         (str-slice "0123456789abcdef" (mod byte 16) (+ (mod byte 16) 1)))]
+            [true unit]))) (str-split text "")) "") "\""))
+(defn fl-source-string [text]
+  (if (not (string? text)) (throw "E_WEB_STRING: string required")
+    (let [encoded (json-stringify text)]
+      (if (str-includes encoded "\\ud")
+        (str "(json_parse " (fl-source-quote encoded) ")") (fl-source-quote text)))))
+(defn fl-source-items [node]
+  (let [items (get (get node "fields") "items")]
+    (if (array? items) items (throw "E_WEB_BLOCK: items array required"))))
+(defn fl-source-call [op args]
+  (str "(" (fl-source-name op) (if (= (length args) 0) "" " ")
+       (str-join (map fl-source-emit args) " ") ")"))
+(defn fl-source-emit [node]
+  (if (= node nil) nil
+    (doseq [key (keys node)]
+      (if (> (length (filter (fn [allowed] (= allowed key))
+              ["kind" "type" "value" "line" "col" "name" "op" "args" "fields" "body" "catch" "finally" "expr"])) 0)
+        nil (throw (str "E_WEB_AST_FIELD: " key)))))
+  (let [kind (get node "kind")]
+    (cond
+      [(= node nil) "nil"]
+      [(= kind "literal")
+       (let [type (get node "type") value (get node "value")]
+         (cond
+           [(= type "string") (fl-source-string value)]
+           [(= type "symbol") (fl-source-name value)]
+           [(= type "number")
+            (if (and (string? value) (regex_match value "^-?([0-9]+(\\.[0-9]*)?([eE][+-]?[0-9]+)?|0[xX][0-9A-Fa-f]+)$"))
+              value (throw "E_WEB_NUMBER: invalid token"))]
+           [(or (= type "boolean") (= type "bool"))
+            (if (boolean? value) (if value "true" "false") (throw "E_WEB_BOOLEAN: boolean required"))]
+           [(or (= type "nil") (= type "null"))
+            (if (= value nil) "nil" (throw "E_WEB_NIL: nil required"))]
+           [true (throw "E_WEB_LITERAL: unsupported literal")]))]
+      [(= kind "variable") (fl-source-name (get node "name"))]
+      [(= kind "keyword") (str ":" (fl-source-name (get node "name")))]
+      [(= kind "sexpr")
+       (if (array? (get node "args")) (fl-source-call (get node "op") (get node "args"))
+         (throw "E_WEB_CALL: arguments array required"))]
+      [(or (= kind "and") (= kind "or")) (fl-source-call kind (get node "args"))]
+      [(= kind "block")
+       (let [type (get node "type") items (fl-source-items node)]
+         (if (not (or (= type "Array") (= type "Map"))) (throw "E_WEB_BLOCK: unsupported type")
+           (if (and (= type "Map") (not (= (mod (length items) 2) 0))) (throw "E_WEB_MAP: pairs required")
+             (str (if (= type "Array") "[" "{") (str-join (map fl-source-emit items) " ")
+                  (if (= type "Array") "]" "}")))))]
+      [(= kind "throw") (fl-source-call "throw" [(get node "expr")])]
+      [(= kind "try")
+       (str "(try " (fl-source-emit (get node "body"))
+            (if (= (get node "catch") nil) "" (str " " (fl-source-emit (get node "catch"))))
+            (if (= (get node "finally") nil) "" (str " " (fl-source-emit (get node "finally")))) ")")]
+      [true (throw (str "E_WEB_AST_KIND: " kind))])))

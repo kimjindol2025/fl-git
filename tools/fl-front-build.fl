@@ -1,0 +1,20 @@
+; Native web compiler command. Output is always a fresh caller-owned bundle.
+(load "./front-web.fl")
+(defn fl-web-command [args]
+  (let [mode (get args 0)]
+    (cond
+      [(and (= mode "--flp-mode") (= (length args) 2))
+       (println (if (fl-web-has-contracts? (str (get args 1) "/pages")) "required" "none"))]
+      [(and (= mode "--seal-assets") (= (length args) 2)) (fl-web-seal-assets (get args 1))]
+      [(and (= mode "--verify-generated") (= (length args) 2)) (fl-web-verify-generated (get args 1))]
+      [(and (= mode "--stage") (= (length args) 3)) (fl-web-stage (get args 1) (get args 2))]
+      [(and (= mode "--plan") (= (length args) 4)) (fl-web-plan (get args 1) (get args 2) (get args 3))]
+      [(and (= mode "--inputs") (= (length args) 2)) (fl-web-inputs (get args 1) false)]
+      [(and (= mode "--browser-inputs") (= (length args) 2)) (fl-web-inputs (get args 1) true)]
+      [(and (= mode "--emit") (= (length args) 4)) (fl-web-emit (get args 1) (get args 2) (get args 3))]
+      [true (do (fl_stderr_write "Usage: fl-front-build-native <web-root> <existing-output-directory>\n") (process-exit 2))])))
+(try
+  (do (fl-web-command (cli-args)) nil)
+  (catch [error]
+    (fl_stderr_write (str (json_stringify {"schema" "fl-web-native/1" "status" "error" "error" (error-message error)}) "\n"))
+    (process-exit 1)))

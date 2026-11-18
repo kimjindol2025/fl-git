@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
+ulimit -c 0
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+WEB_TOOL="${FREELANG_NATIVE_WEB_TOOL:-}"
+FLP_TOOL="${FREELANG_NATIVE_FLP_TOOL:-}"
+ARCHIVE="${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}"
+INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
+blocked() { trap - EXIT; echo "FL_WEB_NATIVE_BUILD=BLOCKED"; printf 'CAUSE=%s\n' "$1" >&2; exit 2; }
+[[ -n "$COMPILER" && -x "$COMPILER" ]] || blocked "Set FREELANG_NATIVE_COMPILER to the verified Native compiler."
+[[ -n "$WEB_TOOL" && -x "$WEB_TOOL" ]] || blocked "Set FREELANG_NATIVE_WEB_TOOL to its matching Native web compiler."
+[[ -f "$ARCHIVE" && -d "$INCLUDE" ]] || blocked "Set matching FREELANG_NATIVE_RUNTIME_ARCHIVE and FREELANG_NATIVE_RUNTIME_INCLUDE."
+[[ "$#" -eq 2 && -d "$1" && -d "$2" ]] || blocked "Usage: fl-front-build-native <web-root> <existing-output-directory>"
+WEB="$(cd -- "$1" && pwd -P)"
+OUTPUT="$(cd -- "$2" && pwd -P)"
+case "$OUTPUT/" in "$WEB/"*) blocked "Output directory must be outside the source web tree.";; esac
+RUN="$(mktemp -d -- "$OUTPUT/fl-web.XXXXXX")"
+printf 'FL_WEB_ARTIFACTS=%s\n' "$RUN"
+step=STAGE
+trap 'rc=$?; if [[ $rc -ne 0 ]]; then printf "FL_WEB_NATIVE_BUILD=FAIL STEP=%s EXIT=%s\n" "$step" "$rc"; fi' EXIT
+"$WEB_TOOL" --stage "$WEB" "$RUN" >"$RUN/stage.log" 2>&1
+step=FLP
+mode="$("$WEB_TOOL" --flp-mode "$RUN/web")"
+case "$mode" in
+  required)
+    [[ -n "$FLP_TOOL" && -x "$FLP_TOOL" ]] || blocked "This project requires FREELANG_NATIVE_FLP_TOOL."
+    FLP_SOURCE_DIR="$RUN/web/pages" FLP_OUTPUT="$RUN/web/pages/_flp-generated.flx" "$FLP_TOOL" >"$RUN/flp.log" 2>&1
+    grep -q '^FLP_COMPILE_EXIT=0$' "$RUN/flp.log"
+    if grep -q '^FLP_COMPILE_EXIT=1$' "$RUN/flp.log"; then exit 1; fi
+    ;;
+  none) printf 'FLP=NOT_REQUIRED\n' >"$RUN/flp.log";;
+  *) echo 'Unrecognized Native FLP requirement result' >&2; exit 1;;
+esac
+step=PLAN
+"$WEB_TOOL" --plan "$RUN/web" "$WEB" "$RUN" >"$RUN/plan.log" 2>&1
+"$WEB_TOOL" --inputs "$RUN" >"$RUN/inputs.nul" 2>"$RUN/inputs.stderr"
+step=PARSE
+while IFS= read -r -d '' source; do
+  IFS= read -r -d '' ast || { echo 'Truncated Native web input list' >&2; exit 1; }
+  "$COMPILER" --parse-json "$source" >"$ast" 2>"$ast.stderr"
+done <"$RUN/inputs.nul"
+step=EMIT
+"$WEB_TOOL" --emit "$RUN" "$ROOT/web/runtime/island-language.fl" "$ROOT/web/runtime/server-language.fl" >"$RUN/emit.log" 2>&1
+"$WEB_TOOL" --browser-inputs "$RUN" >"$RUN/browser-inputs.nul" 2>"$RUN/browser-inputs.stderr"
+step=BROWSER_GENERATE
+while IFS= read -r -d '' program; do
+  IFS= read -r -d '' script || { echo 'Truncated Native browser input list' >&2; exit 1; }
+  "$COMPILER" --browser-js "$program" "$script" >"$program.generate.log" 2>&1
+done <"$RUN/browser-inputs.nul"
+step=SEAL_ASSETS
+"$WEB_TOOL" --seal-assets "$RUN" >"$RUN/seal.log" 2>&1
+"$WEB_TOOL" --emit "$RUN" "$ROOT/web/runtime/island-language.fl" "$ROOT/web/runtime/server-language.fl" >"$RUN/emit-final.log" 2>&1
+step=SERVER_CHECK
+"$COMPILER" --parse-json "$RUN/web/_app.fl" >"$RUN/app.ast.json" 2>"$RUN/app.parse.stderr"
+"$WEB_TOOL" --verify-generated "$RUN" >"$RUN/verify-generated.log" 2>&1
+step=SERVER_GENERATE
+"$COMPILER" "$RUN/web/_app.fl" "$RUN/app.c" >"$RUN/app.generate.log" 2>&1
+if grep -q '\[CGC-ERR\]\|\[IR-ERR\]' "$RUN/app.generate.log"; then exit 1; fi
+step=SERVER_LINK
+gcc -O2 -w -rdynamic -Werror=implicit-function-declaration -I "$INCLUDE" -o "$RUN/web/app-native" "$RUN/app.c" -Wl,--whole-archive "$ARCHIVE" -Wl,--no-whole-archive -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/app.build.log" 2>&1
+sha256sum "$RUN/web/app-native" >"$RUN/app.sha256"
+printf 'FL_WEB_NATIVE_BUILD=PASS\nBROWSER_EXECUTION=NOT_RUN\n' | tee "$RUN/completion.txt"

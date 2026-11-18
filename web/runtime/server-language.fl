@@ -1,0 +1,62 @@
+; Native SSR helpers. Browser behavior lives in island-language.fl / FX.
+(defn fl-front-server-escape [value]
+  (reduce (fn [text pair] (str-replace-in text (get pair 0) (get pair 1))) (str value)
+          [["&" "&amp;"] ["<" "&lt;"] [">" "&gt;"] ["\"" "&quot;"] ["'" "&#39;"]]))
+(defn fl-front-server-children [children]
+  (str-join (map (fn [child]
+    (if (= child nil) "" (if (array? child) (fl-front-server-children child) (str child)))) children) ""))
+(defn fl-front-server-h [tag attrs children void]
+  (if (not (and (string? tag) (regex_match tag "^[A-Za-z][A-Za-z0-9:-]*$") (map? attrs) (array? children)))
+    (throw "SSR h: tag, attributes map and children required") nil)
+  (let [attributes (str-join (map (fn [pair]
+          (let [name (str (get pair 0)) value (get pair 1)]
+            (if (not (regex_match name "^[A-Za-z][A-Za-z0-9:-]*$")) (throw "SSR h: invalid attribute name") nil)
+            (if (fn? value) (throw "SSR h: event functions belong in islands") nil)
+            (if (= value nil) "" (str " " name "=\"" (fl-front-server-escape value) "\"")))) (map-entries attrs)) "")]
+    (str "<" tag attributes ">" (if void "" (str (fl-front-server-children children) "</" tag ">")))))
+(defn form-field [req key]
+  (let [body (get req "body") value (get body key)] (if (= value nil) "" (str value))))
+(defn form-data [req] (or (get req "body") {}))
+(defn form-get [req key] (form-field req key))
+(defn form-validate [req names]
+  (let [missing (filter (fn [name] (= (form-get req name) "")) names)]
+    {"valid" (= (length missing) 0) "errors" missing}))
+(defn url-decode [text] (if (= text nil) "" (str-replace-in (str text) "+" " ")))
+(defn fl-front-server-error [route msg]
+  (let [hint (if (str-includes (str msg) "not found")
+               (str "<div style='background:#1c1917;border:1px solid #78350f;border-radius:8px;padding:16px;margin-top:16px'>"
+                    "<div style='color:#fbbf24;font-size:.8rem;font-weight:700;margin-bottom:8px'>💡 AI 힌트</div>"
+                    "<div style='color:#fde68a;font-size:.85rem;line-height:1.6'>"
+                    "함수명 오타 가능성 있음.<br>"
+                    "올바른 목록: <code>AGENTS.md</code> 참고<br>"
+                    "server_ 함수는 언더스코어(snake_case) 사용<br>"
+                    "예: server-html → server_html ❌, server-html ✅"
+                    "</div></div>")
+               "")]
+    (assoc (server_html
+      (str "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+           "<title>Error — FL-Front</title>"
+           "<style>body{margin:0;font-family:monospace;background:#0d0d0d;color:#fff}"
+           ".box{max-width:860px;margin:60px auto;padding:40px}"
+           ".tag{display:inline-block;background:#ef4444;color:white;font-size:.75rem;"
+           "padding:4px 10px;border-radius:4px;margin-bottom:16px;font-weight:700}"
+           "h1{font-size:1.4rem;margin:0 0 16px;color:#fca5a5}"
+           "pre{background:#1a1a1a;border:1px solid #333;border-radius:8px;"
+           "padding:24px;overflow-x:auto;font-size:.85rem;line-height:1.6;color:#f87171}"
+           ".route{color:#9ca3af;font-size:.85rem;margin-bottom:8px}"
+           "code{background:#292524;padding:2px 6px;border-radius:3px;color:#fde68a}"
+           "</style>"
+           "</head><body><div class='box'>"
+           "<span class='tag'>Runtime Error</span>"
+           "<div class='route'>" (fl-front-server-escape route) "</div>"
+           "<h1>서버 오류가 발생했습니다</h1>"
+           "<pre>" (fl-front-server-escape msg) "</pre>"
+           hint
+           "</div></body></html>")) "status" 500)))
+(defn dev-error-page [route message] (fl-front-server-error route message))
+(defn fl-front-server-assets [response stylesheet]
+  (let [type (get response "contentType") body (get response "body")
+        link (str "<link rel=\"stylesheet\" href=\"" (fl-front-server-escape stylesheet) "\">")]
+    (if (and (string? type) (str-starts-with type "text/html") (string? body))
+      (assoc response "body" (if (str-includes body "</head>")
+        (str-replace-in body "</head>" (str link "</head>")) (str link body))) response)))

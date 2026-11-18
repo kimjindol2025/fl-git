@@ -1011,7 +1011,7 @@
      "remote_info" public-remote-info "remotes" public-remotes}))
 
 (defn api-context-payload []
-  (if (= (length (json_keys @fl-git-context-cache)) 0)
+  (if (= (length (keys @fl-git-context-cache)) 0)
     (do (api-payload "") @fl-git-context-cache)
     @fl-git-context-cache))
 

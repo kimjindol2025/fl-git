@@ -1,0 +1,333 @@
+; Native web bundle planning and AST transformation. No source body execution.
+(load "./front-source.fl")
+(load "./front-style.fl")
+(load "./front-island.fl")
+
+(defn fl-web-includes [items value] (> (length (filter (fn [item] (= item value)) items)) 0))
+(defn fl-web-read [file] (file_read file))
+(defn fl-web-write [file data]
+  (if (file_write file data) true (throw "E_WEB_WRITE: output write failed")))
+(defn fl-web-json [file] (json_parse (fl-web-read file)))
+(defn fl-web-sort [names]
+  (map (fn [entry] (get entry "name")) (arr-sort-by (map (fn [name] {"name" name}) names) "name")))
+(defn fl-web-copy-tree [source target]
+  (dir_create target)
+  (doseq [name (fl-web-sort (dir_list source))]
+    (let [from (str source "/" name) to (str target "/" name)]
+      (if (file_is_file from) (file_copy from to) (fl-web-copy-tree from to))))
+  true)
+(defn fl-web-stage [source run]
+  (let [entries (dir_list source) target (str run "/web")]
+    (if (not (fl-web-includes entries "pages")) (throw "E_WEB_PAGES: pages directory required") nil)
+    (dir_create target)
+    (doseq [name ["pages" "islands" "public"]]
+      (if (fl-web-includes entries name) (fl-web-copy-tree (str source "/" name) (str target "/" name))
+        (dir_create (str target "/" name))))
+    (doseq [name ["utils.css" "skl-utils.css"]]
+      (if (fl-web-includes entries name) (file_copy (str source "/" name) (str target "/" name)) nil))
+    target))
+(defn fl-web-files [directory prefix]
+  (reduce (fn [found name]
+    (let [file (str directory "/" name) relative (str prefix name)]
+      (if (file_is_file file)
+        (if (str-ends-with name ".flx") (push found {"file" file "relative" relative}) found)
+        (concat found (fl-web-files file (str relative "/"))))))
+    [] (fl-web-sort (dir_list directory))))
+(defn fl-web-helper-rank [relative]
+  (loop [i 0]
+    (if (= i 6) 6
+      (if (str-starts-with relative (get ["_layout" "_db" "_afldb" "_auth" "_error" "_charts"] i)) i
+        (recur (+ i 1))))))
+(defn fl-web-route [relative]
+  (let [base (str "/" (str-slice relative 0 (- (length relative) 4)))
+        index (if (str-ends-with base "/index") (str-slice base 0 (- (length base) 5)) base)
+        dynamic (regex_replace index "\\[([^\\]]+)\\]" ":$1")]
+    (if (and (> (length dynamic) 1) (str-ends-with dynamic "/"))
+      (str-slice dynamic 0 (- (length dynamic) 1)) dynamic)))
+(defn fl-web-plan [web original run]
+  (let [files (fl-web-files (str web "/pages") "")
+        helpers (filter (fn [f] (str-starts-with (get f "relative") "_")) files)
+        routes (filter (fn [f] (not (str-starts-with (last (str-split (get f "relative") "/")) "_"))) files)
+        ranked (map (fn [f] (assoc f "rank" (fl-web-helper-rank (get f "relative")))) helpers)
+        sorted-helpers (arr-sort-by ranked "rank")
+        sorted-routes (concat (filter (fn [f] (not (str-includes (get f "relative") "["))) routes)
+                              (filter (fn [f] (str-includes (get f "relative") "[")) routes))
+        combined (concat sorted-helpers sorted-routes)]
+    (if (= (length routes) 0) (throw "E_WEB_ROUTES: at least one real route required") nil)
+    (if (not (= (length combined) (length files))) (throw "E_WEB_HELPER: nested helper must be explicit") nil)
+    (dir_create (str run "/ast"))
+    (dir_create (str web "/public/native-islands"))
+    (let [records (loop [i 0 found []]
+      (if (= i (length combined)) found
+        (let [file (get combined i) relative (get file "relative")
+              helper (str-starts-with relative "_") route (if helper nil (fl-web-route relative))
+              client (str web "/islands/" relative)]
+          (if (and (not helper) (> (length (filter (fn [r] (= (get r "route") route)) found)) 0))
+            (throw "E_WEB_ROUTE_COLLISION: duplicate route") nil)
+          (recur (+ i 1) (push found (assoc file
+            "id" i "helper" helper "route" route "fn" (str "fl-front-page-" i)
+            "origin" (str original "/pages/" relative)
+            "ast" (str run "/ast/source-" i ".json")
+            "client" (if (and (not helper) (file_exists client)) client nil)
+            "clientAst" (str run "/ast/client-" i ".json")
+            "program" (str run "/island-" i ".fl")
+            "script" (str web "/public/native-islands/route-" i ".js")
+            "scriptUrl" (str "/public/native-islands/route-" i ".js")))))))]
+      (let [plan {"schema" "fl-web-native/1" "status" "planned" "web" web "original" original "run" run "records" records}]
+        (fl-web-write (str run "/plan.json") (json_stringify plan)) plan))))
+(defn fl-web-inputs [run browser]
+  (doseq [record (get (fl-web-json (str run "/plan.json")) "records")]
+    (if browser
+      (if (not (get record "hasIslands")) nil
+        (print (str (get record "program") "\x00" (get record "script") "\x00")))
+      (do (print (str (get record "file") "\x00" (get record "ast") "\x00"))
+          (if (= (get record "client") nil) nil
+            (print (str (get record "client") "\x00" (get record "clientAst") "\x00")))))))
+(defn fl-web-ast [file]
+  (let [parsed (fl-web-json file)]
+    (if (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok") (array? (get parsed "nodes")))
+      (get parsed "nodes") (throw "E_WEB_AST: successful parsed source required"))))
+(defn fl-web-style [records]
+  (reduce (fn [state record]
+    (reduce (fn [state parsed]
+      (let [name (get parsed "name")]
+        (if (has-key? (get state "values") name) state
+          {"names" (push (get state "names") name)
+           "values" (assoc (get state "values") name (fl-style-build name parsed))})))
+      state (fl-style-extract (fl-web-read (get record "file")))))
+    {"names" [] "values" {}} records))
+(defn fl-web-node [op args] {"kind" "sexpr" "op" op "args" args})
+(defn fl-web-symbol [name] {"kind" "literal" "type" "symbol" "value" name})
+(defn fl-web-string [value] {"kind" "literal" "type" "string" "value" value})
+(defn fl-web-array [items] {"kind" "block" "type" "Array" "fields" {"items" items}})
+(defn fl-web-path-dir [path]
+  (str-join (slice (str-split path "/") 0 (- (length (str-split path "/")) 1)) "/"))
+(defn fl-web-load-path [path context]
+  (if (not (string? path)) (throw "E_WEB_LOAD: literal string required") nil)
+  (let [plan (get context "plan") record (get context "record")
+        original (get plan "original") project (fl-web-path-dir original)
+        candidates (if (str-starts-with path "/") [path]
+          [(str (fl-web-path-dir (get record "file")) "/" path)
+           (str (fl-web-path-dir (get record "origin")) "/" path)
+           (str original "/" path) (str original "/pages/" path)])
+        resolved (first (filter (fn [file] (not (= file nil))) (map (fn [file] (fl_compiler_realpath file)) candidates)))]
+    (if (or (= resolved nil)
+            (not (or (str-starts-with resolved (str project "/"))
+                     (str-starts-with resolved (str (get plan "run") "/")))))
+      (throw "E_WEB_LOAD: missing or outside project") resolved)))
+(defn fl-web-bound [context names]
+  (assoc context "bound" (concat (get context "bound") names)))
+(defn fl-web-transform [node context]
+  (let [kind (get node "kind") bound (get context "bound")]
+    (cond
+      [(= node nil) nil]
+      [(and (= kind "literal") (= (get node "type") "string") (get context "template"))
+       (assoc node "value" (reduce (fn [text key] (str-replace-in text key (get (get context "replace") key)))
+                                 (get node "value") (keys (get context "replace"))))]
+      [(and (= kind "literal") (= (get node "type") "symbol")
+            (not (fl-web-includes bound (get node "value"))) (has-key? (get context "renames") (get node "value")))
+       (assoc node "value" (get (get context "renames") (get node "value")))]
+      [(and (= kind "variable") (not (fl-web-includes bound (get node "name")))
+            (has-key? (get context "renames") (get node "name")))
+       (assoc node "name" (get (get context "renames") (get node "name")))]
+      [(= kind "block")
+       (assoc node "fields" (assoc (get node "fields") "items"
+         (map (fn [n] (fl-web-transform n (if (= (get node "type") "Map") (assoc context "template" false) context))) (fl-source-items node))))]
+      [(or (= kind "and") (= kind "or"))
+       (assoc node "args" (map (fn [n] (fl-web-transform n context)) (get node "args")))]
+      [(= kind "throw") (assoc node "expr" (fl-web-transform (get node "expr") context))]
+      [(= kind "try")
+       (assoc node "body" (fl-web-transform (get node "body") context)
+                   "catch" (fl-web-transform (get node "catch") context)
+                   "finally" (fl-web-transform (get node "finally") context))]
+      [(= kind "sexpr")
+       (let [op (get node "op") args (get node "args") shadowed (fl-web-includes bound op)]
+         (cond
+           [(or (= op "ns") (= op "defstore")) (throw (str "E_WEB_PENDING_FORM: " op))]
+           [(and (= op "load") (not shadowed))
+            (if (and (= (length args) 1) (= (get (get args 0) "type") "string"))
+              (fl-web-node "load" [(fl-web-string (fl-web-load-path (get (get args 0) "value") context))])
+              (throw "E_WEB_LOAD: static load required"))]
+           [(or (= op "defn") (= op "fn") (= op "server-fn"))
+            (let [named (not (= op "fn")) at (if named 1 0)
+                  params (fl-source-items (get args at)) names (map fl-source-symbol params)
+                  inside (assoc (fl-web-bound context names) "template"
+                    (if named
+                      (fl-web-includes [(str (get (get context "record") "fn") "-inner")
+                                        (str (get (get context "record") "fn") "-post-inner")]
+                                       (fl-source-symbol (get args 0))) (get context "template")))]
+              (fl-web-node (if (= op "server-fn") "defn" op)
+                (concat (slice args 0 (+ at 1))
+                        (map (fn [n] (fl-web-transform n inside)) (slice args (+ at 1) (length args))))))]
+           [(= op "let")
+            (let [items (fl-source-items (get args 0))
+                  pairs (if (and (> (length items) 0) (= (get (first items) "kind") "block"))
+                          (map fl-source-items items)
+                          (loop [i 0 found []]
+                            (if (>= i (length items)) found (recur (+ i 2) (push found (slice items i (+ i 2)))))))
+                  names (map (fn [pair] (fl-source-symbol (get pair 0))) pairs)
+                  inside (fl-web-bound context names)]
+              (if (or (fl-web-includes names "h") (fl-web-includes names "h!"))
+                (throw "E_WEB_BINDING: local SSR h binding pending") nil)
+              (fl-web-node op (concat [(fl-web-array (map (fn [pair]
+                (fl-web-array [(get pair 0) (fl-web-transform (get pair 1) inside)])) pairs))]
+                (map (fn [n] (fl-web-transform n inside)) (slice args 1 (length args))))))]
+           [(and (not shadowed) (or (= op "h") (= op "h!")))
+            (if (< (length args) 2) (throw "E_WEB_H: tag and attributes required")
+              (fl-web-node "fl-front-server-h"
+                [(fl-web-transform (get args 0) context) (fl-web-transform (get args 1) context)
+                 (fl-web-array (map (fn [n] (fl-web-transform n context)) (slice args 2 (length args))))
+                 {"kind" "literal" "type" "boolean" "value" (= op "h!")}]))]
+           [true (assoc node "op" (if (and (not shadowed) (has-key? (get context "renames") op)) (get (get context "renames") op) op) "args" (map (fn [n] (fl-web-transform n context)) args))]))]
+      [true node])))
+(defn fl-web-html [text]
+  (reduce (fn [value pair] (str-replace-in value (get pair 0) (get pair 1))) (str text)
+          [["&" "&amp;"] ["<" "&lt;"] [">" "&gt;"] ["\"" "&quot;"] ["'" "&#39;"]]))
+(defn fl-web-assets [record islands]
+  (let [entries (get (get islands "manifest") "islands")
+        divs (map (fn [island] (str "<div id=\"" (fl-web-html (get island "id")) "\"></div>")) entries)
+        script (if (= (length entries) 0) ""
+                 (str "<script type=\"module\" src=\"" (get record "scriptUrl") "\"></script>"))]
+    (loop [i 0 found {}]
+      (if (= i (length entries))
+        (assoc found "ISLAND_PLACEHOLDER" (str-join divs "") "ISLAND_SCRIPTS" script)
+        (recur (+ i 1) (assoc found (str "ISLAND_PLACEHOLDER_" i) (get divs i)))))))
+(defn fl-web-top-name [node]
+  (if (and (= (get node "kind") "sexpr")
+           (fl-web-includes ["defn" "define" "server-fn"] (get node "op")))
+    (fl-source-symbol (get (get node "args") 0)) nil))
+(defn fl-web-dynamic-route? [route] (or (str-includes route ":") (str-includes route "*")))
+(defn fl-web-register-route [record]
+  (str "(server_get " (fl-source-quote (get record "route")) " " (fl-source-quote (get record "fn")) ")\n"
+       (if (get record "hasPost") (str "(server_post " (fl-source-quote (get record "route")) " "
+                                      (fl-source-quote (str (get record "fn") "-post")) ")\n") "")))
+(defn fl-web-emit [run support server-support]
+  (let [plan (fl-web-json (str run "/plan.json")) records (get plan "records")
+        web (get plan "web") styles (fl-web-style records)
+        bindings (map (fn [name] {"name" name "cls" (get (get (get styles "values") name) "cls")}) (get styles "names"))
+        css-lines (map (fn [name] (get (get (get styles "values") name) "css")) (get styles "names"))
+        paired (filter (fn [file] (file_exists file))
+                  (map (fn [r] (str (str-slice (get r "file") 0 (- (length (get r "file")) 4)) ".css")) records))
+        utilities (first (filter (fn [file] (file_exists file)) [(str web "/skl-utils.css") (str web "/utils.css")]))
+        css (str (str-join (concat (concat css-lines (map fl-web-read paired))
+                     (if (= utilities nil) [] [(fl-web-read utilities)])) "\n") "\n")
+        css-source (str-join (map (fn [binding]
+          (let [name (get binding "name") alias (str-replace-in name "-" "_") value (fl-source-quote (get binding "cls"))]
+            (str "(define " (fl-source-name name) " " value ")\n"
+                 (if (= name alias) "" (str "(define " (fl-source-name alias) " " value ")\n"))))) bindings) "")
+        state (reduce (fn [state record]
+          (let [all (fl-web-ast (get record "ast"))
+                inline (filter (fn [node] (= (get node "op") "island")) all)
+                client (if (= (get record "client") nil) inline
+                         (concat inline (fl-web-ast (get record "clientAst"))))
+                result (fl-island-program {"schema" "freelang.ast.v1" "status" "ok" "nodes" client} support)
+                replacements (if (or (get record "helper") (= (length client) 0)) {} (fl-web-assets record result))
+                helper (get record "helper") name (get record "fn")
+                context {"plan" plan "record" record "bound" [] "replace" replacements
+                         "template" false "renames" (if helper {} {"render" (str name "-inner") "render_post" (str name "-post-inner")})}
+                nodes (filter (fn [node] (not (fl-web-includes ["style" "island"] (get node "op")))) all)
+                prepared (map (fn [node]
+                  (let [original (fl-web-top-name node)
+                        changed (if (and (not helper) (fl-web-includes ["render" "render_post"] original))
+                                  (assoc node "args" (concat [(fl-web-symbol (get (get context "renames") original))]
+                                                           (slice (get node "args") 1 (length (get node "args"))))) node)]
+                    {"name" (fl-web-top-name changed) "line" (get node "line")
+                     "source" (fl-source-emit (fl-web-transform changed context))})) nodes)
+                names (filter (fn [n] (not (= n nil))) (map (fn [entry] (get entry "name")) prepared))
+                has-render (fl-web-includes (map fl-web-top-name nodes) "render")
+                has-post (fl-web-includes (map fl-web-top-name nodes) "render_post")]
+            (if (and (not helper) (= (length client) 0) (str-includes (fl-web-read (get record "file")) "ISLAND_PLACEHOLDER"))
+              (throw "E_WEB_ISLAND_MISSING: placeholder has no client") nil)
+            (if (and (> (length client) 0) (not (str-includes (fl-web-read (get record "file")) "ISLAND_SCRIPTS")))
+              (throw "E_WEB_ISLAND_SCRIPTS: client script marker required") nil)
+            (doseq [binding names]
+              (if (fl-web-includes (get state "names") binding) (throw (str "E_WEB_NAME_COLLISION: " binding)) nil))
+            (if (and (not helper) (not has-render)) (throw "E_WEB_RENDER: route render function required") nil)
+            (if (and helper (> (length client) 0)) (throw "E_WEB_HELPER_ISLAND: helper cannot mount a route island") nil)
+            (if (> (length client) 0)
+              (do (fl-web-write (get record "program") (str css-source (get result "program")))
+                  (fl-web-write (str run "/island-" (get record "id") ".json") (json_stringify (get result "manifest")))) nil)
+            {"names" (concat (get state "names") names)
+             "entries" (concat (concat (get state "entries") (map (fn [entry] (assoc entry "file" (str "pages/" (get record "relative")))) prepared))
+                 (concat (if helper []
+                   [{"file" (str "pages/" (get record "relative")) "line" 1
+                     "source" (str "(defn " name " [req] (try (fl-front-server-assets (" name "-inner req) " (fl-source-quote (or (get plan "cssUrl") "/public/app.css")) ") "
+                                    "(catch [error] (fl-front-server-error " (fl-source-quote (get record "route")) " (error-message error)))))") }])
+                 (if has-post
+                   [{"file" (str "pages/" (get record "relative")) "line" 1
+                     "source" (str "(defn " name "-post [req] (try (" name "-post-inner req) "
+                                    "(catch [error] (fl-front-server-error " (fl-source-quote (get record "route")) " (error-message error)))))")}] [])))
+             "records" (push (get state "records") (assoc record "hasIslands" (> (length client) 0) "hasPost" has-post))}))
+          {"names" [] "entries" [] "records" []} records)
+        entries (get state "entries")
+        static-routing (str-join (map fl-web-register-route
+          (filter (fn [record] (and (not (get record "helper")) (not (fl-web-dynamic-route? (get record "route")))))
+                  (get state "records"))) "")
+        prefix (str "; Native web bundle. Build artifacts only.\n"
+                    "(if (= (env-get \"FL_HTTP_HOST\") \"127.0.0.1\") nil (throw \"Native web bundle requires FL_HTTP_HOST=127.0.0.1\"))\n(load " (fl-source-quote server-support) ")\n" css-source
+                    "(server_static (or (env-get \"FL_WEB_PUBLIC\") \"public\") \"/public\")\n" static-routing)
+        body (str-join (map (fn [entry] (get entry "source")) entries) "\n")
+        routing (str-join (map fl-web-register-route
+          (filter (fn [record] (and (not (get record "helper")) (fl-web-dynamic-route? (get record "route"))))
+                  (get state "records"))) "")
+        not-found (if (fl-web-includes (get state "names") "fl-layout")
+          "(defn fl-front-server-not-found [req] (assoc (server_html (fl-layout \"페이지를 찾을 수 없음\" \"요청한 페이지를 찾을 수 없습니다.\" \"<div class=done><h1>404</h1><p>요청하신 페이지를 찾을 수 없습니다.</p><a href=/>홈으로</a></div>\")) \"status\" 404))\n"
+          "(defn fl-front-server-not-found [req] (server_status 404 \"Not found\"))\n")
+        tail (str routing not-found "(server_get \"/*\" \"fl-front-server-not-found\")\n"
+                  "(defn fl-front-subdomain-redirect [req] (if (= (get (get req \"headers\") \"host\") \"subs.skl.kr\") (server_redirect \"https://subscriptions.skl.kr/\") nil))\n"
+                  "(server_use \"/*\" \"fl-front-subdomain-redirect\")\n"
+                  "(server_start (str-to-num (or (env-get \"PORT\") \"40850\")))\n")
+        full (str prefix body "\n" tail)
+        first-line (length (str-split prefix "\n"))
+        source-map (loop [i 0 found []]
+          (if (= i (length entries)) found
+            (let [entry (get entries i)]
+              (recur (+ i 1) (push found {"generatedLine" (+ first-line i) "file" (get entry "file") "line" (get entry "line")})))))
+        updated (assoc plan "status" "generated" "records" (get state "records") "sourceMap" source-map "bindings" bindings)]
+    (fl-web-write (str web "/public/app.css") css)
+    (fl-web-write (str web "/_app.fl") full)
+    (fl-web-write (str run "/plan.json") (json_stringify updated))
+    (fl-web-write (str run "/build-state.json")
+      (json_stringify {"schema" "fl-web-native/1" "status" "generated" "routes" (filter (fn [r] (not (get r "helper"))) (get state "records"))
+                      "sourceMap" source-map "diagnostics" {"legacyFullCatalog" "NOT_RUN" "fix" "NOT_RUN" "contractReadiness" "NOT_RUN"}}))
+    updated))
+
+(defn fl-web-has-contracts? [directory]
+  (let [entries (fl-web-sort (dir_list directory))]
+    (loop [index 0]
+      (if (= index (length entries)) false
+        (let [name (get entries index) file (str directory "/" name)]
+          (if (if (file_is_file file) (str-ends-with name ".flp") (fl-web-has-contracts? file)) true
+            (recur (+ index 1))))))))
+(defn fl-web-hash [file]
+  (let [result (fl_file_sha256_result file)]
+    (if (and (get result "ok") (regex_match (get result "data") "^[a-f0-9]{64}$"))
+      (get result "data") (throw "E_WEB_ASSET_HASH: SHA-256 failed"))))
+(defn fl-web-seal-assets [run]
+  (let [plan (fl-web-json (str run "/plan.json"))
+        web (get plan "web") css (str web "/public/app.css")
+        css-hash (fl-web-hash css) css-name (str "app." css-hash ".css")
+        records (map (fn [record]
+          (if (not (get record "hasIslands")) record
+            (let [old (get record "script") hash (fl-web-hash old)
+                  name (str "route-" (get record "id") "." hash ".js")
+                  target (str web "/public/native-islands/" name)]
+              (file_copy old target)
+              (file_delete old)
+              (assoc record "script" target "scriptUrl" (str "/public/native-islands/" name) "scriptSha256" hash)))) (get plan "records"))]
+    (file_copy css (str web "/public/" css-name))
+    (fl-web-write (str run "/plan.json") (json_stringify (assoc plan "records" records "cssUrl" (str "/public/" css-name) "cssSha256" css-hash)))))
+(defn fl-web-verify-generated [run]
+  (let [plan (fl-web-json (str run "/plan.json")) nodes (fl-web-ast (str run "/app.ast.json"))
+        declared (filter (fn [name] (not (= name nil))) (map fl-web-top-name nodes))]
+    (doseq [record (get plan "records")]
+      (if (get record "helper") nil
+        (do
+          (if (not (fl-web-includes declared (get record "fn"))) (throw "E_WEB_HANDLER_MISSING: GET wrapper absent") nil)
+          (if (and (get record "hasPost") (not (fl-web-includes declared (str (get record "fn") "-post"))))
+            (throw "E_WEB_HANDLER_MISSING: POST wrapper absent") nil)))
+      (if (get record "hasIslands")
+        (if (= (fl-web-hash (get record "script")) (get record "scriptSha256")) true
+          (throw "E_WEB_ASSET_CHANGED: browser module changed")) nil))
+    (if (= (fl-web-hash (str (get plan "web") "/public/app.css")) (get plan "cssSha256")) true
+      (throw "E_WEB_ASSET_CHANGED: stylesheet changed"))))
