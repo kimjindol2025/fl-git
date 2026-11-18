@@ -1,9 +1,10 @@
 # Native test launcher
 
-scripts/fl-test-native checks, compiles and executes the existing FreeLang
-unit files without Node fallback. The original scripts/fl-test, tests,
-assertions and expected values remain unchanged. The default Node launcher
-has not yet been migrated.
+scripts/fl-test and scripts/fl-test-native check, compile and execute FreeLang
+unit files using the verified Native SDK. The default entry now delegates to
+the Native implementation. Existing test files, assertions and expected values
+remain unchanged. NATIVE-DEFAULT-TEST.md records the latest default-entry
+migration, truthful summary checks and current verification scope.
 
 Set the following to artifacts from the same verified Native FX build:
 
@@ -25,13 +26,15 @@ binary search, download or Node fallback. Host paths and owners: <가림>.
 
 Each discovered *.test.fl file is checked first with the Native --check text
 command, compiled to C, linked with the supplied runtime and executed. A
-compiler error or [CGC-ERR] stops before GCC. Process failure, missing test
-summary or a FAILED marker fails the entry. Missing tools/inputs and failed
+nonzero compiler status or missing/empty generated C stops before GCC. Log
+text is not a compiler status; legal filenames may look like diagnostics.
+Process failure, missing/malformed summaries, unequal passed/total counts or a
+FAILED marker fail the entry. Missing tools/inputs and failed
 discovery report BLOCKED; an empty suite reports NO_TESTS. Generated programs
 run in the caller's working directory, preserving existing test behavior.
 The entry adds no timeout; the caller retains the existing execution policy.
 
-## Current verification
+## Earlier Native entry verification
 
 | Evidence | Result |
 |---|---|
@@ -81,6 +84,10 @@ API coverage and production dependency packaging remain pending. Full DB95
 71-case rerun is NOT_RUN. New JS files: 0; JS line changes: 0.
 
 ## Historical implementation receipts
+
+The following records describe earlier revisions, not the current default
+entry. Their limitations and failures remain historical evidence; use
+NATIVE-DEFAULT-TEST.md for the latest migration result.
 
 # Earlier Native unit execution evidence
 

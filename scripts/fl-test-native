@@ -10,6 +10,24 @@ RUNTIME_INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
 NATIVE_CC="${CC:-gcc}"
 ARTIFACTS="${FREELANG_NATIVE_TEST_ARTIFACTS:-}"
 
+valid_summaries() {
+  local line="" seen=0 passed total
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "Test Results:"* ]] || continue
+    if [[ ! "$line" =~ ^Test\ Results:\ ([0-9]+)/([0-9]+)\ passed$ ]]; then
+      return 1
+    fi
+    passed="${BASH_REMATCH[1]}"
+    total="${BASH_REMATCH[2]}"
+    # Compare decimal strings exactly, without integer overflow or float rounding.
+    passed="${passed#"${passed%%[!0]*}"}"
+    total="${total#"${total%%[!0]*}"}"
+    [[ "$passed" == "$total" ]] || return 1
+    seen=1
+  done <"$1"
+  [[ "$seen" -eq 1 ]]
+}
+
 blocked() {
   echo "FREELANG_TEST=BLOCKED"
   printf 'CAUSE=%s\n' "$1" >&2
@@ -25,13 +43,19 @@ blocked() {
 command -v "$NATIVE_CC" >/dev/null 2>&1 ||
   blocked "The configured C compiler is unavailable."
 [[ -d "$TEST_ROOT" ]] || blocked "Test directory does not exist."
-TEST_ROOT="$(cd -- "$TEST_ROOT" && pwd -P)"
+if ! TEST_ROOT="$(cd -- "$TEST_ROOT" && pwd -P)"; then
+  blocked "Unable to access test directory."
+fi
 
 if [[ -n "$ARTIFACTS" ]]; then
   [[ -d "$ARTIFACTS" ]] || blocked "Native test artifact directory does not exist."
-  RUN_DIR="$(mktemp -d -- "$ARTIFACTS/fl-test-native.XXXXXX")"
+  if ! RUN_DIR="$(mktemp -d -- "$ARTIFACTS/fl-test-native.XXXXXX")"; then
+    blocked "Unable to create retained test artifacts."
+  fi
 else
-  RUN_DIR="$(mktemp -d -- "${TMPDIR:-/tmp}/fl-test-native.XXXXXX")"
+  if ! RUN_DIR="$(mktemp -d -- "${TMPDIR:-/tmp}/fl-test-native.XXXXXX")"; then
+    blocked "Unable to create Native test directory."
+  fi
   trap 'rm -rf -- "$RUN_DIR"' EXIT
 fi
 
@@ -54,7 +78,7 @@ for test_file in "${TEST_FILES[@]}"; do
   mkdir -- "$case_dir"
   echo "[fl-test-native] run $relative"
   if ! "$COMPILER" "$test_file" "$case_dir/test.c" >"$case_dir/generate.log" 2>&1 ||
-     grep -q '\[CGC-ERR\]' "$case_dir/generate.log"; then
+     [[ ! -s "$case_dir/test.c" ]]; then
     cat "$case_dir/generate.log"
     echo "FREELANG_TEST=FAIL"
     exit 1
@@ -73,7 +97,7 @@ for test_file in "${TEST_FILES[@]}"; do
     exit 1
   fi
   cat "$case_dir/output.log"
-  if ! grep -Eq '^Test Results: [0-9]+/[0-9]+ passed$' "$case_dir/output.log" ||
+  if ! valid_summaries "$case_dir/output.log" ||
      grep -q 'FAILED' "$case_dir/output.log"; then
     printf '[fl-test-native] missing passing summary: %s\n' "$relative" >&2
     echo "FREELANG_TEST=FAIL"

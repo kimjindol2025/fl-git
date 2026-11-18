@@ -35,13 +35,14 @@ FreeLang 테스트는 AFJ 공용 `deftest`/`is`/`is=`/`run-tests` 모델을 사�
 `tests/*.test.fl` 파일을 자동 발견해 문법 검사와 실행을 함께 수행한다.
 
 검증된 compiler·runtime SDK 변수는 [Native 시험 실행](docs/NATIVE-TEST-RUNTIME.md)을
-따른다. Node 없이 실행하는 명령은 다음과 같다.
+따른다. 기본 시험 명령은 Node 없이 실행한다.
 
 ```bash
-./scripts/fl-test-native
+./scripts/fl-test
 ```
 
-기존 `scripts/fl-test`·`npm test`와 공용 도구의 Node 경로 전환은 남아 있다.
+`scripts/fl-test-native`도 같은 실행기로 사용할 수 있다. [기본 시험 명령의 검증](docs/NATIVE-DEFAULT-TEST.md)을
+따른다. `npm test`는 npm 자체를 요구하며 공용 도구의 Node 경로 전환도 남아 있다.
 
 기존 전체 회귀 검증은 다음 명령으로 실행한다.
 
