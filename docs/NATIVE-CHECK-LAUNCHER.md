@@ -1,8 +1,10 @@
 # Native page checker launcher
 
 The existing FreeLang checker in tools/fl-check.fl can run as a Native
-executable. scripts/fl-check-native uses FREELANG_NATIVE_FLCHECK to select that
-verified binary and passes FL_CHECK_ROOT and FL_CHECK_TARGET to it.
+executable. scripts/fl-check delegates to scripts/fl-check-native. Both use
+FREELANG_NATIVE_FLCHECK to select that verified binary and pass FL_CHECK_ROOT
+and FL_CHECK_TARGET to it. NATIVE-DEFAULT-CHECK.md records the current default
+entry, complete marker validation and reference comparison.
 
 Example, with a privately built binary path:
 
@@ -14,11 +16,15 @@ export FREELANG_NATIVE_FLCHECK=<verified-native-binary>
 
 The launcher does not search for a compiler or invoke Node. Missing or
 non-executable binaries fail with exit 2. A successful binary must return the
-existing FL_CHECK_EXIT=0/1 protocol marker. Missing protocol output fails with
-exit 2; reported checker errors return exit 1. Other Native process failures
-are propagated.
+existing FL_CHECK_EXIT=0/1 protocol marker exactly once. Missing, duplicate,
+conflicting or malformed protocol output fails with exit 2; reported checker
+errors return exit 1. Other Native process failures are propagated unchanged,
+even if the process printed a checker marker before failing.
 
-## Recorded verification
+## Earlier verification
+
+These results describe the earlier separate entry. Use NATIVE-DEFAULT-CHECK.md
+for the current default entry and its matching SDK receipt.
 
 - FX source: 530ab3df4490c4c7bbb35573b4826a4042fbe9c3.
 - FX generated Stage 2 = Stage 3 = Stage 4:
@@ -41,5 +47,6 @@ are propagated.
 
 This is a Native checker entry point. The existing web builder, development
 server, default Node launchers and test runner migration are not complete.
-Current Node parity was not executed; the source and expected fixture
-contracts were preserved.
+At that revision Node parity was not executed; the source and expected
+fixture contracts were preserved. Current reference comparisons are recorded
+in NATIVE-DEFAULT-CHECK.md.

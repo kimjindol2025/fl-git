@@ -50,6 +50,18 @@ FreeLang 테스트는 AFJ 공용 `deftest`/`is`/`is=`/`run-tests` 모델을 사�
 ./scripts/check.sh
 ```
 
+## 페이지 검사
+
+검증된 Native 페이지 검사기를 지정한다. 기본 명령은 Node 없이 실행한다.
+
+```bash
+export FREELANG_NATIVE_FLCHECK=<verified-native-page-checker>
+./scripts/fl-check
+./scripts/fl-check web/pages/products.flp
+```
+
+[기본 페이지 검사 명령](docs/NATIVE-DEFAULT-CHECK.md)에 설정과 검증 범위를 기록했다.
+
 ## FreeLang Tools
 
 자주 쓰는 개발 명령은 공용 CLI로도 실행할 수 있다.
