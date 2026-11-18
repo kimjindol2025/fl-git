@@ -77,11 +77,17 @@ fl-git branch-delete <이름> --yes
 재시작한다. 생성되는 `public/app.css`는 감시하지 않아 자기 재빌드 루프를
 만들지 않는다. 포트는 `PORT=40860 ./scripts/fl-dev`처럼 바꿀 수 있다.
 
-운영 또는 PM2에서 사용하는 정적 실행은 다음 명령을 사용한다.
+운영 또는 PM2에서 사용하는 정적 실행은 검증된 Native SDK를 설정한 뒤
+다음 명령을 사용한다. 이 명령은 Native 빌드 후 Native 서버를 시작한다.
 
 ```bash
 ./scripts/fl-git-web
 ```
+
+필수 SDK 변수와 검증 범위는 [Native 기본 웹 명령](docs/NATIVE-DEFAULT-WEB.md)을
+따른다. 도구가 없으면 명확히 실패하며 Node로 전환하지 않는다. 산출물은
+소스 밖의 `FREELANG_NATIVE_WEB_OUTPUT` 또는 `TMPDIR` 아래에 보존한다.
+개발 서버 `fl-dev`와 아래 공통 배포 스크립트의 Node 경로는 아직 남아 있다.
 
 공통 workflow 배포 계약은 `.freelang/`에 있다.
 

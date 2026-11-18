@@ -264,3 +264,15 @@ for exact scope, screenshots, receipt IDs and unrun workflows.
 Default Node command migration, dev/HMR, advanced framework/TTY/provider
 coverage and packaging remain unfinished. DB95 full validation/checkpoint
 recovery remains HOLD; deployment NO. Host paths/owners: <가림>.
+
+## Default production web command checkpoint
+
+scripts/fl-git-web now uses the Native builder and Native runner. It preserves
+build-then-run behavior, requires an explicit matching SDK, keeps artifacts
+outside the source web tree and holds the shared heavy lock only for the
+build. Missing configuration fails without Node fallback. See
+NATIVE-DEFAULT-WEB.md for the interface, scoped acceptance and retained
+diagnostic failures. The default command produced the same application ELF
+as V12 and passed the HTTP/browser scope again. Other default commands,
+dev/HMR and .freelang/deploy.sh still require migration. This checkpoint
+supersedes earlier default-production-command NOT_RUN statements only.

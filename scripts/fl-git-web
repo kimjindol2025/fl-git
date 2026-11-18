@@ -1,10 +1,47 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
+ulimit -c 0
 
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
 WEB="$ROOT/web"
 
-cd "$WEB"
-FL_GIT_REPO="$ROOT" FL_HTTP_ALLOW=127.0.0.1,localhost node "$WEB/fl-front-build.js"
-exec env FL_GIT_REPO="$ROOT" FL_HTTP_ALLOW=127.0.0.1,localhost node "$WEB/runtime/bootstrap.js" run "$WEB/_app.fl"
+blocked() { echo 'FL_GIT_WEB=BLOCKED'; printf 'CAUSE=%s\n' "$1" >&2; exit 2; }
+[[ -n "${FREELANG_NATIVE_COMPILER:-}" && -x "$FREELANG_NATIVE_COMPILER" ]] || blocked 'Set FREELANG_NATIVE_COMPILER to the verified Native compiler.'
+[[ -n "${FREELANG_NATIVE_WEB_TOOL:-}" && -x "$FREELANG_NATIVE_WEB_TOOL" ]] || blocked 'Set FREELANG_NATIVE_WEB_TOOL to its matching Native web compiler.'
+[[ -f "${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}" && -d "${FREELANG_NATIVE_RUNTIME_INCLUDE:-}" ]] || blocked 'Set matching FREELANG_NATIVE_RUNTIME_ARCHIVE and FREELANG_NATIVE_RUNTIME_INCLUDE.'
+[[ "${FL_HTTP_HOST:-127.0.0.1}" == 127.0.0.1 ]] || blocked 'Native web entry requires FL_HTTP_HOST=127.0.0.1.'
+native_port="${PORT:-40850}"
+[[ "$native_port" =~ ^[0-9]{1,5}$ ]] || blocked 'PORT must be a decimal integer from 0 to 65535.'
+(( 10#$native_port <= 65535 )) || blocked 'PORT must be a decimal integer from 0 to 65535.'
+for tool in flock gcc ps mktemp; do command -v "$tool" >/dev/null || blocked "Required build tool is unavailable: $tool"; done
+case "$("$FREELANG_NATIVE_WEB_TOOL" --flp-mode "$WEB")" in
+  required) [[ -n "${FREELANG_NATIVE_FLP_TOOL:-}" && -x "$FREELANG_NATIVE_FLP_TOOL" ]] || blocked 'This project requires FREELANG_NATIVE_FLP_TOOL.';;
+  none) ;;
+  *) blocked 'Native web compiler could not determine the project FLP requirement.';;
+esac
+
+OUTPUT="${FREELANG_NATIVE_WEB_OUTPUT:-${TMPDIR:-/tmp}}"
+[[ -d "$OUTPUT" && -w "$OUTPUT" ]] || blocked 'FREELANG_NATIVE_WEB_OUTPUT (or TMPDIR) must be an existing writable output directory.'
+OUTPUT="$(cd -- "$OUTPUT" && pwd -P)"
+case "$OUTPUT/" in "$WEB/"*) blocked 'Output directory must be outside the source web tree.';; esac
+RUN="$(mktemp -d -- "$OUTPUT/fl-git-web.XXXXXX")"
+printf 'FL_GIT_WEB_ARTIFACTS=%s\n' "$RUN"
+ps -eo pid,ppid,comm >"$RUN/processes.before-build"
+if flock -o /tmp/fl-heavy.lock "$ROOT/scripts/fl-front-build-native" "$WEB" "$RUN"; then
+  :
+else
+  rc=$?
+  printf 'FL_GIT_WEB=FAIL STEP=BUILD EXIT=%s\n' "$rc" >&2
+  exit "$rc"
+fi
+
+shopt -s nullglob
+bundles=("$RUN"/fl-web.*)
+[[ "${#bundles[@]}" -eq 1 && -d "${bundles[0]}" && -x "${bundles[0]}/web/app-native" ]] || blocked 'Native build did not produce exactly one executable bundle.'
+grep -qx 'FL_WEB_NATIVE_BUILD=PASS' "${bundles[0]}/completion.txt" || blocked 'Native build completion receipt is missing.'
+exec env FREELANG_NATIVE_WEB_APP="${bundles[0]}/web/app-native" \
+  FL_HTTP_HOST=127.0.0.1 PORT="$((10#$native_port))" "$ROOT/scripts/fl-web-run-native" "$@"
