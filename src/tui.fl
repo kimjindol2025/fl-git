@@ -1,17 +1,10 @@
 ;; 키보드 + TTY 마우스(SGR) Git TUI. 실행: fl-git tui
 (load "./git.fl")
 (load "./tui-mouse.fl")
+(load "./tui-input.fl")
+(load "./tui-display.fl")
 
-(defn tui-read-line [buffer]
-  (let [byte (tty-read-byte)]
-    (cond
-      (or (= byte 10) (= byte 13)) buffer
-      (= byte 127)
-        (if (> (length buffer) 0)
-          (do (print "\b \b") (tui-read-line (slice buffer 0 (- (length buffer) 1))))
-          (tui-read-line buffer))
-      (= byte 27) buffer
-      true (do (print (char-from-code byte)) (tui-read-line (str buffer (char-from-code byte)))))))
+(define tui-exit-status (atom 0))
 
 (defn tui-mouse-enable! []
   (print "\x1b[?1000h\x1b[?1006h"))
@@ -70,7 +63,7 @@
   (print "\x1b[2J\x1b[H")
   (println "fl-git — Git 터미널 관리")
   (println "────────────────────────────────────────")
-  (map (fn [entry] (println (get entry "line"))) rows)
+  (map (fn [entry] (println (tui-display-text (get entry "line")))) rows)
   (println "────────────────────────────────────────")
   (println "클릭: 파일 행 stage/unstage 토글")
   (println "s 상태  d diff  l log  b branch  t stash")
@@ -81,9 +74,13 @@
   (let [path (get entry "path")]
     (if (or (nil? path) (= path ""))
       "경로를 읽지 못했습니다."
-      (if (get entry "staged")
-        (do (git-unstage [path]) (str "unstage: " path))
-        (do (git-add [path]) (str "stage: " path))))))
+      (let [staged (get entry "staged")
+            operation (if staged "unstage" "stage")
+            display-path (tui-display-text (json-str path))
+            status (if staged (git-unstage [path]) (git-add [path]))]
+        (if (= status 0)
+          (str operation ": " display-path)
+          (str operation " 실패: " display-path " (exit " status ")"))))))
 
 (defn tui-handle-mouse [event rows]
   (if (and (= (get event "type") "mouse")
@@ -96,7 +93,7 @@
     nil))
 
 (defn tui-loop [message pending]
-  (let [status-text (git-capture "git status --short --branch")
+  (let [status-text (git-capture "git -c core.quotepath=true -c color.status=false status --short --branch")
         rows (tui-rows-from-status status-text)]
     (draw message rows)
     (let [event (tui-read-event)
@@ -119,11 +116,13 @@
               (= key 97) (do (git-add []) (tui-loop "전체 파일을 stage했습니다." ""))
               (= key 110) (do (git-unstage []) (tui-loop "전체 파일의 stage를 취소했습니다." ""))
               (= key 99) (do
-                (print "\n커밋 메시지: ")
+                (print (str "\n" tui-commit-prompt))
                 (let [message (tui-read-line "")]
                   (println "")
-                  (git-commit message)
-                  (tui-loop "commit 완료 여부를 확인하세요." "")))
+                  (if (nil? message)
+                    (tui-loop "commit을 취소했습니다." "")
+                    (do (git-commit message)
+                        (tui-loop "commit 완료 여부를 확인하세요." "")))))
               (= key 112)
                 (if (= pending "push")
                   (do (git-push "--yes") (tui-loop "push 완료 여부를 확인하세요." ""))
@@ -140,6 +139,10 @@
     (tty-raw-enter!)
     (tui-mouse-enable!)
     (tui-loop "" ""))
-  (catch error (print (str "\nfl-git TUI 오류: " (get error "message") "\n")))
+  (catch error
+    (do (reset! tui-exit-status 1)
+        (print (str "\nfl-git TUI 오류: " (get error "message") "\n"))))
   (finally
     (do (tui-mouse-disable!) (tty-raw-leave!))))
+
+(process-exit (deref tui-exit-status))

@@ -1,0 +1,66 @@
+;; TTY bytes are decoded once as UTF-8; text and raw bytes stay distinct.
+(define tui-commit-prompt "커밋 메시지: ")
+
+(defn tui-input-text [bytes]
+  (let [encoded (buf-concat (map (fn [byte] (buf-u8 byte)) bytes))]
+    (buf-read-str encoded 0 (buf-len encoded))))
+
+(defn tui-input-second? [first byte]
+  (cond
+    (= first 224) (>= byte 160)
+    (= first 237) (< byte 160)
+    (= first 240) (>= byte 144)
+    (= first 244) (< byte 144)
+    true true))
+
+(defn tui-input-tail [bytes remaining]
+  (if (= remaining 0)
+    {"text" (tui-input-text bytes) "queued" nil}
+    (let [byte (tty-read-byte)]
+      (cond
+        (nil? byte) (throw {"message" "터미널 입력이 종료됐습니다."})
+        (and (>= byte 128) (< byte 192)
+             (or (> (length bytes) 1) (tui-input-second? (get bytes 0) byte)))
+          (tui-input-tail (append bytes byte) (- remaining 1))
+        true {"text" "�" "queued" byte}))))
+
+(defn tui-input-character [byte]
+  (cond
+    (< byte 128) {"text" (char-from-code byte) "queued" nil}
+    (and (>= byte 194) (<= byte 244))
+      (tui-input-tail [byte] (if (< byte 224) 1 (if (< byte 240) 2 3)))
+    true {"text" "�" "queued" nil}))
+
+(defn tui-input-char-start [encoded cursor]
+  (if (and (> cursor 0)
+           (>= (buf-read-u8 encoded cursor) 128)
+           (< (buf-read-u8 encoded cursor) 192))
+    (tui-input-char-start encoded (- cursor 1))
+    cursor))
+
+(defn tui-input-erase [text]
+  (let [encoded (buf-str text) size (buf-len encoded)]
+    (if (= size 0)
+      text
+      (buf-read-str encoded 0 (tui-input-char-start encoded (- size 1))))))
+
+(defn tui-read-line-next [buffer queued]
+  (let [byte (if (nil? queued) (tty-read-byte) queued)]
+    (cond
+      (nil? byte) (throw {"message" "터미널 입력이 종료됐습니다."})
+      (= byte 0) (throw {"message" "커밋 메시지에는 NUL을 넣을 수 없습니다."})
+      (or (= byte 10) (= byte 13)) buffer
+      (or (= byte 127) (= byte 8))
+        (let [shorter (tui-input-erase buffer)]
+          ;; Redraw the line instead of guessing terminal cell widths.
+          (print (str "\r\x1b[2K" tui-commit-prompt shorter))
+          (tui-read-line-next shorter nil))
+      (or (= byte 27) (= byte 3)) nil
+      true
+        (let [character (tui-input-character byte)
+              text (get character "text")]
+          (print text)
+          (tui-read-line-next (str buffer text) (get character "queued"))))))
+
+(defn tui-read-line [buffer]
+  (tui-read-line-next buffer nil))

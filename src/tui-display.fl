@@ -1,0 +1,23 @@
+;; Render filename data without emitting terminal C0/C1 controls.
+(defn tui-display-control [code]
+  (let [high (cond (< code 16) "0" (< code 32) "1"
+                   (= code 127) "7" (< code 144) "8" true "9")
+        low (cond (< code 16) code (< code 32) (- code 16)
+                  (= code 127) 15 (< code 144) (- code 128) true (- code 144))]
+    (str "\\u00" high (char-at "0123456789abcdef" low))))
+
+(defn tui-display-text [text]
+  (let [encoded (buf-str text) size (buf-len encoded)]
+    (loop [i 0 output []]
+      (if (>= i size)
+        (let [joined (buf-concat output)]
+          (buf-read-str joined 0 (buf-len joined)))
+        (let [byte (buf-read-u8 encoded i)]
+          (cond
+            (or (< byte 32) (= byte 127))
+              (recur (+ i 1) (append output (buf-str (tui-display-control byte))))
+            (and (= byte 194) (< (+ i 1) size)
+                 (>= (buf-read-u8 encoded (+ i 1)) 128)
+                 (< (buf-read-u8 encoded (+ i 1)) 160))
+              (recur (+ i 2) (append output (buf-str (tui-display-control (buf-read-u8 encoded (+ i 1))))))
+            true (recur (+ i 1) (append output (buf-u8 byte)))))))))

@@ -12,24 +12,36 @@ Stage하고, 커밋한 뒤 GitHub 연결·branch를 확인하고 Pull/Push한다
 - 기존 `fl-split-term`의 TTY/PTY 계약을 참고하되 소스는 독립 유지
 - Git 명령 실행, TUI, GitHub 연동을 AFJ로 구현 완료
 - 본체는 Git 프로세스 권한이 필요한 AFJ(`.fl`)로 구현한다.
-- `scripts/tui-runner.mjs`는 TTY capability만 여는 얇은 호스트 경계다.
+- 기본 CLI·TUI는 Native 실행 파일과 런타임의 TTY 호스트를 사용한다.
 
 ## 실행
 
+검증된 Native SDK의 CLI와 TUI 실행 파일을 지정한다. 기본 명령은 Node 없이
+실행하며, 도구가 없으면 명확히 실패한다.
+
 ```bash
-node /home/kim/kim/platform/freelang-afj/bootstrap.js check src/main.fl
-node /home/kim/kim/platform/freelang-afj/bootstrap.js run src/main.fl --help
+export FREELANG_NATIVE_FLGIT=<verified-native-cli-executable>
+export FREELANG_NATIVE_FLGIT_TUI=<matching-native-tui-executable>
+./scripts/fl-git --help
+./scripts/fl-git status
+./scripts/fl-git tui
 ```
+
+SDK 환경과 검증 범위는 [Native 기본 CLI](docs/NATIVE-DEFAULT-CLI.md)를 따른다.
 
 ## 테스트
 
 FreeLang 테스트는 AFJ 공용 `deftest`/`is`/`is=`/`run-tests` 모델을 사용한다.
 `tests/*.test.fl` 파일을 자동 발견해 문법 검사와 실행을 함께 수행한다.
 
+검증된 compiler·runtime SDK 변수는 [Native 시험 실행](docs/NATIVE-TEST-RUNTIME.md)을
+따른다. Node 없이 실행하는 명령은 다음과 같다.
+
 ```bash
-./scripts/fl-test
-npm test
+./scripts/fl-test-native
 ```
+
+기존 `scripts/fl-test`·`npm test`와 공용 도구의 Node 경로 전환은 남아 있다.
 
 기존 전체 회귀 검증은 다음 명령으로 실행한다.
 

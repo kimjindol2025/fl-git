@@ -9,9 +9,9 @@
 |---|---|---|
 | FX 컴파일러 | 실제 seed→Stage4, Stage2=3=4 일치; Native 실행 파일 | 기존 보호 검증기의 오래된 seed pin, 배포용 의존성 포장 |
 | 프로젝트 검사 | fl-check-native, 32개 fixture·기본 검사 통과 | 전체 진단·fix·contracts 호환성과 기본 진입점 전환 |
-| 프로젝트 단위 시험 | fl-test-native, 기존 71개 assertion 통과 | 참조 검사기 전체 동작 비교·기본 명령 전환 |
-| CLI | fl-git-native, 기존 22개 통합 사례 통과 | 전체 provider 동작·기본 명령 전환 |
-| TUI | 별도 Native 실행 경로와 기존 터미널 검증 | Unicode 입력·파일 경로·모든 대화형 기능 확인 |
+| 프로젝트 단위 시험 | fl-test-native, 기존 7개 단위 suite 71건 통과 | 참조 검사기 전체 동작 비교·기본 명령 전환 |
+| CLI | 기본 fl-git를 Native로 전환; 기본 명령의 기존 22개 통합 사례 통과 | 전체 provider 동작·SDK 포장 |
+| TUI | 기본 Native TUI, 실제 동작/안전성 16건·Git 경로 28건·경로 거부 6건 통과 | 모든 대화형 기능·임의 바이너리 경로 지원 확인 |
 | FLP / CSS / island | 별도 Native 도구; 실제 웹의 8개 모듈 생성 | 지원 범위를 넘는 계약·scope·store 동작 확인 |
 | 웹 빌드·서버 | 기본 fl-git-web을 Native 빌드 후 실행으로 전환; 실제 HTTP·브라우저 8개 화면·카트·데이터 통과 | 전체 앱 흐름·SDK 포장·공통 배포 경로 전환 |
 | 개발 서버 | 기존 Node dev 경로 보존 | Native dev/HMR 구현과 동작 검증 |
@@ -105,3 +105,13 @@ commit 중 I/O 실패 뒤 live 상태와 명시적 건강 상태, 프로세스 �
 않는다. 전체 Native 71개는 이 변경 뒤 재실행하지 않았고, 51/20은 이전
 소스의 기록값이다. DB 상용 준비 판정은 HOLD이며, 고객 DB 연결·주문 저장·
 운영 배포는 하지 않았다.
+
+후속 기본 CLI 전환은 NATIVE-DEFAULT-CLI.md에 기록했다. 기본 fl-git가 Native
+launcher를 실행하고 SDK 부재 시 종료 2로 실패한다. 앞서 기록한 TUI Unicode
+입력/인용 경로 실패는 수정됐다. Git 실제 출력의 경로 28건, 잘못된 경로
+거부 6건, 기본 명령의 TUI 16건, CLI 22건과 기존 7개 suite 71건이 통과했다.
+Escape/Ctrl-C는 입력을 취소하고 NUL 오류는 종료 1이다. 모든 PTY 사례에서
+터미널이 복원됐다. 다른 웹 변경 4개와 추가 미추적 시험은 보존했으며 이
+단위 결과 범위에 포함하지 않는다. 전체 웹/브라우저와 인증 provider 쓰기는
+이번 변경의 검증 결과가 아니다. checker·test·dev 및 공통 배포의 기본 Node
+경로가 남아 있어 Node 제거 전체는 미완료이며 DB 상용 준비도 HOLD다.

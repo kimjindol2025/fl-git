@@ -1,14 +1,78 @@
 ;; TTY 마우스 CSI 파싱·상태 행 매핑 (AFJ). 호스트에 마우스 빌트인 없음.
 ;; 검증: tests/tui-mouse.test.fl  · 사용: src/tui.fl
 
+;; Git C quotes contain octal bytes, not Latin-1 characters.
+(defn tui-path-text [encoded]
+  (let [text (buf-read-str encoded 0 (buf-len encoded))]
+    (if (= (buf-str text) encoded)
+      text
+      (throw "UTF-8로 표현할 수 없는 Git 경로입니다."))))
+
+(defn tui-path-octal? [byte]
+  (and (>= byte 48) (<= byte 55)))
+
+(defn tui-path-escape [byte]
+  (if (or (= byte 34) (= byte 92))
+    byte
+    (get {"a" 7 "b" 8 "t" 9 "n" 10 "v" 11 "f" 12 "r" 13}
+         (char-from-code byte))))
+
+(defn tui-path-unquote [raw]
+  (let [encoded (buf-str raw) size (buf-len encoded) end (- size 1)]
+    (if (or (= size 0) (not (= (buf-read-u8 encoded 0) 34)))
+      raw
+      (if (or (< size 2) (not (= (buf-read-u8 encoded end) 34)))
+        (throw "닫히지 않은 Git 경로 인용입니다.")
+        (loop [i 1 output []]
+          (if (>= i end)
+            (tui-path-text (buf-concat output))
+            (let [byte (buf-read-u8 encoded i)]
+              (cond
+                (= byte 34) (throw "잘못된 Git 경로 인용입니다.")
+                (not (= byte 92)) (recur (+ i 1) (append output (buf-u8 byte)))
+                (>= (+ i 1) end) (throw "잘못된 Git 경로 escape입니다.")
+                true
+                  (let [escaped (buf-read-u8 encoded (+ i 1))
+                        simple (tui-path-escape escaped)]
+                    (cond
+                      (not (nil? simple))
+                        (recur (+ i 2) (append output (buf-u8 simple)))
+                      (and (< (+ i 3) end)
+                           (tui-path-octal? escaped)
+                           (tui-path-octal? (buf-read-u8 encoded (+ i 2)))
+                           (tui-path-octal? (buf-read-u8 encoded (+ i 3))))
+                        (let [value (+ (* (- escaped 48) 64)
+                                       (* (- (buf-read-u8 encoded (+ i 2)) 48) 8)
+                                       (- (buf-read-u8 encoded (+ i 3)) 48))]
+                          (if (or (= value 0) (> value 255))
+                            (throw "잘못된 Git 경로 바이트입니다.")
+                            (recur (+ i 4) (append output (buf-u8 value)))))
+                      true (throw "잘못된 Git 경로 escape입니다.")))))))))))
+
+(defn tui-path-rename-offset [encoded]
+  (let [size (buf-len encoded)]
+    (loop [i 0 quoted false]
+      (if (>= i size)
+        (throw "이름 변경 경로를 읽을 수 없습니다.")
+        (let [byte (buf-read-u8 encoded i)]
+          (cond
+            (and quoted (= byte 92)) (recur (+ i 2) quoted)
+            (= byte 34) (recur (+ i 1) (not quoted))
+            (and (not quoted) (<= (+ i 4) size)
+                 (= (buf-read-str encoded i 4) " -> ")) (+ i 4)
+            true (recur (+ i 1) quoted)))))))
+
 (defn tui-status-path [line]
-  (let [raw (str-trim (slice (str line) 3 (length (str line))))
-        unquoted (if (and (str-starts-with raw "\"") (str-ends-with raw "\""))
-                   (slice raw 1 (- (length raw) 1))
-                   raw)]
-    (if (str-includes unquoted " -> ")
-      (str-trim (get (regex_split unquoted " -> ") 1))
-      unquoted)))
+  (let [encoded (buf-str (str line)) size (buf-len encoded)]
+    (if (< size 4)
+      ""
+      (let [raw (buf-slice encoded 3 (- size 3))
+            renamed (or (= (buf-read-u8 encoded 0) 82)
+                        (= (buf-read-u8 encoded 1) 82)
+                        (= (buf-read-u8 encoded 0) 67)
+                        (= (buf-read-u8 encoded 1) 67))
+            offset (if renamed (tui-path-rename-offset raw) 0)]
+        (tui-path-unquote (buf-read-str raw offset (- (buf-len raw) offset)))))))
 
 (defn tui-status-staged? [line]
   (let [x (slice (str line) 0 1)]
@@ -16,7 +80,7 @@
 
 (defn tui-status-lines [text]
   (filter (fn [line] (> (length (str-trim line)) 0))
-          (regex_split (str-trim (str text)) "\\n")))
+          (regex_split (str text) "\\n")))
 
 (defn tui-index-rows [lines row acc]
   (if (= (length lines) 0)

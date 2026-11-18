@@ -2,8 +2,8 @@
 
 scripts/fl-git-native runs a separately verified Native executable built from
 src/main.fl. It preserves the current working directory and forwards command
-arguments without interpreting them. The existing scripts/fl-git entry is
-preserved while the remaining execution paths are migrated.
+arguments without interpreting them. The default scripts/fl-git entry now
+delegates to it; see NATIVE-DEFAULT-CLI.md for the latest migration receipt.
 
 ```sh
 export FREELANG_NATIVE_FLGIT=<verified-native-cli-executable>
@@ -25,7 +25,9 @@ the TUI with interactive terminal descriptors and restores terminal settings
 when the child exits. Missing tools fail explicitly with exit 2. Dedicated
 Native PTY validation covers raw input, signals, descendant reaping, actual
 mouse/keyboard interaction and Enter/menu restoration. The sources retain
-all TUI features. Typed Unicode input and Git-quoted paths remain pending.
+all TUI features. Typed Unicode input and Git-quoted paths now pass the
+current contracts; NATIVE-DEFAULT-CLI.md records the 28 path cases and 16
+default-entry terminal workflows, safety checks and limitations.
 
 The Native runtime supplies str-replace-all as the reference's literal
 split/join alias of str-replace. This preserves apostrophe quoting in Git
