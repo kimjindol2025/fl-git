@@ -86,7 +86,7 @@ registration/collision and advanced import/scope cases remain to be verified.
 | Current HTTP probe | PASS: 19 rows including request approval and a real UTC audit entry |
 | Generic project / cache/data controls | 10/10 in native-web-controls.jkt68oiw (before shell_capture SDK change) |
 | Browser DOM/console/events/screenshots | Scoped PASS: 8 views, cart, data, desktop/mobile; see NATIVE-BROWSER-VERIFICATION.md |
-| Legacy full diagnostics/fix/contracts/dev/HMR/default migration | incomplete |
+| Full diagnostic/contracts coverage, dev/HMR and remaining entries | incomplete; see current entry receipts |
 | Full DB95 commercial gate | NOT_RERUN; commercial HOLD |
 
 The first compiler-tool link failed because a C bridge function was passed
@@ -276,3 +276,15 @@ diagnostic failures. The default command produced the same application ELF
 as V12 and passed the HTTP/browser scope again. Other default commands,
 dev/HMR and .freelang/deploy.sh still require migration. This checkpoint
 supersedes earlier default-production-command NOT_RUN statements only.
+
+## Default FLP command checkpoint
+
+scripts/flp-compile now preserves both page-check gates and uses the Native
+generator entry. NATIVE-DEFAULT-FLP.md records the current SDK, private
+generation, exact protocol, complete-output checks and caught publication
+failure recovery. The FreeLang generator source and its eight output bytes
+remain unchanged. Its direct entry does not add checker dependencies; this
+web builder continues to call the generator inside the already-private bundle.
+No full bundle/browser rerun is claimed by the launcher checkpoint. Dev/HMR,
+shared verification/deployment, general FLP support and SDK packaging remain
+open. Diagnostic fix is advice, not an automatic source-rewrite option.

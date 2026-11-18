@@ -5,21 +5,190 @@ SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
 ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
 SOURCE_DIR="${1:-$ROOT/web/pages}"
 NATIVE_TOOL="${FREELANG_NATIVE_FLP_TOOL:-}"
+announced=0
+blocked() {
+  announced=1
+  echo "FLP_NATIVE_COMPILE=BLOCKED"
+  printf 'CAUSE=%s\n' "$1" >&2
+  exit 2
+}
+failed() {
+  announced=1
+  echo "FLP_NATIVE_COMPILE=FAIL"
+  printf 'CAUSE=%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+[[ -n "$NATIVE_TOOL" && -f "$NATIVE_TOOL" && -x "$NATIVE_TOOL" ]] ||
+  blocked "Set FREELANG_NATIVE_FLP_TOOL to the verified Native flp-compile executable."
+[[ -d "$SOURCE_DIR" ]] || blocked "Source directory does not exist."
+if ! SOURCE_DIR="$(cd -P -- "$SOURCE_DIR" && printf '%s/' "$PWD")"; then
+  blocked "Unable to access source directory."
+fi
+SOURCE_DIR="${SOURCE_DIR%/}"
+WEB_ROOT="${SOURCE_DIR%/*}"
+[[ -n "$WEB_ROOT" ]] || WEB_ROOT=/
 
-if [[ -z "$NATIVE_TOOL" || ! -x "$NATIVE_TOOL" ]]; then
-  echo "FLP_NATIVE_COMPILE=BLOCKED"
-  echo "CAUSE=Set FREELANG_NATIVE_FLP_TOOL to the verified Native flp-compile executable." >&2
-  exit 2
+inputs=(products.flp 'products/[id].flp' cart.flp checkout.flp admin/products.flp)
+relative_outputs=(pages/products.flx 'pages/products/[id].flx' pages/cart.flx pages/checkout.flx
+  islands/products.flx 'islands/products/[id].flx' islands/cart.flx islands/checkout.flx)
+destinations=("$SOURCE_DIR/products.flx" "$SOURCE_DIR/products/[id].flx"
+  "$SOURCE_DIR/cart.flx" "$SOURCE_DIR/checkout.flx" "$WEB_ROOT/islands/products.flx"
+  "$WEB_ROOT/islands/products/[id].flx" "$WEB_ROOT/islands/cart.flx"
+  "$WEB_ROOT/islands/checkout.flx" "$SOURCE_DIR/_flp-generated.flx")
+parents=("$SOURCE_DIR/products" "$WEB_ROOT/islands" "$WEB_ROOT/islands/products")
+
+check_destination() {
+  local target="$1" parent="${1%/*}"
+  [[ ! -L "$target" ]] || blocked "Generated output must not be a symbolic link."
+  if [[ -e "$target" ]]; then
+    [[ -f "$target" && -w "$target" ]] ||
+      blocked "Generated output must be a writable regular file."
+  fi
+  while [[ ! -e "$parent" ]]; do parent="${parent%/*}"; [[ -n "$parent" ]] || parent=/; done
+  [[ -d "$parent" && -w "$parent" && -x "$parent" ]] ||
+    blocked "Generated output directory is not writable."
+}
+for parent in "${parents[@]}"; do
+  [[ ! -L "$parent" ]] || blocked "Generated output directory must not be a symbolic link."
+  [[ ! -e "$parent" || -d "$parent" ]] || blocked "Generated output parent is not a directory."
+done
+for target in "${destinations[@]}"; do check_destination "$target"; done
+if ! RUN="$(mktemp -d -- "${TMPDIR:-/tmp}/flp-native.XXXXXX")"; then
+  blocked "Unable to create the Native FLP staging directory."
 fi
-if [[ ! -d "$SOURCE_DIR" ]]; then
-  echo "FLP_NATIVE_COMPILE=BLOCKED"
-  echo "CAUSE=Source directory does not exist." >&2
-  exit 2
-fi
-SOURCE_DIR="$(cd -- "$SOURCE_DIR" && pwd -P)"
-output="$(FLP_SOURCE_DIR="$SOURCE_DIR" FLP_OUTPUT="$SOURCE_DIR/_flp-generated.flx" "$NATIVE_TOOL")"
+temps=() backups=() existed=() created_dirs=()
+replaced=0
+legacy_removed=0
+pending_temp=""
+pending_backup=""
+cleanup() {
+  local rc=$? i path rollback_ok=1 cleanup_ok=1
+  trap - EXIT INT TERM HUP
+  [[ -z "$pending_temp" ]] || temps+=("$pending_temp")
+  [[ -z "$pending_backup" ]] || backups+=("$pending_backup")
+  if [[ "$rc" -ne 0 ]]; then
+    if [[ "$legacy_removed" -eq 1 ]]; then
+      if ! mv -fT -- "${backups[8]}" "${destinations[8]}"; then rollback_ok=0; fi
+    fi
+    for ((i=replaced-1; i>=0; i--)); do
+      if [[ "${existed[i]}" -eq 1 ]]; then
+        if ! mv -fT -- "${backups[i]}" "${destinations[i]}"; then rollback_ok=0; fi
+      elif ! rm -f -- "${destinations[i]}"; then
+        rollback_ok=0
+      fi
+    done
+  fi
+  for path in "${temps[@]}"; do
+    if ! rm -f -- "$path"; then cleanup_ok=0; fi
+  done
+  if [[ "$rollback_ok" -eq 1 ]]; then
+    for path in "${backups[@]}"; do
+      [[ -n "$path" ]] || continue
+      if ! rm -f -- "$path"; then cleanup_ok=0; fi
+    done
+    if ! rm -rf -- "$RUN"; then cleanup_ok=0; fi
+    if [[ "$rc" -ne 0 ]]; then
+      for ((i=${#created_dirs[@]}-1; i>=0; i--)); do
+        rmdir -- "${created_dirs[i]}" 2>/dev/null || true
+      done
+    fi
+  else
+    printf 'FLP_NATIVE_ROLLBACK=FAIL\nFLP_NATIVE_ARTIFACTS=%s\n' "$RUN" >&2
+  fi
+  if [[ "$cleanup_ok" -eq 0 && "$rc" -eq 0 ]]; then rc=1; fi
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FLP_NATIVE_COMPILE=PASS"
+  elif [[ "$announced" -eq 0 ]]; then
+    echo "FLP_NATIVE_COMPILE=FAIL"
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+mkdir -p -- "$RUN/web/pages/products" "$RUN/web/pages/admin" "$RUN/web/islands/products" "$RUN/old"
+for ((i=0; i<${#destinations[@]}; i++)); do
+  target="${destinations[i]}"
+  if [[ -f "$target" ]]; then
+    cp -p -- "$target" "$RUN/old/$i"
+    existed+=(1)
+  else
+    existed+=(0)
+  fi
+done
+for input in "${inputs[@]}"; do
+  [[ -f "$SOURCE_DIR/$input" && -r "$SOURCE_DIR/$input" ]] ||
+    failed "A required FLP contract is missing or unreadable."
+  cp -- "$SOURCE_DIR/$input" "$RUN/web/pages/$input"
+done
+
 status=0
-if printf '%s\n' "$output" | grep -q '^FLP_COMPILE_EXIT=1$'; then status=1; fi
+output="$(FLP_SOURCE_DIR="$RUN/web/pages" FLP_OUTPUT="$RUN/web/pages/_flp-generated.flx" "$NATIVE_TOOL")" || status=$?
 printf '%s\n' "$output" | grep -v '^FLP_COMPILE_EXIT=' || true
-if [[ "$status" -eq 0 ]]; then echo "FLP_NATIVE_COMPILE=PASS"; else echo "FLP_NATIVE_COMPILE=FAIL"; fi
-exit "$status"
+[[ "$status" -eq 0 ]] || failed "Native FLP generator failed." "$status"
+marker_count=0
+marker=""
+invalid_marker=0
+while IFS= read -r line; do
+  [[ "$line" == FLP_COMPILE_EXIT=* ]] || continue
+  marker_count=$((marker_count + 1))
+  if [[ "$line" =~ ^FLP_COMPILE_EXIT=[01]$ ]]; then
+    marker="${line#FLP_COMPILE_EXIT=}"
+  else
+    invalid_marker=1
+  fi
+done <<< "$output"
+[[ "$marker_count" -eq 1 && "$invalid_marker" -eq 0 ]] ||
+  blocked "Native FLP generator must return exactly one FLP_COMPILE_EXIT=0/1 marker."
+[[ "$marker" -eq 0 ]] || failed "Native FLP generator rejected these contracts."
+for relative in "${relative_outputs[@]}"; do
+  [[ -f "$RUN/web/$relative" && ! -L "$RUN/web/$relative" && -s "$RUN/web/$relative" ]] ||
+    failed "Native FLP generator did not produce all eight complete outputs."
+done
+for input in "${inputs[@]}"; do
+  cmp -s -- "$SOURCE_DIR/$input" "$RUN/web/pages/$input" ||
+    failed "FLP contracts changed during generation; outputs were not published."
+done
+for ((i=0; i<${#destinations[@]}; i++)); do
+  target="${destinations[i]}"
+  check_destination "$target"
+  if [[ "${existed[i]}" -eq 1 ]]; then
+    cmp -s -- "$target" "$RUN/old/$i" ||
+      failed "Generated destination changed during generation; outputs were not published."
+  elif [[ -e "$target" || -L "$target" ]]; then
+    failed "Generated destination appeared during generation; outputs were not published."
+  fi
+done
+for parent in "$WEB_ROOT/islands" "$WEB_ROOT/islands/products"; do
+  if [[ ! -d "$parent" ]]; then created_dirs+=("$parent"); mkdir -- "$parent"; fi
+done
+for ((i=0; i<${#destinations[@]}; i++)); do
+  target="${destinations[i]}"
+  parent="${target%/*}"
+  backups+=("")
+  if [[ "${existed[i]}" -eq 1 ]]; then
+    pending_backup="$(mktemp -- "$parent/.flp-previous.XXXXXX")"
+    backups[i]="$pending_backup"
+    cp -p -- "$target" "$pending_backup"
+  fi
+  if [[ "$i" -lt "${#relative_outputs[@]}" ]]; then
+    pending_temp="$(mktemp -- "$parent/.flp-output.XXXXXX")"
+    temps+=("$pending_temp")
+    cp -- "$RUN/web/${relative_outputs[i]}" "$pending_temp"
+    if [[ "${existed[i]}" -eq 1 ]]; then
+      chmod --reference="$target" "$pending_temp"
+    else
+      chmod --reference="$RUN/web/${relative_outputs[i]}" "$pending_temp"
+    fi
+  fi
+done
+for ((i=0; i<${#relative_outputs[@]}; i++)); do
+  replaced=$((i + 1))
+  mv -fT -- "${temps[i]}" "${destinations[i]}"
+done
+if [[ "${existed[8]}" -eq 1 ]]; then
+  legacy_removed=1
+  rm -- "${destinations[8]}"
+fi
+exit 0

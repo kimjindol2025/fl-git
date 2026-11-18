@@ -62,6 +62,14 @@ export FREELANG_NATIVE_FLCHECK=<verified-native-page-checker>
 
 [기본 페이지 검사 명령](docs/NATIVE-DEFAULT-CHECK.md)에 설정과 검증 범위를 기록했다.
 
+FLP 계약 컴파일도 Native 도구를 지정해 실행한다. 기존 두 페이지 검사 후 서버·island
+파일을 생성한다. [Native FLP 명령](docs/NATIVE-DEFAULT-FLP.md)에 출력 보존과 검증 범위를 기록했다.
+
+```bash
+export FREELANG_NATIVE_FLP_TOOL=<matching-native-flp-generator>
+./scripts/flp-compile
+```
+
 ## FreeLang Tools
 
 자주 쓰는 개발 명령은 공용 CLI로도 실행할 수 있다.
