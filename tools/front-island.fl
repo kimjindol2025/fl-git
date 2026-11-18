@@ -1,0 +1,257 @@
+; Native island AST -> FreeLang browser source. No JavaScript runtime strings.
+; Input is the compiler's non-executing freelang.ast.v1 interchange.
+(define fl-island-serial (atom 0))
+(define FL-ISLAND-PREFIX "front-native-island-")
+(define FL-ISLAND-ALIASES
+  {"inc" "front-native-island-inc" "dec" "front-native-island-dec"
+   "not" "front-native-island-not" "not=" "front-native-island-not-equal"
+   ">" "front-native-island-greater" "<=" "front-native-island-less-equal"
+   ">=" "front-native-island-greater-equal" "first" "front-native-island-first"
+   "rest" "front-native-island-rest" "push" "front-native-island-push"
+   "concat" "front-native-island-concat" "filter" "front-native-island-filter"
+   "reduce" "front-native-island-reduce" "empty?" "front-native-island-empty"})
+
+(defn fl-island-fresh []
+  (let [number @fl-island-serial]
+    (swap! fl-island-serial + 1)
+    (str FL-ISLAND-PREFIX number)))
+
+(defn fl-island-quote [text]
+  (str "\""
+    (str-join
+      (map (fn [unit]
+             (let [byte (char-code-at unit 0)]
+               (cond
+                 [(= unit "\"") "\\\""]
+                 [(= unit "\\") "\\\\"]
+                 [(< byte 32)
+                  (let [high (math-floor (/ byte 16)) low (mod byte 16)]
+                    (str "\\x" (str-slice "0123456789abcdef" high (+ high 1))
+                                (str-slice "0123456789abcdef" low (+ low 1))))]
+                 [true unit])))
+           (str-split text "")) "")
+    "\""))
+
+(defn fl-island-string-literal [text]
+  ; UTF-8 file output correctly replaces lone surrogates. Keep those code
+  ; units as escaped JSON data instead of putting invalid UTF-8 in source.
+  (let [encoded (json-str text)]
+    (if (str-includes encoded "\\ud")
+      (str "(browser-json-parse " (fl-island-quote encoded) ")")
+      (fl-island-quote text))))
+
+(defn fl-island-name [text]
+  (if (not (string? text)) (throw "E_ISLAND_NAME: string name required")
+   (let [name (if (str-starts-with text "$") (str-slice text 1 (length text)) text)
+        normalized (str-replace-in name "_" "-")
+        units (str-split name "")]
+    (if (or (= name "") (str-starts-with name FL-ISLAND-PREFIX)
+            (str-starts-with name "__fl")
+            (str-starts-with normalized "j-host-")
+            (str-starts-with normalized "jcore-")
+            (str-starts-with normalized "fl-compiler-")
+            (= normalized "fl-register-named-fn")
+            (not (every? (fn [unit]
+                           (str-includes "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_?!/.<>=+*%&|^~" unit))
+                         units)))
+      (throw "E_ISLAND_NAME: invalid or reserved source name") name))))
+
+(defn fl-island-binding-name [node]
+  (cond
+    [(= (get node "kind") "variable") (fl-island-name (get node "name"))]
+    [(and (= (get node "kind") "literal") (= (get node "type") "symbol"))
+     (fl-island-name (get node "value"))]
+    [true (throw "E_ISLAND_BINDING: symbol required")]))
+
+(defn fl-island-items [node type]
+  (if (and (= (get node "kind") "block") (= (get node "type") type)
+           (= (type-of (get (get node "fields") "items")) "array"))
+    (get (get node "fields") "items")
+    (throw (str "E_ISLAND_SHAPE: expected " type))))
+
+(defn fl-island-pairs [node]
+  (let [items (fl-island-items node "Array")]
+    (if (and (> (length items) 0) (= (get (first items) "kind") "block"))
+      (map (fn [item]
+             (let [pair (fl-island-items item "Array")]
+               (if (= (length pair) 2) pair (throw "E_ISLAND_BINDING: pair required")))) items)
+      (if (not (= (mod (length items) 2) 0))
+        (throw "E_ISLAND_BINDING: even binding vector required")
+        (loop [index 0 pairs []]
+          (if (>= index (length items)) pairs
+            (recur (+ index 2) (push pairs [(get items index) (get items (+ index 1))]))))))))
+
+(defn fl-island-prepare-bindings [pairs outer]
+  (loop [index 0 env outer records [] names []]
+    (if (>= index (length pairs)) {"env" env "records" records}
+      (let [pair (get pairs index)
+            source (fl-island-binding-name (get pair 0))
+            name (fl-island-fresh)
+            fallback (or (get outer source)
+                         (str "(throw " (fl-island-quote (str "Unbound island binding: " source)) ")"))]
+        (if (> (length (filter (fn [other] (= source other)) names)) 0)
+          (throw "E_ISLAND_BINDING: duplicate binding")
+          (recur (+ index 1)
+                 (assoc env source (str "(front-native-island-read " name ")"))
+                 (push records {"source" source "name" name "fallback" fallback "value" (get pair 1)})
+                 (push names source)))))))
+
+(defn fl-island-cell [record]
+  (str (get record "name") " (atom [false nil (fn [] " (get record "fallback") ")])"))
+
+(defn fl-island-body [nodes env update]
+  (if (= (length nodes) 0) "nil"
+    (str "(do " (str-join (map (fn [node] (fl-island-emit node env update)) nodes) " ") ")")))
+
+(defn fl-island-initialize [record env update persistent]
+  (let [name (get record "name")
+        assign (str "(reset! " name " [true " (fl-island-emit (get record "value") env update) " nil])")]
+    (if persistent (str "(if (get (deref " name ") 0) nil " assign ")") assign)))
+
+(defn fl-island-emit-let [args env update]
+  (let [prepared (fl-island-prepare-bindings (fl-island-pairs (get args 0)) env)
+        records (get prepared "records") inner (get prepared "env")]
+    (str "(let [" (str-join (map fl-island-cell records) " ") "] "
+      (str-join (map (fn [record] (fl-island-initialize record inner update false)) records) " ")
+      " " (fl-island-body (slice args 1 (length args)) inner update) ")")))
+
+(defn fl-island-emit-fn [args env update]
+  (let [params (fl-island-items (get args 0) "Array")
+        prepared (loop [index 0 inner env names [] sources []]
+                   (if (>= index (length params)) {"env" inner "names" names}
+                     (let [source (fl-island-binding-name (get params index)) name (fl-island-fresh)]
+                       (if (= source "&") (throw "E_ISLAND_BINDING: variadic parameters pending") nil)
+                       (if (> (length (filter (fn [other] (= source other)) sources)) 0)
+                         (throw "E_ISLAND_BINDING: duplicate parameter")
+                         (recur (+ index 1) (assoc inner source name) (push names name) (push sources source))))))]
+    (str "(fn [" (str-join (get prepared "names") " ") "] "
+      (fl-island-body (slice args 1 (length args)) (get prepared "env") update) ")")))
+
+(defn fl-island-form [op args env update]
+  (str "(" op (if (= (length args) 0) "" " ")
+       (str-join (map (fn [node] (fl-island-emit node env update)) args) " ") ")"))
+
+(defn fl-island-symbol [name env]
+  (let [source (fl-island-name name)]
+    (or (get env source) (get FL-ISLAND-ALIASES source) source)))
+
+(defn fl-island-emit-call [node env update]
+  (let [op (get node "op") args (get node "args")]
+    (cond
+      [(= op "let") (fl-island-emit-let args env update)]
+      [(= op "fn") (fl-island-emit-fn args env update)]
+      [(or (= op "if") (= op "do")) (fl-island-form op args env update)]
+      [(or (= op "loop") (= op "recur") (= op "defn") (= op "define") (= op "set!"))
+       (throw (str "E_ISLAND_UNSUPPORTED_FORM: " op))]
+      [(and (not (= op "__apply__")) (not (= (get env (fl-island-name op)) nil)))
+       (fl-island-form (get env (fl-island-name op)) args env update)]
+      [(or (= op "h") (= op "h!"))
+       (if (< (length args) 1) (throw "E_ISLAND_ARITY: h requires a tag")
+         (str "(island-h " (fl-island-emit (get args 0) env update) " "
+              (if (> (length args) 1) (fl-island-emit (get args 1) env update) "{}")
+              " [" (if (= op "h!") ""
+                     (str-join (map (fn [child] (fl-island-emit child env update))
+                                    (slice args 2 (length args))) " ")) "])"))]
+      [(or (= op "reset!") (= op "swap!"))
+       (if (= update nil) (throw "E_ISLAND_STATE: update scope required")
+         (let [value (fl-island-fresh)]
+           (str "(let [" value " " (fl-island-form op args env update) "] (" update ") " value ")")))]
+      [(= op ".getElementById")
+       (if (and (= (length args) 2) (= (get (get args 0) "type") "symbol")
+                (= (get (get args 0) "value") "document"))
+         (fl-island-form "browser-by-id" (slice args 1 2) env update)
+         (throw "E_ISLAND_INTEROP: document.getElementById required"))]
+      [(= op ".parse")
+       (if (and (= (length args) 2) (= (get (get args 0) "type") "symbol")
+                (= (get (get args 0) "value") "JSON"))
+         (fl-island-form "browser-json-parse" (slice args 1 2) env update)
+         (throw "E_ISLAND_INTEROP: JSON.parse required"))]
+      [(= op ".-textContent") (fl-island-form "browser-text" args env update)]
+      [(= op ".-value") (fl-island-form "browser-value" args env update)]
+      [(= op ".-target") (fl-island-form "browser-event-target" args env update)]
+      [(= op ".getAttribute") (fl-island-form "island-attribute" args env update)]
+      [(= op "__apply__")
+       (str "(" (str-join (map (fn [item] (fl-island-emit item env update)) args) " ") ")")]
+      [(= op "when")
+       (str "(if " (fl-island-emit (get args 0) env update) " "
+            (fl-island-body (slice args 1 (length args)) env update) " nil)")]
+      [(or (= op "load") (= op "eval"))
+       (throw "E_ISLAND_BOUNDARY: server load/eval is unavailable")]
+      [(or (= op "island") (str-starts-with op "."))
+       (throw (str "E_ISLAND_UNSUPPORTED: " op))]
+      [true (fl-island-form (fl-island-symbol op env) args env update)])))
+
+(defn fl-island-emit [node env update]
+  (let [kind (get node "kind")]
+    (cond
+      [(= node nil) "nil"]
+      [(= kind "literal")
+       (let [type (get node "type") value (get node "value")]
+         (cond
+           [(= type "string")
+            (if (string? value) (fl-island-string-literal value) (throw "E_ISLAND_LITERAL: string required"))]
+           [(= type "number")
+            (if (regex_match value "^-?[0-9]+(\\.[0-9]*)?([eE][+-]?[0-9]+)?$")
+              value (throw "E_ISLAND_NUMBER: invalid number"))]
+           [(or (= type "boolean") (= type "bool"))
+            (if (= (type-of value) "boolean") (if value "true" "false") (throw "E_ISLAND_LITERAL: boolean required"))]
+           [(or (= type "nil") (= type "null"))
+            (if (= value nil) "nil" (throw "E_ISLAND_LITERAL: nil required"))]
+           [(= type "symbol") (fl-island-symbol value env)]
+           [true (throw "E_ISLAND_LITERAL: unsupported literal")]))]
+      [(= kind "variable") (fl-island-symbol (get node "name") env)]
+      [(= kind "keyword") (str ":" (fl-island-name (get node "name")))]
+      [(= kind "block")
+       (let [type (get node "type") items (fl-island-items node (get node "type"))]
+         (if (not (or (= type "Array") (= type "Map"))) (throw "E_ISLAND_BLOCK: unsupported block")
+           (if (and (= type "Map") (not (= (mod (length items) 2) 0))) (throw "E_ISLAND_MAP: even items required")
+             (str (if (= type "Array") "[" "{")
+                  (str-join (map (fn [item] (fl-island-emit item env update)) items) " ")
+                  (if (= type "Array") "]" "}")))))]
+      [(or (= kind "and") (= kind "or")) (fl-island-form kind (get node "args") env update)]
+      [(= kind "sexpr") (fl-island-emit-call node env update)]
+      [true (throw (str "E_ISLAND_UNSUPPORTED_IR: " kind))])))
+
+(defn fl-island-atom-binding? [record]
+  (let [value (get record "value")]
+    (and (= (get value "kind") "sexpr") (= (get value "op") "atom"))))
+
+(defn fl-island-one [node index]
+  (let [args (get node "args") name (fl-island-binding-name (get args 0))
+        options (fl-island-items (get args 1) "Array")
+        body (slice args 2 (length args))
+        id (str "island-" (str-lower name) "-" index)
+        update (fl-island-fresh)
+        simple-let (and (= (length body) 1) (= (get (first body) "op") "let"))
+        let-args (if simple-let (get (first body) "args") [])
+        prepared (fl-island-prepare-bindings (if simple-let (fl-island-pairs (first let-args)) []) {})
+        records (get prepared "records") env (get prepared "env")
+        persistent (filter fl-island-atom-binding? records)
+        local (filter (fn [record] (not (fl-island-atom-binding? record))) records)]
+    (if (> (length options) 0) (throw "E_ISLAND_OPTIONS: watch/store integration pending") nil)
+    {"name" name "id" id
+     "state" (map (fn [record] (get record "source")) persistent)
+     "source" (str "(let [" (str-join (map fl-island-cell persistent) " ") "] "
+       "(island-mount " (fl-island-quote id) " (fn [" update "] "
+         "(let [" (str-join (map fl-island-cell local) " ") "] "
+           (str-join (map (fn [record] (fl-island-initialize record env update (fl-island-atom-binding? record))) records) " ")
+           " " (if simple-let (fl-island-body (slice let-args 1 (length let-args)) env update)
+                                          (fl-island-body body {} update)) "))))\n")}))
+
+(defn fl-island-program [parsed support]
+  (if (not (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok")))
+    (throw "E_ISLAND_AST: successful freelang.ast.v1 input required")
+    (let [nodes (get parsed "nodes")]
+      (if (not (and (= (type-of nodes) "array")
+                   (every? (fn [node] (and (= (get node "kind") "sexpr") (= (get node "op") "island"))) nodes)))
+        (throw "E_ISLAND_SOURCE: client source must contain only island forms")
+        (do
+          (reset! fl-island-serial 0)
+          (let [islands (loop [index 0 found []]
+                          (if (>= index (length nodes)) found
+                            (recur (+ index 1) (push found (fl-island-one (get nodes index) index)))))]
+            {"program" (str "(load " (fl-island-quote support) ")\n"
+                            (str-join (map (fn [island] (get island "source")) islands) "\n"))
+             "manifest" {"schema" "fl-islands/1" "hasIslands" (> (length islands) 0)
+                         "islands" (map (fn [island] {"name" (get island "name") "id" (get island "id")
+                                                    "state" (get island "state")}) islands)}}))))))

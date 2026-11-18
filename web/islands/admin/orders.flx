@@ -58,7 +58,7 @@
         (h "h2" {} "관리자 인증")
         (h "form" {"id" "admin-order-login" "autocomplete" "off"}
           (h "label" {"for" "admin-order-password"} "관리자 암호")
-          (h "input" {"id" "admin-order-password" "type" "password" "autocomplete" "current-password" "required"})
+          (h "input" {"id" "admin-order-password" "type" "password" "autocomplete" "current-password" "required" "required"})
           (h "button" {"type" "button" :on-click login} "인증"))
         (if (= @message "") "" (h "p" {"class" "order-error" "role" "status"} @message)))
       (h "section" {}

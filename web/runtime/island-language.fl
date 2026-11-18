@@ -1,0 +1,28 @@
+; Pure FreeLang support for generated island modules.
+(defn front-native-island-read [cell]
+  (let [record (deref cell)]
+    (if (get record 0) (get record 1) ((get record 2)))))
+(defn front-native-island-inc [value] (+ value 1))
+(defn front-native-island-dec [value] (- value 1))
+(defn front-native-island-not [value] (if value false true))
+(defn front-native-island-not-equal [left right] (if (= left right) false true))
+(defn front-native-island-greater [left right] (< right left))
+(defn front-native-island-less-equal [left right] (or (< left right) (= left right)))
+(defn front-native-island-greater-equal [left right] (or (< right left) (= left right)))
+(defn front-native-island-first [value] (get value 0))
+(defn front-native-island-rest [value]
+  (loop [index 1 result []]
+    (if (< index (length value))
+      (recur (+ index 1) (append result [(get value index)])) result)))
+(defn front-native-island-push [values item] (append (or values []) [item]))
+(defn front-native-island-concat [left right] (append (or left []) (or right [])))
+(defn front-native-island-filter [predicate values]
+  (loop [index 0 result []]
+    (if (< index (length values))
+      (let [item (get values index)]
+        (recur (+ index 1) (if (predicate item) (append result [item]) result))) result)))
+(defn front-native-island-reduce [callback initial values]
+  (loop [index 0 result initial]
+    (if (< index (length values))
+      (recur (+ index 1) (callback result (get values index))) result)))
+(defn front-native-island-empty [value] (if value (= (length value) 0) true))

@@ -1,0 +1,19 @@
+; Consume the verified compiler's AST and emit browser-target FreeLang source.
+(load "./front-island.fl")
+
+(defn fl-island-command [args]
+  (if (not (= (length args) 4))
+    (do
+      (println "Usage: fl-island-compile <ast.json> <support.fl> <program.fl> <manifest.json>")
+      (process-exit 2))
+    (let [parsed (json-parse (file_read (get args 0)))
+          compiled (fl-island-program parsed (get args 1))]
+      (file_write (get args 2) (get compiled "program"))
+      (file_write (get args 3) (str (json-str (get compiled "manifest")) "\n"))
+      (println (json-str (get compiled "manifest"))))))
+
+(try
+  (fl-island-command (cli-args))
+  (catch e
+    (println (json-str {"schema" "fl-islands/1" "status" "error" "error" (error-message e)}))
+    (process-exit 1)))

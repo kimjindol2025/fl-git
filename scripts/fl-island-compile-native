@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+ISLAND_TOOL="${FREELANG_NATIVE_ISLAND_TOOL:-}"
+
+blocked() {
+  echo "FL_ISLAND_NATIVE_COMPILE=BLOCKED"
+  printf 'CAUSE=%s\n' "$1" >&2
+  exit 2
+}
+[[ -n "$COMPILER" && -x "$COMPILER" ]] || blocked "Set FREELANG_NATIVE_COMPILER to the verified Native FX compiler."
+[[ -n "$ISLAND_TOOL" && -x "$ISLAND_TOOL" ]] || blocked "Set FREELANG_NATIVE_ISLAND_TOOL to its matching Native island compiler."
+[[ "$#" -eq 2 ]] || blocked "Usage: fl-island-compile-native <client.flx> <existing-output-directory>"
+[[ -f "$1" ]] || blocked "Client source must be a regular file."
+[[ -d "$2" ]] || blocked "Output directory does not exist."
+SOURCE="$(readlink -f -- "$1")"
+OUTPUT="$(cd -- "$2" && pwd -P)"
+RUN="$(mktemp -d -- "$OUTPUT/fl-island.XXXXXX")"
+printf 'FL_ISLAND_ARTIFACTS=%s\n' "$RUN"
+
+if "$COMPILER" --parse-json "$SOURCE" >"$RUN/ast.json" 2>"$RUN/parse.stderr"; then :; else
+  status=$?
+  cat "$RUN/ast.json" "$RUN/parse.stderr"
+  echo "FL_ISLAND_NATIVE_COMPILE=FAIL"
+  exit "$status"
+fi
+if "$ISLAND_TOOL" "$RUN/ast.json" "$ROOT/web/runtime/island-language.fl" "$RUN/program.fl" "$RUN/manifest.json" >"$RUN/frontend.log" 2>&1; then :; else
+  status=$?
+  cat "$RUN/frontend.log"
+  echo "FL_ISLAND_NATIVE_COMPILE=FAIL"
+  exit "$status"
+fi
+if "$COMPILER" --browser-js "$RUN/program.fl" "$RUN/module.js" >"$RUN/generate.log" 2>&1; then :; else
+  status=$?
+  cat "$RUN/generate.log"
+  echo "FL_ISLAND_NATIVE_COMPILE=FAIL"
+  exit "$status"
+fi
+[[ -s "$RUN/module.js" ]] || { echo "FL_ISLAND_NATIVE_COMPILE=FAIL"; exit 1; }
+cat "$RUN/manifest.json"
+echo "FL_ISLAND_NATIVE_COMPILE=PASS"
