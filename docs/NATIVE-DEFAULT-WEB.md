@@ -70,8 +70,9 @@ Private receipt: native-default-web.nok8manc. Host paths/owners: <가림>.
 | Tracked source and git state during diagnostics / business fixture files | Unchanged |
 
 The application SHA matches prior real browser validation, so this launcher
-change did not alter generated application bytes. The current FX compiler
-SHA is c8c6a0e691ddec4c4a9e0626d2b7c17d0d7f0450c40fb1847f4c1b13ff854f67.
+change did not alter generated application bytes. The compiler used for this
+launcher receipt has SHA
+c8c6a0e691ddec4c4a9e0626d2b7c17d0d7f0450c40fb1847f4c1b13ff854f67.
 Seed bootstrap/stage0.c remains
 0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767.
 
