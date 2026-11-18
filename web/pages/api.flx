@@ -193,9 +193,9 @@
       {"ok" false "error" "FL_GIT_ROOTS에 *를 사용할 수 없습니다."})))
 
 (defn api-provider-redact [text]
-  (let [step1 (regex-replace (str text) "Token: \\S+" "Token: [redacted]")
-        step2 (regex-replace step1 "GH_TOKEN=\\S+" "GH_TOKEN=[redacted]")
-        step3 (regex-replace step2 "GITHUB_TOKEN=\\S+" "GITHUB_TOKEN=[redacted]")]
+  (let [step1 (regex_replace (str text) "Token: \\S+" "Token: [redacted]")
+        step2 (regex_replace step1 "GH_TOKEN=\\S+" "GH_TOKEN=[redacted]")
+        step3 (regex_replace step2 "GITHUB_TOKEN=\\S+" "GITHUB_TOKEN=[redacted]")]
     step3))
 
 (defn api-provider-tool? [name]

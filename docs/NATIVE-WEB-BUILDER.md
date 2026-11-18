@@ -79,11 +79,11 @@ registration/collision and advanced import/scope cases remain to be verified.
 | Evidence | Status |
 |---|---|
 | Real project Native bundle | 9 route registrations, 8 browser modules, linked ELF |
-| Final build-time wrapper/asset verification | PASS in native-web-build-v6.t7w2wtg7 |
+| Final build-time wrapper/asset verification | PASS in native-web-build-v9.uxqe9u2a |
 | Collected real-project build trace | Node 0; network requests 0 |
-| Fresh core | native-shell-core.jn7p3ky4: frontend 71/71, CLI 22/22, FX 11/11 |
+| Fresh core | native-json-core.wcpd3881: frontend 71/71, CLI 22/22, FX 11/11 |
 | Page checker / original DB95 subset | 32/32 plus defaults; 7/13/36/40 exit 0 |
-| Current HTTP probe | PASS: pages, memory cart/checkout, offline Git status/context and CSS |
+| Current HTTP probe | PASS: 19 rows including request approval and a real UTC audit entry |
 | Generic project / cache/data controls | 10/10 in native-web-controls.jkt68oiw (before shell_capture SDK change) |
 | Browser DOM/console/events/screenshots | NOT_RUN |
 | Legacy full diagnostics/fix/contracts/dev/HMR/default migration | incomplete |
@@ -124,7 +124,7 @@ was changed. Existing default Node entries remain until their full behavior
 is ported and accepted. Customer DB connections and order submission/storage
 were not exercised.
 
-## Current application checkpoint
+## Initial Git-read checkpoint
 
 The current server ELF SHA-256 is
 61ffce6243553c623f6d89b7fcb97d3e45603e7b102ab02f4e49ac0a7c7fb383.
@@ -166,3 +166,63 @@ downloaded, copied into the repository or added to global configuration.
 New authored JS files: 0; authored JS line changes: 0. Full DB95 remains
 NOT_RERUN with its recorded 51 PASS / 20 FAIL baseline and checkpoint recovery
 blocker. Commercial readiness HOLD; deployment NO.
+
+## Current runtime and application acceptance boundary
+
+The current FX checkpoint is c2752e1dfb2aa486b766bbef34bfd91c59984b20.
+The matching fresh four-stage compiler ELF SHA-256 is
+c8c6a0e691ddec4c4a9e0626d2b7c17d0d7f0450c40fb1847f4c1b13ff854f67.
+Fresh Stage 2 = 3 = 4 C remains
+c1f48e888960f21679278d4e90ce0d2e05d3e51bbfecefafcd212819905458fa.
+Generation took 38.88 / 36.88 seconds with 1,526,500 / 1,528,988 KiB peak RSS.
+The 2 GiB cap and seed were unchanged; previous failure/performance receipts
+remain recorded.
+
+The Native runtime now implements now_iso and server_req_client_ip. Their
+28-row clock/peer evidence and fresh bootstrap/core results are recorded in
+FX NATIVE-TIME-PEER.md. The request field comes from the socket, including
+when forwarding headers, query and body fields contain a forged IP value.
+The existing HTTP JSON helper now honors body/status calls as well as the
+prior status/body form, with invalid explicit body-first statuses rejected.
+Its 25-row constructor/wire evidence is in FX NATIVE-JSON-STATUS.md.
+The previously noted missing runtime handlers are resolved for this SDK.
+
+The expanded V7 application run exposed the wrong approval-denial status.
+V8 confirmed the corrected HTTP 400, then found ordinary Git output replaced
+by a literal pattern string. api-provider-redact was using the older
+pattern-first regex operation with text-first arguments. Its three calls
+now use the existing text-first regex_replace module operation, retaining
+the same redaction categories and patterns. Private receipt
+native-provider-redaction.p0ql1u63 passes seven exact results: empty/ordinary/
+Unicode data is retained, multiple synthetic sensitive values are masked,
+and empty prefixes are preserved. No real secret value was used or printed.
+No regex runtime convention or existing repository test was changed.
+
+Final real-project receipts native-web-build-v9.uxqe9u2a and
+native-web-runtime-v9.54600y1u both exit 0. The server ELF SHA-256 is
+17d7ba8bc4c37485e4c31220ca58b88a647e657c8ba5279931246caf7e1f63ac.
+The generated source registers 187 functions and has zero unregistered
+literal named-call lookups in the private inventory. This inventory is not
+a general proof about every possible dynamic call.
+
+The 19-row HTTP receipt retains the prior page, cart, context and CSS cases,
+then verifies unapproved terminal access returns 400, an approved harmless
+local Git status returns its original stdout and exit 0, and exactly one
+UTC audit entry is stored in memory. All eight browser module endpoints
+return the generated assets. Fixture business files remain byte-identical;
+no order is submitted/stored and no customer DB is connected. Build and
+server exec traces contain zero Node-family executions; build network
+syscalls and server outbound connect calls are zero. Owned/traced processes
+after cleanup are zero. The failed V7/V8 receipts are retained separately.
+
+Actual application DOM/events/screenshots remain NOT_RUN at this checkpoint.
+After the standalone browser failures, the isolated frontend checkout was
+registered with the existing local Orca runtime without source changes.
+A pinned blank tab and its snapshot now succeed through Orca's embedded
+browser. Application browser validation is the next step; no browser was
+downloaded and no security or memory setting was changed. CLI helper and
+browser reference guides were read through orca skills get orca-cli.
+
+See NATIVE-EXIT-STATUS.md for the remaining default Node entries, dev/HMR,
+advanced framework/TTY/provider work and DB commercial gates. Commercial
+readiness remains HOLD; deployment NO. Host paths/owners: <가림>.
