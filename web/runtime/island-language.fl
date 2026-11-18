@@ -26,3 +26,10 @@
     (if (< index (length values))
       (recur (+ index 1) (callback result (get values index))) result)))
 (defn front-native-island-empty [value] (if value (= (length value) 0) true))
+
+(defn front-native-island-photo [product]
+  (let [photo (island-trim (island-str (or (get product "photo") "")))]
+    (if (or (= photo "")
+            (front-native-island-not (island-regex-test "^/public/[A-Za-z0-9._/-]+$" photo))
+            (island-contains photo ".."))
+      "/public/product-default.svg" photo)))

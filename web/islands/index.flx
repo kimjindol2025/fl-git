@@ -818,7 +818,7 @@
                                (h "div" {:class "folder-list repo-list"}
                                  (arr-join (map (fn [path] (h "button" {:class "folder-item repo-item" :title path :on-click (fn [] (open-repository path))} (str "◆ " path))) @repositories) ""))))
                         (h "div" {:class "selected-folder"} (str "선택 경로: " (or @repo-input "—") " · 폴더 클릭=진입 또는 Git이면 전환")))
-                   (h "div" {:class "branch-pill"} (str "⎇ " (or (get @data "branch") "—")))))
+                   (h "div" {:class "branch-pill"} (str "⎇ " (or (get @data "branch") "—"))))
             (h "section" {:class "stats-grid"}
               (str (status-card "BRANCH" (get @data "branch") "blue")
                    (status-card "REMOTE" (if (> (length (or (get @data "remote") "")) 0) "CONNECTED" "LOCAL ONLY") "green")
@@ -837,7 +837,7 @@
                                  " · auth " (or (get (get @data "remote_info") "auth") "—")
                                  " · branch " (or (get (get @data "remote_info") "branch") "—")
                                  " · ↑" (or (get (get @data "sync") "ahead") "—")
-                                 " ↓" (or (get (get @data "sync") "behind") "—"))))))))
+                                 " ↓" (or (get (get @data "sync") "behind") "—")))))))
             (h "section" {:class "provider-directory"}
               (str (h "style" {} ".provider-directory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.provider-directory-card{display:block;width:100%;text-align:left;background:#111925;border:1px solid var(--line);border-radius:14px;color:var(--text);padding:16px;cursor:pointer}.provider-directory-card:hover{border-color:var(--blue);background:#17243a}.provider-directory-card strong{display:block;font-size:14px}.provider-directory-card span{display:block;margin-top:7px;color:var(--muted);font:11px ui-monospace,monospace}@media(max-width:1000px){.provider-directory{grid-template-columns:1fr}}")
                    (h "button" {:class "provider-directory-card" :on-click (fn [] (open-provider-page "github"))}
@@ -853,8 +853,8 @@
                         (h "p" {:class "muted"} "현재 폴더에 새 로컬 Git 저장소를 생성합니다.")
                         (h "div" {:class "picker-row"}
                           (h "input" {:class "repo-input" :type "text" :value @new-repo-name :placeholder "예: my-new-repo" :on-input (fn [e] (reset! new-repo-name (.-value (.-target e))))})
-                          (h "button" {:class "button primary picker-button" :on-click create-repo} "저장소 생성")))))
-          "")
+                          (h "button" {:class "button primary picker-button" :on-click create-repo} "저장소 생성"))))))
+          ""))
         (h "aside" {:class (if (= @right-open true) "desktop-detail" "desktop-detail collapsed")}
           (if (= @right-open true)
             (str (h "div" {:class "detail-heading"}

@@ -9,7 +9,16 @@
    ">=" "front-native-island-greater-equal" "first" "front-native-island-first"
    "rest" "front-native-island-rest" "push" "front-native-island-push"
    "concat" "front-native-island-concat" "filter" "front-native-island-filter"
-   "reduce" "front-native-island-reduce" "empty?" "front-native-island-empty"})
+   "reduce" "front-native-island-reduce" "empty?" "front-native-island-empty"
+   "str" "island-str" "arr-join" "island-join" "str-join" "island-join"
+   "str-trim" "island-trim" "str-contains" "island-contains" "str-includes" "island-contains"
+   "str-count" "island-count" "str-split" "island-split" "regex_split" "island-regex-split"
+   "assoc" "island-assoc" "dissoc" "island-dissoc" "keys" "island-keys"
+   "merge" "island-merge" "obj-merge" "island-merge" "json_merge" "island-json-merge"
+   "Number" "island-number" "js_confirm" "island-confirm"
+   "fetch!" "island-fetch" "fetch-post!" "island-fetch-post"
+   "fetch-delete!" "island-fetch-delete" "fetch-result!" "island-fetch-result"
+   "fl-product-photo" "front-native-island-photo"})
 
 (defn fl-island-fresh []
   (let [number @fl-island-serial]
@@ -140,7 +149,10 @@
     (cond
       [(= op "let") (fl-island-emit-let args env update)]
       [(= op "fn") (fl-island-emit-fn args env update)]
-      [(or (= op "if") (= op "do")) (fl-island-form op args env update)]
+      [(= op "if")
+       (if (or (= (length args) 2) (= (length args) 3)) (fl-island-form op args env update)
+         (throw "E_ISLAND_ARITY: if requires condition, then and optional else"))]
+      [(= op "do") (fl-island-form op args env update)]
       [(or (= op "loop") (= op "recur") (= op "defn") (= op "define") (= op "set!"))
        (throw (str "E_ISLAND_UNSUPPORTED_FORM: " op))]
       [(and (not (= op "__apply__")) (not (= (get env (fl-island-name op)) nil)))
@@ -158,18 +170,40 @@
            (str "(let [" value " " (fl-island-form op args env update) "] (" update ") " value ")")))]
       [(= op ".getElementById")
        (if (and (= (length args) 2) (= (get (get args 0) "type") "symbol")
+                (= (get env "document") nil)
                 (= (get (get args 0) "value") "document"))
          (fl-island-form "browser-by-id" (slice args 1 2) env update)
          (throw "E_ISLAND_INTEROP: document.getElementById required"))]
       [(= op ".parse")
        (if (and (= (length args) 2) (= (get (get args 0) "type") "symbol")
+                (= (get env "JSON") nil)
                 (= (get (get args 0) "value") "JSON"))
          (fl-island-form "browser-json-parse" (slice args 1 2) env update)
          (throw "E_ISLAND_INTEROP: JSON.parse required"))]
       [(= op ".-textContent") (fl-island-form "browser-text" args env update)]
-      [(= op ".-value") (fl-island-form "browser-value" args env update)]
+      [(= op ".-value") (fl-island-form "island-value" args env update)]
       [(= op ".-target") (fl-island-form "browser-event-target" args env update)]
       [(= op ".getAttribute") (fl-island-form "island-attribute" args env update)]
+      [(= op ".reset")
+       (if (= (length args) 1) (fl-island-form "island-form-reset!" args env update)
+         (throw "E_ISLAND_INTEROP: form reset takes no method arguments"))]
+      [(= op ".test")
+       (let [regex (get args 0) parts (get regex "args")]
+         (if (and (= (length args) 2) (= (get regex "kind") "sexpr") (= (get regex "op") "RegExp")
+                  (= (get env "RegExp") nil) (or (= (length parts) 1) (= (length parts) 2)))
+           (let [pattern (fl-island-fresh) flags (fl-island-fresh) text (fl-island-fresh)]
+             (str "(let [" pattern " " (fl-island-emit (get parts 0) env update)
+                  " " flags " " (if (= (length parts) 2) (fl-island-emit (get parts 1) env update) "\"\"")
+                  " " text " " (fl-island-emit (get args 1) env update) "] "
+                  "(island-regex-test " pattern " " text " " flags "))"))
+           (throw "E_ISLAND_INTEROP: inline RegExp test required")))]
+      [(= op ".assign")
+       (let [target (get args 0) values (get target "args") global (get values 0)]
+         (if (and (= (length args) 2) (= (get target "op") ".-location") (= (length values) 1)
+                  (= (get global "type") "symbol") (= (get global "value") "window")
+                  (= (get env "window") nil))
+           (fl-island-form "island-navigate!" (slice args 1 2) env update)
+           (throw "E_ISLAND_INTEROP: window.location.assign required")))]
       [(= op "__apply__")
        (str "(" (str-join (map (fn [item] (fl-island-emit item env update)) args) " ") ")")]
       [(= op "when")
