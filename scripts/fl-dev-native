@@ -53,8 +53,8 @@ export FL_NATIVE_DEV_WEB="$WEB" FL_NATIVE_DEV_STATE="$STATE"
 export FL_NATIVE_DEV_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 [[ "$FL_NATIVE_DEV_TOKEN" =~ ^[0-9a-f]{64}$ ]] || blocked 'Unable to create the development supervisor token.'
 printf 'FL_NATIVE_DEV_ARTIFACTS=%s\n' "$RUN"
-APP_PID= HMR_PID= WATCH_PID= BUILD_PID= WATCH_FD= ACTIVE= CANDIDATE=
-DIRTY=0 DEBOUNCE=0 GENERATION=0
+APP_PID= HMR_PID= WATCH_PID= BUILD_PID= WATCH_FD= ACTIVE= CANDIDATE= BUILD_COMMIT=
+DIRTY=0 DEBOUNCE=0 GENERATION=0 WATCH_PENDING=
 now_ms() { "$FREELANG_NATIVE_DEV_WATCH_HOST" --clock-ms; }
 # SDK libcurl belongs to the Native binaries. The host curl command uses its
 # own system libraries; loading the SDK's older ABI into it can fail at startup.
@@ -102,7 +102,7 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 0' INT TERM
-head_commit() { git -C "$FL_GIT_REPO" rev-parse --verify HEAD 2>/dev/null || true; }
+head_commit() { git -C "$FL_GIT_REPO" rev-parse --short --verify HEAD 2>/dev/null || true; }
 publish_airc() {
   local file="$WEB/HANDOFF.airc" temporary
   if [[ -f "$file" && ! -L "$file" ]]; then
@@ -125,10 +125,23 @@ healthy_children() {
   if [[ -n "$APP_PID" ]] && ! child_running "$APP_PID"; then printf 'Application stopped after readiness.\n' >"$RUN/failure.log"; failure_state RUNTIME "" "$RUN/failure.log" 0; return 1; fi
 }
 watch_event() {
-  local event
-  if IFS= read -r -t .05 -u "$WATCH_FD" event; then
-    [[ "$event" == CHANGE ]] || { printf 'Unexpected source notification.\n' >&2; return 1; }
+  local event= result=0
+  # Bash can time out after consuming part of a line, including when a child
+  # completion interrupts the read. Preserve those bytes for the next read.
+  IFS= read -r -t .05 -u "$WATCH_FD" event || result=$?
+  WATCH_PENDING+="$event"
+  if ((result == 0)); then
+    event="$WATCH_PENDING"; WATCH_PENDING=
+    if [[ "$event" != CHANGE ]]; then
+      printf 'Unexpected source notification: %q\n' "$event" >"$RUN/failure.log"
+      failure_state WATCH "" "$RUN/failure.log" 0
+      exit 1
+    fi
     DIRTY=1; DEBOUNCE=$(($(now_ms) + 250))
+  elif [[ CHANGE != "$WATCH_PENDING"* ]]; then
+    printf 'Unexpected partial source notification.\n' >"$RUN/failure.log"
+    failure_state WATCH "" "$RUN/failure.log" 0
+    exit 1
   fi
   return 0
 }
@@ -211,7 +224,8 @@ css_publish() {
 build() {
   local output="$1" result=0
   mkdir -- "$output" || return 1
-  setsid flock -o /tmp/fl-heavy.lock "$ROOT/scripts/fl-front-build-native" "$WEB" "$output" >"$output/build.log" 2>&1 &
+  BUILD_COMMIT="$(head_commit)"
+  setsid env FL_NATIVE_FRONT_COMMIT="$BUILD_COMMIT" flock -o /tmp/fl-heavy.lock "$ROOT/scripts/fl-front-build-native" "$WEB" "$output" >"$output/build.log" 2>&1 &
   BUILD_PID=$!
   while child_running "$BUILD_PID"; do healthy_children || return 1; watch_event || return 1; done
   wait "$BUILD_PID" || result=$?; BUILD_PID=
@@ -252,7 +266,7 @@ rebuild() {
     ACTIVE="$CANDIDATE"
   fi
   elapsed=$(($(now_ms) - started))
-  "$CONTROL" --success "$CANDIDATE" "$ACTIVE" "$elapsed" "$(head_commit)" "$STATE" >"$RUN/state.next"
+  "$CONTROL" --success "$CANDIDATE" "$ACTIVE" "$elapsed" "$BUILD_COMMIT" "$STATE" >"$RUN/state.next"
   mv -f -- "$RUN/state.next" "$STATE"; publish_airc
   printf 'FL_DEV_NATIVE_READY=1 BUILD=%s\n' "$GENERATION"
   if [[ "$kind" == css ]]; then notify css-reload; else notify soft-reload; fi

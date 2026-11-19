@@ -139,3 +139,10 @@ also exposes a monotonic clock for the unchanged readiness/stop bounds. Its
 separate evidence records the rebuilt package and relocated execution. This
 does not replace the earlier complete compiler/runtime qualification or imply
 headless, complete metadata, deployment or application acceptance.
+
+The next [source metadata checkpoint](NATIVE-FRONT-METADATA.md) includes catalog
+data, contract readiness and store declarations in the web/control tools. Its
+evidence distinguishes exact legacy-data comparisons, standalone island output
+parity and actual automatic browser reload controls from the still-pending
+static/headless/deployment requirements. The compiler/runtime pair is reused
+from the accepted coherent checkpoint; no new whole DB result is claimed.

@@ -58,7 +58,9 @@
      "sourceMap" (or (get raw "sourceMap") []) "issues" issues
      "store_keys" (or (get raw "store_keys") []) "contracts" (or (get raw "contracts") [])
      "contractSummary" (or (get raw "contractSummary") {}) "repoCommit" head
-     "diagnostics" (or (get raw "diagnostics") {"legacyFullCatalog" "NOT_RUN" "contractReadiness" "NOT_RUN"})
+     "diagnostics" (or (get raw "diagnostics") []) "diagnosticCodes" (or (get raw "diagnosticCodes") [])
+     "diagnosticStatus" (or (get raw "diagnosticStatus") {"catalog" "NOT_RUN" "contractReadiness" "NOT_RUN"})
+     "summary" (or (get raw "summary") {})
      "errorLoop" (fl-dev-control-loop previous issues)}))
 
 (defn fl-dev-control-ast-issue [bundle]

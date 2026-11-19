@@ -1,0 +1,136 @@
+{
+  "schema": "native-front-metadata-evidence/1",
+  "date": "2026-11-20",
+  "status": {
+    "overallGoal": "ACTIVE",
+    "commercial": "HOLD",
+    "productionDeployment": "NO",
+    "defaultDevelopmentEntry": "UNCHANGED"
+  },
+  "source": {
+    "frontendBase": "752f1b4600f357ce930cb927f4995313014e1a6e",
+    "fxQualifiedBase": "a50d74bf28c2fd98d59a735251302fbf37547b17",
+    "ownedSha256": {
+      "tools/front-diagnostic-codes.fl": "75c4c0e58376e00f8282600d8a60fad318485a04dd2e271c87af0ca4647f0fa9",
+      "tools/front-contracts.fl": "eb080b92a5b2fa5e17365d7e6830cf23751bc4f6681f06410979fe6650ca37dd",
+      "tools/front-metadata.fl": "7fdf811ab68d0e8939c6f0682703e03a2f4319ba4907c4a07945eb5b02eff261",
+      "tools/front-island.fl": "a4f5c04ddc19a3f53fbd0d3b5d7b1e013cd3265efb7f23a7310208b04820b4e5",
+      "tools/front-web.fl": "48b55d5f6d255477ee206660f0b5304863d228a38bbc2ec00360c98ef8ccbde9",
+      "tools/fl-front-build.fl": "f85ec6f4d45952ed585290be168e807a441b51880560e74576622361d42d5519",
+      "tools/front-dev-control.fl": "8e2c56a3140bede0a97e53661ce9d32e4c989e8580936ff5a6f2ebd31d628163",
+      "scripts/fl-dev-native": "6557036ea3e767405ab1cd7cd2f3bbae2b0aeec5529cc13db62fee6e9720f704"
+    },
+    "foreignFilesPreserved": 4,
+    "bootstrapSeedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767"
+  },
+  "sdk": {
+    "compilerSha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+    "compilerCSha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+    "runtimeArchiveSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "manifestSha256": "28a448ef4694ec1c7344bf420cab3bad8a63e184dfde100ec81ff6c1ec19a7ca",
+    "relocation": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "LF"
+    ],
+    "manifestBeforeAndAfter": "PASS",
+    "webAndControlGeneratedCEqualCandidateV2": true,
+    "all12BinariesEqualPriorPackageWithFailedOldHost": true,
+    "serviceWatcherAndNotificationHostEqualAcceptedR11Binaries": {
+      "fl-dev-server": true,
+      "fl-dev-watch": true,
+      "fl-dev-watch-host": true
+    },
+    "qualification": "Accepted R10 compiler/runtime pair reused; no new bootstrap or whole DB qualification."
+  },
+  "checks": {
+    "legacyAnnotationComparisons": 25,
+    "catalogAndDiagnosticConversion": 2,
+    "contractCatalogTotal": "27/27",
+    "privateReference": "Exact unchanged legacy functions executed only by private Node oracle on synthetic data, outside Native product path; final Native results compare frozen reference output.",
+    "standaloneIslandProgramManifestParityAndPackagedCatalog": "4/4",
+    "oldAndNewPartialNotificationReaderControls": "8/8",
+    "combinedRealAppMetadataChromeAndCleanup": "24/24",
+    "combinedControlNames": [
+      "real-native-defstore-build",
+      "real-contract-complete-at-head",
+      "real-store-registry",
+      "real-store-warning",
+      "metadata-catalog-and-diagnostics",
+      "inspection-receives-contract-store-metadata",
+      "initializer-never-executed-during-build",
+      "browser-initial-counter",
+      "browser-literal-defaults",
+      "other-route-default-not-initialized",
+      "browser-initializer-no-side-effect",
+      "browser-real-hmr-connected",
+      "browser-real-click-updates-shared-store",
+      "initial-css-red",
+      "automatic-css-keeps-app-dom-state",
+      "automatic-source-reload-restores-store-atoms",
+      "restored-false-and-empty-values",
+      "new-commit-invalidates-contract-verification",
+      "contract-mismatch-warning-exposed",
+      "updated-default-does-not-overwrite-restored-value",
+      "contract-repair-complete",
+      "initializer-never-executed-after-rebuilds",
+      "normal-owned-cleanup",
+      "product-node-execution-zero"
+    ],
+    "originalApiAndWatcher": "Previously qualified R11 83/83 and23/23 binaries unchanged, not relabeled as new runs.",
+    "protectedTestRunnerExpectationOrBoundChanges": 0,
+    "newHandwrittenProductJsTsPython": 0,
+    "collectedNativeProductBuildRuntimeNodeFamilyExecutions": 0,
+    "ownedNativeProcessesAfterChecks": 0,
+    "screenshotAndPhysicalPointer": "NOT_VERIFIED"
+  },
+  "semantics": {
+    "contractCompleteRequires": [
+      "nonempty route",
+      "one or more checks",
+      "zero failed checks",
+      "exact nonempty verification/build HEAD match"
+    ],
+    "storeDefaults": [
+      "number",
+      "string",
+      "boolean",
+      "nil",
+      "empty array",
+      "empty map"
+    ],
+    "otherInitializers": "Legacy null fallback; never evaluated.",
+    "restoration": "Initialize after HMR restore and before mount; preserve false/zero/empty/non-null values.",
+    "diagnostics": "Catalog and contract/store items implemented; coverage status separate from item array. Remaining static checks are NOT_RUN."
+  },
+  "retainedFailures": [
+    {
+      "receipt": "contract-edge-controls",
+      "finding": "Scalar checks: pass yielded different Object.values count. Original failure and reference retained; v2 matches all25 annotation cases."
+    },
+    {
+      "receipt": "sdk-browser-v2",
+      "finding": "15 functional controls passed before old timed pipe reader rejected a source notification; supervisor exited1. Final count16/18 includes audit and failing exception/normal-exit expectation. Retained without relabeling.",
+      "correction": "Old reader reproducibly loses partial lines on normal timeout. Preserve partial bytes and validate complete CHANGE; invalid input records WATCH failure before exit. Initial failed trace did not capture read syscalls, so the precise interrupt in that run is not claimed proven."
+    }
+  ],
+  "bounds": {
+    "virtualMemoryKiB": 2097152,
+    "readinessMilliseconds": 3000,
+    "stopMillisecondsPerChild": 3000,
+    "debounceMilliseconds": 250,
+    "watchReadMilliseconds": 50,
+    "sharedBuildLock": "UNCHANGED"
+  },
+  "remaining": [
+    "remaining static diagnostic checks and stdlib metadata",
+    "full legacy metadata/JSON field parity audit and fix workflows",
+    "live runtime log and expression source translation",
+    "Native headless /~ai/test and island tests",
+    "default fl-dev switch and artifact retention",
+    "deployment Node removal",
+    "actual Git/application and visual/pointer acceptance",
+    "latest whole DB gate plus safety/recovery/concurrency/load/operations"
+  ]
+}

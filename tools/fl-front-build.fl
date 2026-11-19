@@ -3,6 +3,9 @@
 (defn fl-web-command [args]
   (let [mode (get args 0)]
     (cond
+      [(and (= mode "--codes") (= (length args) 1)) (println (json_stringify (fl-diagnostic-catalog)))]
+      [(and (= mode "--metadata") (= (length args) 2))
+       (println (json_stringify (fl-front-metadata (fl-web-json (str (get args 1) "/plan.json")))))]
       [(and (= mode "--flp-mode") (= (length args) 2))
        (println (if (fl-web-has-contracts? (str (get args 1) "/pages")) "required" "none"))]
       [(and (= mode "--seal-assets") (= (length args) 2)) (fl-web-seal-assets (get args 1))]

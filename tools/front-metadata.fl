@@ -1,0 +1,99 @@
+; Source annotations and AST diagnostics. Never evaluate application bodies.
+(load "./front-contracts.fl")
+(load "./front-diagnostic-codes.fl")
+
+(defn fl-diagnostic-catalog []
+  {"schema" "fl-diagnostic-codes/1" "tool" "freelang-front"
+   "count" (length FL-FRONT-DIAGNOSTIC-CODES) "diagnosticCodes" FL-FRONT-DIAGNOSTIC-CODES})
+(defn fl-diagnostic-items [issues]
+  (map (fn [issue]
+    (let [code (or (get issue "check") (get issue "code") "unknown")
+          meta (first (filter (fn [entry] (= (get entry "code") code)) FL-FRONT-DIAGNOSTIC-CODES))]
+      {"code" code "severity" (if (= (get issue "level") "error") "error" "warning")
+       "file" (or (get issue "file") "") "line" (or (get issue "line") 0) "column" (or (get issue "column") 0)
+       "message" (or (get issue "message") "") "hint" (or (get meta "hint") "")
+       "fixable" (or (get meta "fixable") false) "applicability" (or (get meta "applicability") "manual")})) issues))
+(defn fl-metadata-basename [file] (last (str-split file "/")))
+(defn fl-metadata-ast [file]
+  (let [parsed (json_parse (file_read file))]
+    (if (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok") (array? (get parsed "nodes")))
+      (get parsed "nodes") (throw "E_WEB_METADATA_AST: successful parsed source required"))))
+(defn fl-metadata-walk [node]
+  (let [kind (get node "kind") children
+         (cond
+           [(or (= kind "sexpr") (= kind "and") (= kind "or")) (get node "args")]
+           [(= kind "block") (get (get node "fields") "items")]
+           [(= kind "try") [(get node "body") (get node "catch") (get node "finally")]]
+           [(= kind "throw") [(get node "expr")]]
+           [true []])]
+    (concat (if (= node nil) [] [node])
+      (reduce (fn [found child] (concat found (fl-metadata-walk child))) [] children))))
+(defn fl-metadata-store-declaration [node record]
+  (let [args (get node "args") key-node (get args 0) initial (get args 1)
+        key (if (= (get key-node "kind") "keyword") (get key-node "name")
+              (if (= (get key-node "type") "symbol") (get key-node "value") nil))
+        supported (or (and (= (get initial "kind") "literal")
+                          (> (length (filter (fn [type] (= type (get initial "type")))
+                            ["string" "number" "boolean" "bool" "nil" "null"])) 0))
+                      (and (= (get initial "kind") "block")
+                           (= (length (get (get initial "fields") "items")) 0)))]
+    (if (not (and (= (length args) 2) (string? key) (regex_match key "^[\\w-]+$")))
+      (throw "E_WEB_DEFSTORE: declaration requires a static key and initial value") nil)
+    {"key" key "file" (fl-metadata-basename (get record "relative"))
+     "relative" (get record "relative") "helper" (get record "helper")
+     "initial" (if supported initial nil) "supported" supported}))
+(defn fl-metadata-store-issues [records declarations]
+  (if (= (length declarations) 0) []
+    (reduce (fn [issues record]
+      (if (get record "helper") issues
+        (let [all (fl-metadata-ast (get record "ast"))
+              islands (concat (filter (fn [node] (= (get node "op") "island")) all)
+                        (if (= (get record "client") nil) [] (fl-metadata-ast (get record "clientAst"))))
+              file (fl-metadata-basename (get record "relative"))]
+          (reduce (fn [issues island]
+            (let [calls (fl-metadata-walk island)
+                  uses (concat (filter (fn [node] (= (get node "op") "dispatch")) calls)
+                               (filter (fn [node] (= (get node "op") "get-store")) calls))]
+              (reduce (fn [issues node]
+                (let [first (get (get node "args") 0) key (get first "value")
+                      declared (> (length (filter (fn [entry] (= (get entry "key") key)) declarations)) 0)
+                      repeated (> (length (filter (fn [issue] (and (= (get issue "file") file) (= (get issue "storeKey") key))) issues)) 0)]
+                  (if (and (= (get first "type") "string") (regex_match key "^[\\w-]+$") (not declared) (not repeated))
+                    (push issues {"level" "warn" "check" "store-key" "file" file "line" 0 "storeKey" key
+                      "message" (str "(" (get node "op") " \"" key "\") 키 미선언 — (defstore :" key " init) 추가 필요")}) issues))) issues uses))) issues islands))))
+      [] records)))
+(defn fl-front-metadata [plan]
+  (let [records (get plan "records") head (or (get plan "repoCommit") "")
+        contracts (reduce (fn [rows record]
+          (let [source (str (file_read (get record "file"))
+                        (if (= (get record "client") nil) "" (str "\n" (file_read (get record "client")))))
+                file (fl-metadata-basename (get record "relative"))]
+            (concat rows (fl-contract-scan source file)))) [] records)
+        readiness (fl-contract-readiness contracts head)
+        declarations (reduce (fn [rows record]
+          (concat rows (map (fn [node] (fl-metadata-store-declaration node record))
+            (filter (fn [node] (= (get node "op") "defstore")) (fl-metadata-ast (get record "ast")))))) [] records)
+        store-keys (reduce (fn [keys entry]
+          (if (> (length (filter (fn [key] (= key (get entry "key"))) keys)) 0) keys (push keys (get entry "key")))) [] declarations)
+        issues (concat (map (fn [row]
+          {"level" "warn" "check" "contract-readiness" "file" (get row "file") "line" 0
+           "message" (str (if (= (get row "route") "") (get row "file") (get row "route")) " 계약 미완료 — "
+             (if (> (get (get row "check_summary") "fail") 0)
+               (str "checks fail=" (get (get row "check_summary") "fail"))
+               (if (not (get row "verified_matches_head"))
+                 (str "verified " (get row "last_verified_commit") " != head " (if (= head "") "-" head)) "contract incomplete")))})
+          (filter (fn [row] (not (= (get row "readiness") "complete"))) (get readiness "rows")))
+          (fl-metadata-store-issues records declarations))]
+    {"contracts" (get readiness "rows") "contractSummary" (get readiness "summary")
+     "store_keys" store-keys "storeDeclarations" declarations "issues" issues
+     "diagnostics" (fl-diagnostic-items issues) "diagnosticCodes" FL-FRONT-DIAGNOSTIC-CODES
+     "summary" {"errors" (length (filter (fn [issue] (= (get issue "level") "error")) issues))
+                 "warnings" (length (filter (fn [issue] (= (get issue "level") "warn")) issues))
+                 "diagnosticCodeCount" (length FL-FRONT-DIAGNOSTIC-CODES)
+                 "contractCount" (get (get readiness "summary") "total")
+                 "contractComplete" (get (get readiness "summary") "complete")
+                 "contractInProgress" (get (get readiness "summary") "in_progress")
+                 "contractMissing" (get (get readiness "summary") "missing")
+                 "contractVerified" (get (get readiness "summary") "verified")}
+     "diagnosticStatus" {"catalog" "PORTED" "contractReadiness" "PORTED" "storeRegistry" "PORTED"
+                          "remainingStaticChecks" "NOT_RUN" "islandTests" "NOT_RUN" "fix" "NOT_RUN"}}))

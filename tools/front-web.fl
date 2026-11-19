@@ -2,6 +2,7 @@
 (load "./front-source.fl")
 (load "./front-style.fl")
 (load "./front-island.fl")
+(load "./front-metadata.fl")
 
 (defn fl-web-includes [items value] (> (length (filter (fn [item] (= item value)) items)) 0))
 (defn fl-web-read [file] (file_read file))
@@ -73,7 +74,8 @@
             "program" (str run "/island-" i ".fl")
             "script" (str web "/public/native-islands/route-" i ".js")
             "scriptUrl" (str "/public/native-islands/route-" i ".js")))))))]
-      (let [plain {"schema" "fl-web-native/1" "status" "planned" "web" web "original" original "run" run "records" records}
+      (let [plain {"schema" "fl-web-native/1" "status" "planned" "web" web "original" original "run" run "records" records
+                   "repoCommit" (or (env-get "FL_NATIVE_FRONT_COMMIT") "")}
             raw-port (or (env-get "FL_HMR_PORT") "40851")
             development (= (env-get "FL_FRONT_NATIVE_DEV") "1")
             port (if development (str-to-num raw-port) 40851)
@@ -220,6 +222,7 @@
                                       (fl-source-quote (str (get record "fn") "-post")) ")\n") "")))
 (defn fl-web-emit [run support server-support]
   (let [plan (fl-web-json (str run "/plan.json")) records (get plan "records")
+        metadata (fl-front-metadata plan)
         web (get plan "web") styles (fl-web-style records)
         bindings (map (fn [name] {"name" name "cls" (get (get (get styles "values") name) "cls")}) (get styles "names"))
         css-lines (map (fn [name] (get (get (get styles "values") name) "css")) (get styles "names"))
@@ -237,12 +240,17 @@
                 inline (filter (fn [node] (= (get node "op") "island")) all)
                 client (if (= (get record "client") nil) inline
                          (concat inline (fl-web-ast (get record "clientAst"))))
-                result (fl-island-program {"schema" "freelang.ast.v1" "status" "ok" "nodes" client} support)
+                stores (filter (fn [entry] (or (get entry "helper") (= (get entry "relative") (get record "relative"))))
+                               (get metadata "storeDeclarations"))
+                initializers (str-join (map (fn [entry]
+                  (let [key (fl-source-quote (get entry "key")) value (fl-source-emit (get entry "initial"))]
+                    (str "(if (= (island-get-store " key ") nil) (island-dispatch " key " " value ") nil)\n"))) stores) "")
+                result (fl-island-program-with-store {"schema" "freelang.ast.v1" "status" "ok" "nodes" client} support initializers)
                 replacements (if (or (get record "helper") (= (length client) 0)) {} (fl-web-assets record result))
                 helper (get record "helper") name (get record "fn")
                 context {"plan" plan "record" record "bound" [] "replace" replacements
                          "template" false "renames" (if helper {} {"render" (str name "-inner") "render_post" (str name "-post-inner")})}
-                nodes (filter (fn [node] (not (fl-web-includes ["style" "island"] (get node "op")))) all)
+                nodes (filter (fn [node] (not (fl-web-includes ["style" "island" "defstore"] (get node "op")))) all)
                 prepared (map (fn [node]
                   (let [original (fl-web-top-name node)
                         changed (if (and (not helper) (fl-web-includes ["render" "render_post"] original))
@@ -318,8 +326,9 @@
       (fl-web-write (get plan "devProgram") (str "(island-dev-connect! " (get plan "hmrPort") ")\n")) nil)
     (fl-web-write (str run "/plan.json") (json_stringify updated))
     (fl-web-write (str run "/build-state.json")
-      (json_stringify {"schema" "fl-web-native/1" "status" "generated" "routes" (filter (fn [r] (not (get r "helper"))) (get state "records"))
-                      "sourceMap" source-map "diagnostics" {"legacyFullCatalog" "NOT_RUN" "fix" "NOT_RUN" "contractReadiness" "NOT_RUN"}}))
+      (json_stringify (assoc metadata "schema" "fl-web-native/1" "status" "generated"
+                      "routes" (filter (fn [r] (not (get r "helper"))) (get state "records"))
+                      "repoCommit" (get plan "repoCommit") "sourceMap" source-map)))
     updated))
 
 (defn fl-web-has-contracts? [directory]

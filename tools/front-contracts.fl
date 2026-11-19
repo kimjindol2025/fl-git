@@ -1,0 +1,76 @@
+; Contract annotations are data. No page body or check expression is executed.
+(defn fl-contract-js-string [value]
+  (cond
+    [(= value nil) ""]
+    [(array? value) (str-join (map fl-contract-js-string value) ",")]
+    [(map? value) "[object Object]"]
+    [true (str value)]))
+(defn fl-contract-values [value]
+  (let [items (if (array? value) value [value])]
+    (filter (fn [text] (not (= text "")))
+      (map (fn [item] (str-trim (fl-contract-js-string item))) items))))
+(defn fl-contract-assign [values key value]
+  (if (not (has-key? values key)) (assoc values key value)
+    (let [before (get values key)]
+      (assoc values key (if (array? before) (push before value) [before value])))))
+(defn fl-contract-object-values [value]
+  (cond
+    [(map? value) (vals value)]
+    [(array? value) value]
+    [(string? value) (str-split value "")]
+    [true []]))
+(defn fl-contract-parse [lines file]
+  (let [initial {"file" file "route" "" "purpose" "" "type" "" "pattern" ""
+                 "routes" {} "state" {} "requires" {} "checks" {} "last_verified" {}}
+        parsed (reduce (fn [state raw]
+          (if (not (str-starts-with (str-trim raw) ";")) state
+            (let [after (regex_replace raw "^;\\s?" "")
+                  indent (length (or (regex_find after "^ *") ""))
+                  text (str-trim after) colon (str-index-of text ":")]
+              (if (< colon 1) state
+                (let [key (str-trim (str-slice text 0 colon))
+                      value (str-trim (str-slice text (+ colon 1) (length text)))
+                      contract (get state "value") section (get state "section")]
+                  (if (<= indent 1)
+                    (if (= value "")
+                      {"section" key "value" (if (map? (get contract key)) contract (assoc contract key {}))}
+                      {"section" "" "value" (assoc contract key value)})
+                    (if (= section "") state
+                      {"section" section "value" (assoc contract section
+                        (fl-contract-assign (if (map? (get contract section)) (get contract section) {}) key value))})))))))
+          {"section" "" "value" initial} lines)
+        contract (get parsed "value") checks (fl-contract-object-values (get contract "checks"))
+        passed (length (filter (fn [value]
+          (let [text (str-to-lower (fl-contract-js-string value))]
+            (or (= text "pass") (= text "true")))) checks))]
+    (assoc contract "check_summary" {"total" (length checks) "pass" passed "fail" (- (length checks) passed)})))
+(defn fl-contract-scan [source file]
+  (let [result (reduce (fn [state line]
+          (let [text (str-trim line)]
+            (cond
+              [(str-starts-with text "; @contract") (assoc state "block" [])]
+              [(str-starts-with text "; @endcontract")
+               {"block" nil "rows" (if (= (get state "block") nil) (get state "rows")
+                 (push (get state "rows") (fl-contract-parse (get state "block") file)))}]
+              [(= (get state "block") nil) state]
+              [true (assoc state "block" (push (get state "block") line))])))
+          {"block" nil "rows" []} (str-split source "\n"))]
+    (get result "rows")))
+(defn fl-contract-readiness [contracts head]
+  (let [rows (map (fn [contract]
+          (let [verified (str-trim (fl-contract-js-string (get (get contract "last_verified") "commit")))
+                matches (and (not (= verified "")) (not (= head "")) (= verified head))
+                checks (or (get contract "check_summary") {"total" 0 "pass" 0 "fail" 0})
+                route-ready (not (= (str-trim (fl-contract-js-string (get contract "route"))) ""))
+                routes (get contract "routes")
+                readiness (if (and (> (get checks "total") 0) (= (get checks "fail") 0) route-ready matches) "complete"
+                            (if (or (> (get checks "pass") 0) route-ready) "in_progress" "missing"))]
+            (assoc contract "last_verified_commit" (if (= verified "") "-" verified)
+              "verified_matches_head" matches "readiness" readiness
+              "route_links" (concat (fl-contract-values (get routes "read")) (fl-contract-values (get routes "write")))))) contracts)
+        summary (reduce (fn [summary row]
+          (assoc summary "total" (+ (get summary "total") 1)
+            (get row "readiness") (+ (get summary (get row "readiness")) 1)
+            "verified" (+ (get summary "verified") (if (get row "verified_matches_head") 1 0))))
+          {"total" 0 "complete" 0 "in_progress" 0 "missing" 0 "verified" 0} rows)]
+    {"rows" rows "summary" summary}))

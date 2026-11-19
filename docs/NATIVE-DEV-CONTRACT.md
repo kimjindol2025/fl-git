@@ -132,6 +132,13 @@ earlier component/browser checks. Complete metadata and diagnostics, headless
 execution, deployment migration and actual application flows remain required;
 the default entry is not switched by that supervisor milestone.
 
+The later [source metadata receipt](NATIVE-FRONT-METADATA.md) adds actual contract
+readiness, store declarations and defaults, store warnings and the full catalog
+data. It separates diagnostic items from coverage status. It also tests automatic
+supervisor-driven CSS/source reloads in Chrome and fixes timed notification reads.
+Remaining static diagnostics, stdlib metadata, live source translation and
+headless execution still prevent a complete default-entry migration claim.
+
 
 ## Verification and deployment boundary
 

@@ -295,7 +295,7 @@
          (if (> (length watch-keys) 0) (str " [" (str-join (map fl-island-quote watch-keys) " ") "]") "")
          "))\n")}))
 
-(defn fl-island-program [parsed support]
+(defn fl-island-program-with-store [parsed support initializers]
   (if (not (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok")))
     (throw "E_ISLAND_AST: successful freelang.ast.v1 input required")
     (let [nodes (get parsed "nodes")]
@@ -307,8 +307,11 @@
           (let [islands (loop [index 0 found []]
                           (if (>= index (length nodes)) found
                             (recur (+ index 1) (push found (fl-island-one (get nodes index) index)))))]
-            {"program" (str "(load " (fl-island-quote support) ")\n(island-hmr-restore!)\n"
+            {"program" (str "(load " (fl-island-quote support) ")\n(island-hmr-restore!)\n" initializers
                             (str-join (map (fn [island] (get island "source")) islands) "\n"))
              "manifest" {"schema" "fl-islands/1" "hasIslands" (> (length islands) 0)
                          "islands" (map (fn [island] {"name" (get island "name") "id" (get island "id")
                                                     "state" (get island "state")}) islands)}}))))))
+
+(defn fl-island-program [parsed support]
+  (fl-island-program-with-store parsed support ""))

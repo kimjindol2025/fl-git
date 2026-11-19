@@ -65,12 +65,14 @@ retain the latest 20 rows. The supervisor does not create a missing AIRC file.
 
 Structured parser failures include source file, line and column. The control
 tool can translate a generated runtime location to its containing source
-function. Live runtime log translation, expression-level precision, the full
-legacy diagnostic catalog, store/contract readiness metadata and headless
-`/~ai/test` remain open. Explicit `NOT_RUN` fields describe that scope; empty
-metadata is not evidence of parity. Automatic browser state restoration was
-validated separately in the preceding browser receipt; these supervisor tests
-do not add screenshot, pointer or complete application-flow acceptance.
+function. The subsequent [source metadata implementation](NATIVE-FRONT-METADATA.md)
+adds the 19-entry catalog, store defaults/registry and real contract readiness.
+Live runtime log translation, expression-level precision, remaining static
+diagnostics and headless `/~ai/test` remain open. Explicit `NOT_RUN` fields
+describe that scope; empty metadata is not evidence of parity. Browser state restoration was
+validated separately in the preceding browser receipt; the metadata receipt
+also tests automatic supervisor-driven reloads in Chrome. Neither adds screenshot,
+pointer or complete application-flow acceptance.
 
 ## Verification
 
