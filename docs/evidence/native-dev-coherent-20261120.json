@@ -144,7 +144,40 @@
         0,
         0
       ],
-      "owned_tabs_finalized": true
+      "owned_tabs_finalized": true,
+      "asset_coherence": {
+        "all_assets_from_current_core": true,
+        "assets": [
+          {
+            "asset": "shared-store.js",
+            "sha256": "75fe5493b0479e78b4390c0199288a539487347539756f6a158d598c4bb66d46",
+            "browser_core_sha256": "66f0016095215fa8fa58e0bc73528effe66d786527a0f2f2d55a1d8fe1da547a"
+          },
+          {
+            "asset": "direct-store.js",
+            "sha256": "efb7d98f8461937f4fb4b474e5486618189c2437bb643a791075530caa8b947a",
+            "browser_core_sha256": "66f0016095215fa8fa58e0bc73528effe66d786527a0f2f2d55a1d8fe1da547a"
+          },
+          {
+            "asset": "controls.js",
+            "sha256": "293f74be2d752bf9a4dd3b829f1428961fc45ac065942a5e3e72dbdc1e3ab8f1",
+            "browser_core_sha256": "66f0016095215fa8fa58e0bc73528effe66d786527a0f2f2d55a1d8fe1da547a"
+          },
+          {
+            "asset": "native-dev.js",
+            "sha256": "8b535ea23ee80d57fc8f4bd2d6edb8c6f3c388118d09bd296f5c35a687841aea",
+            "browser_core_sha256": "66f0016095215fa8fa58e0bc73528effe66d786527a0f2f2d55a1d8fe1da547a"
+          },
+          {
+            "asset": "route-1.75fe5493b0479e78b4390c0199288a539487347539756f6a158d598c4bb66d46.js",
+            "sha256": "75fe5493b0479e78b4390c0199288a539487347539756f6a158d598c4bb66d46",
+            "browser_core_sha256": "66f0016095215fa8fa58e0bc73528effe66d786527a0f2f2d55a1d8fe1da547a"
+          }
+        ]
+      },
+      "scope_note": "Initial coherent receipt retained earlier generated JS for auxiliary shared/direct store pages. Those sources are now regenerated with the current SDK, all five served browser scripts have the current core hash, and the identical 23 controls pass again. Original receipt preserved; screenshot/pointer limitations unchanged.",
+      "all_served_assets_verified": true,
+      "functional_receipt": "browser-current-receipt"
     }
   },
   "actual_worktree_unit_summary": {
