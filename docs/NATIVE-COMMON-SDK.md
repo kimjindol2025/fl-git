@@ -146,3 +146,9 @@ evidence distinguishes exact legacy-data comparisons, standalone island output
 parity and actual automatic browser reload controls from the still-pending
 static/headless/deployment requirements. The compiler/runtime pair is reused
 from the accepted coherent checkpoint; no new whole DB result is claimed.
+
+The next [static diagnostic checkpoint](NATIVE-STATIC-DIAGNOSTICS.md) adds Native
+AST checks and SDK inventory metadata without changing the compiler/runtime.
+Package provenance additionally covers the FreeLang server and island runtime
+helpers. Its evidence separates declared operation/ABI counts, private legacy
+reference execution, Native product traces and the remaining acceptance work.

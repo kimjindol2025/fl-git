@@ -1,6 +1,7 @@
 ; Source annotations and AST diagnostics. Never evaluate application bodies.
 (load "./front-contracts.fl")
 (load "./front-diagnostic-codes.fl")
+(load "./front-static.fl")
 
 (defn fl-diagnostic-catalog []
   {"schema" "fl-diagnostic-codes/1" "tool" "freelang-front"
@@ -75,7 +76,8 @@
             (filter (fn [node] (= (get node "op") "defstore")) (fl-metadata-ast (get record "ast")))))) [] records)
         store-keys (reduce (fn [keys entry]
           (if (> (length (filter (fn [key] (= key (get entry "key"))) keys)) 0) keys (push keys (get entry "key")))) [] declarations)
-        issues (concat (map (fn [row]
+        static (fl-static-analyze plan)
+        issues (fl-static-join [(get static "issues") (map (fn [row]
           {"level" "warn" "check" "contract-readiness" "file" (get row "file") "line" 0
            "message" (str (if (= (get row "route") "") (get row "file") (get row "route")) " 계약 미완료 — "
              (if (> (get (get row "check_summary") "fail") 0)
@@ -83,17 +85,18 @@
                (if (not (get row "verified_matches_head"))
                  (str "verified " (get row "last_verified_commit") " != head " (if (= head "") "-" head)) "contract incomplete")))})
           (filter (fn [row] (not (= (get row "readiness") "complete"))) (get readiness "rows")))
-          (fl-metadata-store-issues records declarations))]
+          (map (fn [issue] (dissoc issue "storeKey")) (fl-metadata-store-issues records declarations))])]
     {"contracts" (get readiness "rows") "contractSummary" (get readiness "summary")
      "store_keys" store-keys "storeDeclarations" declarations "issues" issues
      "diagnostics" (fl-diagnostic-items issues) "diagnosticCodes" FL-FRONT-DIAGNOSTIC-CODES
-     "summary" {"errors" (length (filter (fn [issue] (= (get issue "level") "error")) issues))
+     "summary" (merge (get static "summary") {"errors" (length (filter (fn [issue] (= (get issue "level") "error")) issues))
                  "warnings" (length (filter (fn [issue] (= (get issue "level") "warn")) issues))
                  "diagnosticCodeCount" (length FL-FRONT-DIAGNOSTIC-CODES)
                  "contractCount" (get (get readiness "summary") "total")
                  "contractComplete" (get (get readiness "summary") "complete")
                  "contractInProgress" (get (get readiness "summary") "in_progress")
                  "contractMissing" (get (get readiness "summary") "missing")
-                 "contractVerified" (get (get readiness "summary") "verified")}
+                 "contractVerified" (get (get readiness "summary") "verified")})
      "diagnosticStatus" {"catalog" "PORTED" "contractReadiness" "PORTED" "storeRegistry" "PORTED"
-                          "remainingStaticChecks" "NOT_RUN" "islandTests" "NOT_RUN" "fix" "NOT_RUN"}}))
+                          "remainingStaticChecks" "PORTED" "staticChecks" (get static "checks")
+                          "islandTests" "NOT_RUN" "fix" "NOT_RUN"}}))

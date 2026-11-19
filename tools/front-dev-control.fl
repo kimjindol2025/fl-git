@@ -63,14 +63,22 @@
      "summary" (or (get raw "summary") {})
      "errorLoop" (fl-dev-control-loop previous issues)}))
 
+(defn fl-dev-control-source-path [file original]
+  (let [parts (str-split (or original "") "/")
+        project (str-join (slice parts 0 (- (length parts) 1)) "/")]
+    (if (and (not (= project "")) (str-starts-with file (str project "/")))
+      (str-slice file (+ (length project) 1) (length file)) (last (str-split file "/")))))
 (defn fl-dev-control-ast-issue [bundle]
   (let [plan (fl-dev-control-read (str bundle "/plan.json") {})
-        records (or (get plan "records") [])]
+        records (concat (or (get plan "records") [])
+          (map (fn [dependency] (assoc dependency "dependency" true)) (or (get plan "dependencies") [])))]
     (loop [index 0]
       (if (>= index (length records)) nil
         (let [record (get records index)
-              candidates [[(get record "ast") (str "pages/" (get record "relative"))]
-                          [(get record "clientAst") (str "islands/" (get record "relative"))]]
+              candidates (if (get record "dependency")
+                           [[(get record "ast") (fl-dev-control-source-path (get record "file") (get plan "original"))]]
+                           [[(get record "ast") (str "pages/" (get record "relative"))]
+                            [(get record "clientAst") (str "islands/" (get record "relative"))]])
               found (first (filter (fn [item] (not (= item nil)))
                 (map (fn [item]
                   (let [file (get item 0)]
@@ -88,11 +96,14 @@
       (if (file_exists file)
         (let [text (str-trim (file_read file))]
           (if (= text "") message (str-replace-in text bundle "[build]"))) message)))
-    fallback ["stage.log" "flp.log" "plan.log" "emit.log" "seal.log" "emit-final.log"
+    fallback ["stage.log" "flp.log" "plan.log" "dependencies.stderr" "diagnostics.stderr" "emit.log" "seal.log" "emit-final.log"
               "app.parse.stderr" "verify-generated.log" "app.generate.log" "app.build.log"]))
 (defn fl-dev-control-failure [stage bundle log elapsed previous]
   (let [fallback (str-trim (file_read log))
+        checked (if (= bundle "") {} (fl-dev-control-read (str bundle "/build-state.json") {}))
+        preflight (first (filter (fn [issue] (= (get issue "level") "error")) (or (get checked "issues") [])))
         issue (or (if (= bundle "") nil (fl-dev-control-ast-issue bundle))
+                  (if (= preflight nil) nil (assoc preflight "code" (get preflight "check")))
                   {"level" "error" "code" (str "NATIVE_DEV_" stage)
                    "message" (if (= bundle "") fallback (fl-dev-control-build-message bundle fallback))})
         issues [(assoc issue "stage" stage)]]

@@ -1,0 +1,153 @@
+{
+  "schema": "native-static-diagnostics-evidence/1",
+  "date": "2026-11-20",
+  "status": {
+    "goal": "ACTIVE",
+    "commercial": "HOLD",
+    "productionDeployment": "NO",
+    "defaultFlDev": "UNCHANGED"
+  },
+  "source": {
+    "frontendBase": "e4ad2165083660f22e45e23a768175cccca893a8",
+    "ownedSha256": {
+      "tools/front-static-context.fl": "8bfe2624bc1536164f43d3f10f54dd526ac53d4a2c5682cf024c475953782ecd",
+      "tools/front-static.fl": "947c7f0789a242ac0d4bd0db2d722a141d57a69d7d37aa058e3c72520b23eea7",
+      "tools/front-metadata.fl": "5bfd02469df499821eb9c3508289de2b07ef94680ab6163568290e67436b95fa",
+      "tools/front-web.fl": "53bf23d79d96ee2c33959cea93999ab2c725a8ef4a9010caf6845878137b142f",
+      "tools/fl-front-build.fl": "6adcbfc7e7cbb08fd11abc82312cbe2875b8e248e845795fe73cd885a166392b",
+      "tools/front-dev-control.fl": "de2619f8f2a56296af6e0b7ac07f4938755cec0e341a3a485754eea7dec5da48",
+      "scripts/fl-front-build-native": "3b1d6ec602198dfd9a578a008ae84635c42cf0f1b35156d130b498198bd78bea",
+      "scripts/fl-sdk-package-native": "2be0cbf7c3a50255ad347054b56ff73641930cd3f62e741b88e448cdf13eec82"
+    },
+    "foreignFilesPreserved": 4,
+    "bootstrapSeedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767"
+  },
+  "sdk": {
+    "manifestSha256": "13bf3ef4a21afca99eb96a5be832931ad36b13151a3f7003f0cccb4229ccd72d",
+    "compilerSha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+    "compilerCSha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+    "runtimeArchiveSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "webToolSha256": "0e4021c6280359528e08483595b6a2fb74ada9dd57026e7d37399f737c7ab8fa",
+    "controlToolSha256": "c96d3335b79aa2d574f3c021b101de28263788d36353bd8406532f32958ed725",
+    "relocation": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "LF"
+    ],
+    "manifestBeforeAfter": "PASS",
+    "testedWebCandidate": "v4 generated C exact",
+    "testedFailureControl": "v5 generated C exact",
+    "binariesUnchangedFromAcceptedR12": [
+      "fl-check",
+      "fl-dev-server",
+      "fl-dev-watch",
+      "fl-dev-watch-host",
+      "fl-git",
+      "fl-island-compile",
+      "fl-style-compile",
+      "fl-tui",
+      "flc",
+      "flp-compile"
+    ],
+    "frameworkRuntimeProvenance": "server-language.fl and island-language.fl included",
+    "qualification": "Accepted R10 compiler/runtime reused; no new bootstrap or DB gate claimed."
+  },
+  "coverage": {
+    "catalogStaticRules": 17,
+    "existingStoreKeyRule": 1,
+    "islandTestRule": "NOT_IMPLEMENTED",
+    "nativeControls": "43/43",
+    "realBuildHttpControls": "24/24",
+    "boundaries": "6/6",
+    "finalSdkRealAppMetadataChromeHmrCleanup": "24/24",
+    "globalLocalAndClientShadowRuntime": "5/5",
+    "legacyReference": {
+      "total": 37,
+      "exact": 29,
+      "differences": [
+        "db-row-shadowed-let",
+        "db-row-shadowed-param",
+        "island-boundary-alias",
+        "island-local-server-name",
+        "json-parse-in-string",
+        "local-function-not-unknown",
+        "local-range-not-builtin",
+        "nested-builtin-arity"
+      ],
+      "scope": "Unchanged rule functions in a private Node oracle with independently supplied matching SDK known names; not whole Node bootstrap or whole builder parity.",
+      "differencesAreExplicitAstCorrections": true
+    },
+    "inventory": {
+      "v11OperationNames": 201,
+      "nativeAbiDeclaredNames": 1109,
+      "registryNamesValidatedWithRunningNative": true,
+      "declarationHeaderSha256": "50f74e0c7865be68af79fc32e18be23e249b804878effd3a5a7c91100bf03e12",
+      "nodeBootstrapCountEquivalenceClaimed": false
+    },
+    "actualFrontendInputBuild": {
+      "includesPreservedForeignChanges": true,
+      "routes": 9,
+      "helpers": 6,
+      "dependencies": 1,
+      "errors": 0,
+      "warnings": 1,
+      "warningCodes": [
+        "upper-hyphen"
+      ],
+      "applicationElfSha256": "97ad366fa8814bb689b63670db50742f115b656928c968de5c2b702e78be4631",
+      "completion": "PASS",
+      "browserAndGitFlow": "NOT_RUN"
+    },
+    "productTraceNodeFamilyExecutions": 0,
+    "privateNodeOracleSeparate": true,
+    "ownedLiveNativeProcesses": 0,
+    "newHandwrittenProductJsTsPython": 0,
+    "protectedTestRunnerExpectationBoundChanges": 0,
+    "screenshotPhysicalPointer": "NOT_VERIFIED"
+  },
+  "bounds": {
+    "virtualMemoryKiB": 2097152,
+    "readinessMilliseconds": 3000,
+    "stopMilliseconds": 3000,
+    "sharedBuildLock": "UNCHANGED"
+  },
+  "retainedFailuresAndCorrections": [
+    {
+      "receipt": "static-controls-v1",
+      "failure": "Reserved let binding missing because new code used concat with more than two arrays.",
+      "correction": "Fold binary concatenation explicitly; v2 retained additional failing body case, v3/v4 fixed all issue-group traversals. Native concat contract and protected runtime were not changed."
+    },
+    {
+      "receipt": "legacy-comparison-v1/v2",
+      "failure": "Private adapter passed route objects to helper-only checker, then omitted SERVER_ONLY data.",
+      "correction": "Correct private adapter arguments/constants from unchanged reference source; full v3 produces29 exact/8 explicit differences, not falsely37 exact."
+    },
+    {
+      "receipt": "build-controls-v1",
+      "failure": "Private HTTP expectation omitted the framework stylesheet prefix.",
+      "correction": "v2 still requires exact whole response, including the URL from generated plan and expected function output."
+    },
+    {
+      "receipt": "shadow-runtime-v1",
+      "failure": "Private client omitted required island option vector; emitter rejected it.",
+      "correction": "v2/v3 add empty option vector and retain same binding/output assertions."
+    },
+    {
+      "receipt": "shadow-runtime-v2",
+      "failure": "Private document node ID invalidated during navigation.",
+      "correction": "v3 retries only stale document IDs within the same3-second observation bound;5/5 pass."
+    }
+  ],
+  "remaining": [
+    "console-only CSS/dangerous-pattern/name-collision advisories and suggestions",
+    "full JSON-field/metadata parity and fix workflows",
+    "namespace and advanced module qualification",
+    "expression source maps and live log translation",
+    "headless /~ai/test and island tests",
+    "default fl-dev migration and retention policy",
+    "deployment Node removal",
+    "actual application/Git and visual/pointer acceptance",
+    "latest whole DB Native gate plus safety/recovery/concurrency/load/operations"
+  ]
+}

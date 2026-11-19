@@ -139,6 +139,13 @@ supervisor-driven CSS/source reloads in Chrome and fixes timed notification read
 Remaining static diagnostics, stdlib metadata, live source translation and
 headless execution still prevent a complete default-entry migration claim.
 
+The [Native static diagnostic checkpoint](NATIVE-STATIC-DIAGNOSTICS.md) now
+implements 17 further catalog rules, actual SDK declaration metadata, guarded
+recursive load discovery and preflight/error-state integration. It preserves
+the previous app on failed rebuilds through the existing supervisor contract.
+Remaining advisories, fixes, full JSON/source-map parity, headless tests and
+application acceptance still keep the default development entry unchanged.
+
 
 ## Verification and deployment boundary
 

@@ -6,6 +6,8 @@
       [(and (= mode "--codes") (= (length args) 1)) (println (json_stringify (fl-diagnostic-catalog)))]
       [(and (= mode "--metadata") (= (length args) 2))
        (println (json_stringify (fl-front-metadata (fl-web-json (str (get args 1) "/plan.json")))))]
+      [(and (= mode "--dependency-inputs") (= (length args) 2)) (fl-web-dependency-inputs (get args 1))]
+      [(and (= mode "--preflight") (= (length args) 2)) (fl-web-preflight (get args 1))]
       [(and (= mode "--flp-mode") (= (length args) 2))
        (println (if (fl-web-has-contracts? (str (get args 1) "/pages")) "required" "none"))]
       [(and (= mode "--seal-assets") (= (length args) 2)) (fl-web-seal-assets (get args 1))]

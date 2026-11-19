@@ -5,6 +5,7 @@ if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 20
 ulimit -c 0
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
 ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+export FL_NATIVE_FRONT_SERVER_SUPPORT="$ROOT/web/runtime/server-language.fl"
 COMPILER="${FREELANG_NATIVE_COMPILER:-}"
 WEB_TOOL="${FREELANG_NATIVE_WEB_TOOL:-}"
 FLP_TOOL="${FREELANG_NATIVE_FLP_TOOL:-}"
@@ -43,6 +44,17 @@ while IFS= read -r -d '' source; do
   IFS= read -r -d '' ast || { echo 'Truncated Native web input list' >&2; exit 1; }
   "$COMPILER" --parse-json "$source" >"$ast" 2>"$ast.stderr"
 done <"$RUN/inputs.nul"
+step=DEPENDENCIES
+while true; do
+  "$WEB_TOOL" --dependency-inputs "$RUN" >"$RUN/dependencies.nul" 2>"$RUN/dependencies.stderr"
+  [[ -s "$RUN/dependencies.nul" ]] || break
+  while IFS= read -r -d '' source; do
+    IFS= read -r -d '' ast || { echo 'Truncated Native dependency input list' >&2; exit 1; }
+    "$COMPILER" --parse-json "$source" >"$ast" 2>"$ast.stderr"
+  done <"$RUN/dependencies.nul"
+done
+step=DIAGNOSTICS
+"$WEB_TOOL" --preflight "$RUN" >"$RUN/diagnostics.log" 2>"$RUN/diagnostics.stderr"
 step=EMIT
 "$WEB_TOOL" --emit "$RUN" "$ROOT/web/runtime/island-language.fl" "$ROOT/web/runtime/server-language.fl" >"$RUN/emit.log" 2>&1
 "$WEB_TOOL" --browser-inputs "$RUN" >"$RUN/browser-inputs.nul" 2>"$RUN/browser-inputs.stderr"

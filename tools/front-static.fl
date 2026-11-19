@@ -1,0 +1,249 @@
+; Static checks over the compiler's read-only AST; no application execution.
+(load "./front-static-context.fl")
+(defn fl-static-issue [level check file node message]
+  {"level" level "check" check "file" file "line" (or (get node "line") 0) "message" message})
+(defn fl-static-warning [code context node message]
+  (fl-static-issue "warn" code (get context "file") node message))
+(defn fl-static-bound? [name context] (has-key? (get context "bound") (fl-static-bare name)))
+(defn fl-static-with-bound [context names]
+  (assoc context "bound" (reduce (fn [bound name] (if (= name nil) bound (assoc bound name true))) (get context "bound") names)
+    "db" (reduce (fn [db name] (if (= name nil) db (assoc db name false))) (get context "db") names)))
+(defn fl-static-signature [name context]
+  (or (get (get context "definitions") name)
+      (get (get context "definitions") (if (str-includes name "_") (str-replace-in name "_" "-") (str-replace-in name "-" "_")))))
+(defn fl-static-db-call? [node]
+  (regex_match (fl-static-op (get node "op")) "^(db-query|db-one|db-all|mariadb-query|mariadb-pool-query)$"))
+(defn fl-static-db-value? [node context]
+  (or (fl-static-db-call? node)
+      (and (not (= (fl-static-name node) nil)) (get (get context "db") (fl-static-name node)))
+      (and (fl-static-has? ["get" "first" "last" "nth" "get-at" "get-in"] (fl-static-op (get node "op")))
+           (any? fl-static-db-call? (fl-metadata-walk node)))))
+(defn fl-static-check-bindings [pairs node context]
+  (reduce (fn [issues pair]
+    (let [name (fl-static-name (get pair 0))]
+      (fl-static-join [issues
+        (if (= name "act") [(fl-static-issue "error" "reserved-word" (get context "file") node
+          "'act'은(는) FL 예약어 — let 바인딩에 사용 불가")] [])
+        (if (fl-static-has? ["s" "h" "h!"] name) [(fl-static-warning "let-shadow" context node
+          (str "let '" name "' 가 전역 헬퍼를 가림 — 긴 바인딩 이름 사용"))] [])]))) [] pairs))
+(defn fl-static-check-params [params node context]
+  (reduce (fn [issues param]
+    (let [name (fl-static-name param) raw (if (= (get param "kind") "variable") (str "$" name) name)]
+      (fl-static-join [issues
+        (if (= name "act") [(fl-static-issue "error" "reserved-word" (get context "file") node
+          "'act'은(는) FL 예약어 — 파라미터에 사용 불가")] [])
+        (if (has-key? (get context "shortGlobals") name) [(fl-static-warning "global-shadow" context node
+          (str "파라미터 '" raw "' 가 전역 헬퍼 '" name "' 를 가림 — 1글자 변수명 금지"))] [])]))) [] params))
+(defn fl-static-map-issues [node context]
+  (if (not (= (get node "type") "Map")) []
+    (let [items (fl-static-items node)]
+      (loop [index 0 issues []]
+        (if (>= (+ index 1) (length items)) issues
+          (let [key (get items index) value (get items (+ index 1))]
+            (recur (+ index 2)
+              (if (and (= (get key "kind") "keyword") (= (get key "name") "name")
+                       (= (get value "type") "string") (= (get value "value") "text"))
+                (push issues (fl-static-warning "req-key-collision" context key
+                  ":name \"text\" 는 req body raw 텍스트와 충돌 — content/title 등 사용")) issues))))))))
+(defn fl-static-call-issues [node context]
+  (let [name (get node "op") op (fl-static-op name) args (or (get node "args") [])
+        bound (fl-static-bound? name context) signature (fl-static-signature name context)
+        overridden (or bound (get signature "function"))
+        server (and (get context "island") (fl-static-has? FL-STATIC-SERVER-ONLY op) (not bound))
+        builtin (and (not overridden) (fl-static-has? ["range" "nth"] op) (not (= (length args) 2)))
+        user-arity (and (not bound) (get signature "function") (not (get signature "variadic"))
+                        (not (= (get signature "arity") (length args))))
+        unknown (and (not (get context "island")) (not bound) (regex_match name "^[a-z][a-z0-9_-]{2,}[!?]?$" )
+                     (not (fl-static-known? name context)) (not (str-starts-with name "page_"))
+                     (not (str-ends-with name "__inner")))
+        first-name (fl-static-name (get args 0)) second (get args 1)
+        req-key (and (not overridden) (= (length args) 2) (= (get second "type") "string") (= (get second "value") "text")
+                     (or (and (= op "get") (= first-name "body")) (and (= op "form-get") (= first-name "req"))))
+        parent (fl-static-op (last (get context "ancestors")))
+        nullable (and (not overridden) (fl-static-has? ["server-req-query" "server-req-param" "server-req-header" "server-req-cookie"] op)
+                      (fl-static-has? ["str-includes" "str-split" "str-replace" "str-slice" "str-to-num"
+                        "str-to-upper" "str-to-lower" "str-trim" "str-starts-with" "str-ends-with"
+                        "str-contains" "parse-int" "parse-float" "str-pad"] parent))
+        accumulating (first (filter (fn [ancestor] (fl-static-has? ["reduce" "loop" "recur"] ancestor)) (get context "ancestors")))
+        mutation (and (not overridden) (fl-static-has? ["obj-merge" "obj-omit" "assoc" "assoc-in" "update-in" "dissoc" "merge"] op)
+                      (get (get context "db") first-name))]
+    (fl-static-join [
+      (if server [(fl-static-issue "error" "island-boundary" (get context "file") node (str "(" name ") 서버 전용 함수를 island 안에서 사용"))] [])
+      (if unknown [(fl-static-warning "undefined-fn" context node (str "'" name "' 정의 없음"))] [])
+      (if builtin [(fl-static-warning "builtin-arity" context node
+        (str "(" name ") 인자 2개 필요, " (length args) "개 — "
+          (if (= op "range") "(range start end) — (range n) 은 빈 배열" "(nth coll idx)")))] [])
+      (if user-arity [(fl-static-warning "arity" context node
+        (str "(" name ") 인자 " (get signature "arity") "개 필요, " (length args) "개 전달"))] [])
+      (if (and (= name "json-parse") (not overridden)) [(fl-static-warning "json-parse-hyphen" context node
+        "(json-parse) 대신 (json_parse) 사용 — 서버 컨텍스트 파싱 오염 방지")] [])
+      (if req-key [(fl-static-warning "req-key-collision" context node
+        (str (if (= op "get") "get body \"text\"" "form-get \"text\"") " 는 req body raw 텍스트와 충돌 — content/title 등 사용"))] [])
+      (if nullable [(fl-static-warning "nullable-consume" context node
+        (str "(" (last (get context "ancestors")) " (" name " …)): null 반환 가능 — (or x 기본값)/req-query-default 로 가드 필요"))] [])
+      (if (and (= op "str") (> (length args) 1) (not (= accumulating nil))) [(fl-static-warning "str-loop-concat" context node
+        (str accumulating " 내 (str …) 누적 — O(n²) GC 위험, 배열 누적 후 str-join 권장"))] [])
+      (if mutation [(fl-static-warning "db-row-mutation" context node
+        (str "(" name " " first-name "): db-query 결과(JS 객체)에 맵 변형 — get 만 동작, 명시적 맵 구성 필요"))] [])])))
+(defn fl-static-walk-many [nodes context]
+  (reduce (fn [issues node] (concat issues (fl-static-walk node context))) [] nodes))
+(defn fl-static-walk [node context]
+  (let [kind (get node "kind")]
+    (cond
+      [(= kind "block") (concat (fl-static-map-issues node context)
+         (fl-static-walk-many (fl-static-items node) (assoc context "ancestors" (push (get context "ancestors") "__collection__"))))]
+      [(or (= kind "and") (= kind "or"))
+       (fl-static-walk-many (get node "args") (assoc context "ancestors" (push (get context "ancestors") kind)))]
+      [(= kind "throw") (fl-static-walk (get node "expr") (assoc context "ancestors" (push (get context "ancestors") "throw")))]
+      [(= kind "try") (fl-static-walk-many [(get node "body") (get node "catch") (get node "finally")]
+         (assoc context "ancestors" (push (get context "ancestors") "try")))]
+      [(not (= kind "sexpr")) []]
+      [true
+       (let [op (get node "op") args (or (get node "args") [])
+             inside (assoc context "ancestors" (push (get context "ancestors") (fl-static-op op)))]
+         (cond
+           [(fl-static-has? ["quote" "defstore" "style" "ns"] op) []]
+           [(= op "island")
+            (fl-static-walk-many (slice args (if (= (get (get args 1) "kind") "block") 2 1) (length args))
+              (assoc inside "island" true))]
+           [(fl-static-has? ["defn" "server-fn" "server_fn" "fn"] op)
+            (let [named (not (= op "fn")) index (if named 1 0) params (fl-static-items (get args index))
+                  name (if named (fl-static-name (get args 0)) nil)
+                  bound (fl-static-with-bound inside (concat (map fl-static-name params)
+                    (if (and named (not (has-key? (get context "definitions") name))) [name] [])))
+                  body (slice args (+ index 1) (length args))]
+              (fl-static-join [(fl-static-check-params params node context)
+                (if (= name "act") [(fl-static-issue "error" "reserved-word" (get context "file") node "'act'은(는) FL 예약어 — 함수 이름에 사용 불가")] [])
+                (if (and named (regex_match name "^[A-Z][A-Za-z0-9]*-[A-Za-z0-9-]+$")
+                         (>= (length (regex_find_all name "-")) 2)) [(fl-static-warning "upper-hyphen" context node
+                  (str "'" name "' 대문자+하이픈은 뺄셈 파싱 위험 — '" (str-replace-in (str-to-lower name) "-" "_") "' 권장"))] [])
+                (fl-static-walk-many body bound)]))]
+           [(= op "define")
+            (let [name (fl-static-name (get args 0))]
+              (fl-static-join [
+                (if (= name "act") [(fl-static-issue "error" "reserved-word" (get context "file") node "'act'은(는) FL 예약어 — 함수 이름에 사용 불가")] [])
+                (if (and (string? name) (regex_match name "^[A-Z][A-Za-z0-9]*-[A-Za-z0-9-]+$")
+                         (>= (length (regex_find_all name "-")) 2)) [(fl-static-warning "upper-hyphen" context node
+                  (str "'" name "' 대문자+하이픈은 뺄셈 파싱 위험 — '" (str-replace-in (str-to-lower name) "-" "_") "' 권장"))] [])
+                (fl-static-walk-many (slice args 1 (length args)) inside)]))]
+           [(= op "catch")
+            (let [binding (get args 0) params (if (= (get binding "kind") "block") (fl-static-items binding) [binding])]
+              (fl-static-walk-many (slice args 1 (length args)) (fl-static-with-bound inside (map fl-static-name params))))]
+           [(fl-static-has? ["let" "loop"] op)
+            (let [pairs (fl-static-pairs (get args 0)) names (map (fn [pair] (fl-static-name (get pair 0))) pairs)
+                  bound (fl-static-with-bound inside names)
+                  db (reduce (fn [db pair] (assoc db (fl-static-name (get pair 0)) (fl-static-db-value? (get pair 1) (assoc bound "db" db))))
+                             (get context "db") pairs)
+                  bound (assoc bound "db" db)]
+              (fl-static-join [(fl-static-check-bindings pairs node context)
+                (fl-static-walk-many (map (fn [pair] (get pair 1)) pairs) bound)
+                (fl-static-walk-many (slice args 1 (length args)) bound)]))]
+           [true (concat (fl-static-call-issues node context) (fl-static-walk-many args inside))]))])))
+
+(defn fl-static-comment-issues [source file]
+  (let [units (str-split source "") count (length units)]
+    (loop [index 0 line 1 mode "" depth 0 issues []]
+      (if (>= index count) issues
+        (let [char (get units index) next (get units (+ index 1)) third (get units (+ index 2))
+              triple (and (= char "\"") (= next "\"") (= third "\""))]
+          (cond
+            [(> depth 0)
+             (cond
+               [(and (= char "#") (= next "|")) (recur (+ index 2) line mode (+ depth 1) issues)]
+               [(and (= char "|") (= next "#")) (recur (+ index 2) line mode (- depth 1) issues)]
+               [true (recur (+ index 1) (+ line (if (= char "\n") 1 0)) mode depth issues)])]
+            [(= mode "triple")
+             (if triple (recur (+ index 3) line "" 0 issues)
+               (recur (+ index 1) (+ line (if (= char "\n") 1 0)) mode 0 issues))]
+            [(= mode "string")
+             (cond
+               [(= char "\\") (recur (+ index 2) (+ line (if (= next "\n") 1 0)) mode 0 issues)]
+               [(= char "\"") (recur (+ index 1) line "" 0 issues)]
+               [true (recur (+ index 1) (+ line (if (= char "\n") 1 0)) mode 0 issues)])]
+            [triple (recur (+ index 3) line "triple" 0 issues)]
+            [(= char "\"") (recur (+ index 1) line "string" 0 issues)]
+            [(and (= char "#") (= next "|")) (recur (+ index 2) line "" 1 issues)]
+            [(= char ";")
+             (let [end (loop [end (+ index 1)] (if (or (>= end count) (= (get units end) "\n")) end (recur (+ end 1))))
+                   body (str-trim (str-join (slice units (+ index 1) end) ""))]
+               (recur end line "" 0
+                 (if (regex_match body "^\\((defn|define|server-fn)\\b")
+                   (push issues (fl-static-issue "warn" "comment-defn" file {"line" line}
+                     "주석 속 (defn ...) — 스캔/rename 오탐 유발 가능")) issues)))]
+            [true (recur (+ index 1) (+ line (if (= char "\n") 1 0)) "" 0 issues)]))))))
+(defn fl-static-source-issues [units]
+  (let [allow (str-trim (or (env-get "FL_HTTP_ALLOW") ""))
+        evidence (first (filter (fn [unit]
+          (regex_match (get unit "source") "\\bafldb-|https?://127\\.0\\.0\\.1\\b|https?://localhost\\b")) units))]
+    (concat (reduce (fn [issues unit] (concat issues (fl-static-comment-issues (get unit "source") (get unit "file")))) [] units)
+      (if (and (= allow "") (not (= evidence nil)))
+        [(fl-static-issue "warn" "fl-http-allow" (get evidence "file") nil
+          "private HTTP(afldb/127.0.0.1) 사용 — FL_HTTP_ALLOW=127.0.0.1,localhost 설정 필요")] []))))
+(defn fl-static-route-issues [records]
+  (let [routes (filter (fn [record] (not (get record "helper"))) records)
+        static (filter (fn [record] (not (str-includes (get record "route") ":"))) routes)
+        dynamic (filter (fn [record] (str-includes (get record "route") ":")) routes)]
+    (reduce (fn [issues route]
+      (let [dynamic-parts (filter (fn [part] (not (= part ""))) (str-split (get route "route") "/"))]
+        (reduce (fn [issues candidate]
+          (let [parts (filter (fn [part] (not (= part ""))) (str-split (get candidate "route") "/"))
+                matches (and (= (length parts) (length dynamic-parts))
+                  (loop [index 0]
+                    (if (= index (length parts)) true
+                      (if (or (str-starts-with (get dynamic-parts index) ":") (= (get parts index) (get dynamic-parts index)))
+                        (recur (+ index 1)) false))))]
+            (if matches (push issues (fl-static-issue "warn" "route-shadow"
+              (last (str-split (get route "relative") "/")) nil
+              (str "동적 '" (get route "route") "' 가 정적 '" (get candidate "route") "' 를 가로챌 수 있음 — 정적 우선 등록 확인"))) issues))) issues static))) [] dynamic)))
+(defn fl-static-helper-order-issues [records]
+  (let [helpers (map (fn [record] (last (str-split (get record "relative") "/"))) (filter (fn [record] (get record "helper")) records))]
+    (reduce (fn [issues file]
+      (let [prefix (regex_find file "^_[a-z][a-z0-9]*-")]
+        (if (= prefix nil) issues
+          (let [base (str-slice prefix 0 (- (length prefix) 1)) parent (str base ".flx")
+                suffix (str-slice file (length prefix) (- (length file) 4))]
+            (if (and (str-ends-with file ".flx") (fl-static-has? helpers parent))
+              (push issues (fl-static-issue "warn" "helper-load-order" file nil
+                (str "'" file "' 가 '" parent "' 보다 먼저 로드됨 — '" base "_" suffix ".flx' 로 rename"))) issues))))) [] helpers)))
+(defn fl-static-dedupe [issues]
+  (get (reduce (fn [state issue]
+    (let [code (get issue "check") line (get issue "line") message (get issue "message")
+          identity (json_stringify [(get issue "file") code
+            (if (fl-static-has? ["undefined-fn" "upper-hyphen"] code) 0 line) message])]
+      (if (has-key? (get state "seen") identity) state
+        {"seen" (assoc (get state "seen") identity true) "issues" (push (get state "issues") issue)})))
+    {"seen" {} "issues" []} issues) "issues"))
+(defn fl-static-analyze [plan]
+  (let [units (fl-static-units plan) library (fl-static-library)
+        support (if (and (string? (get plan "serverSupportAst")) (file_exists (get plan "serverSupportAst")))
+                  (fl-metadata-ast (get plan "serverSupportAst")) [])
+        styles (reduce (fn [names unit]
+          (concat names (filter (fn [name] (not (= name nil)))
+            (map (fn [node] (if (= (get node "op") "style") (fl-static-name (get (get node "args") 0)) nil))
+              (reduce (fn [nodes root] (concat nodes (fl-metadata-walk root))) [] (get unit "nodes")))))) [] units)
+        front-names (fl-static-unique (concat FL-STATIC-FRONT
+          (concat (filter (fn [name] (not (= name nil))) (map fl-static-top-name support))
+                  (concat styles (map (fn [name] (str-replace-in name "-" "_")) styles)))))
+        definitions (fl-static-definitions units)
+        short (fl-static-unique (fl-static-join [["h" "h!"]
+          (filter (fn [name] (regex_match name "^[A-Za-z]$|^h!$")) (get library "names"))
+          (reduce (fn [names unit]
+            (if (not (get unit "helper")) names
+              (concat names (filter (fn [name] (and (string? name) (regex_match name "^[A-Za-z]$|^h!$")))
+                (map fl-static-top-name (get unit "nodes")))))) [] units)]))
+        context {"definitions" definitions "front" (fl-static-set front-names) "libraryAbi" (get library "abi")
+                 "shortGlobals" (fl-static-set short) "bound" {} "db" {} "ancestors" [] "island" false}
+        ast-issues (reduce (fn [issues unit]
+          (concat issues (fl-static-walk-many (get unit "nodes")
+            (assoc context "file" (get unit "file") "island" (or (get unit "client") false))))) [] units)
+        issues (fl-static-dedupe (fl-static-join [ast-issues (fl-static-source-issues units)
+          (fl-static-helper-order-issues (get plan "records")) (fl-static-route-issues (get plan "records"))]))
+        public-count (length (fl-static-unique (concat (get library "names") front-names)))]
+    {"issues" issues "summary" {"stdlibLoadOk" (get library "ok") "stdlibLsFnsCount" (get library "count")
+      "stdlibFnCount" public-count "stdlibNativeAbiCount" (get library "abiCount")
+      "stdlibSource" "matching-native-sdk" "stdlibHeaderSha256" (get library "headerSha256")
+      "stdlibBootstrap" (or (env-get "FREELANG_NATIVE_COMPILER") "")
+      "stdlibLoadError" (get library "error")}
+     "checks" ["reserved-word" "island-boundary" "json-parse-hyphen" "upper-hyphen" "let-shadow"
+       "fl-http-allow" "helper-load-order" "req-key-collision" "undefined-fn" "arity" "builtin-arity"
+       "comment-defn" "global-shadow" "route-shadow" "db-row-mutation" "nullable-consume" "str-loop-concat"]}))

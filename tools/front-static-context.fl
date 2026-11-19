@@ -1,0 +1,91 @@
+; Native diagnostic context. SDK declarations are data, never executable input.
+(define FL-STATIC-FORMS ["defn" "define" "fn" "let" "loop" "recur" "if" "cond" "case" "do" "begin"
+  "when" "unless" "and" "or" "try" "catch" "finally" "throw" "load" "ns" "quote" "set!"
+  "doseq" "dotimes" "doto" "->" "->>" "deftest" "describe" "it" "is" "is=" "run-tests" "test-summary"])
+(define FL-STATIC-FRONT ["island" "server-fn" "server_fn" "defstore" "style" "h" "h!"])
+(define FL-STATIC-SERVER-ONLY ["server-html" "server-json" "server-text" "server-redirect"
+  "server-status" "server-header" "server-req-path" "server-req-query" "server-req-param"
+  "server-req-json" "server-req-body" "server-event-stream" "server-start" "form-get" "form-field"
+  "form-data" "form-validate" "layout" "layout-html" "layout-html-seo" "layout-core"
+  "db-migrate" "db-fetch-stats" "url-decode" "export-to-csv" "export-to-json"])
+(defn fl-static-has? [values value] (> (length (filter (fn [item] (= item value)) values)) 0))
+(defn fl-static-join [groups]
+  (reduce (fn [all group] (concat all group)) [] groups))
+(defn fl-static-unique [values]
+  (get (reduce (fn [state value]
+    (if (has-key? (get state "seen") value) state
+      {"seen" (assoc (get state "seen") value true) "values" (push (get state "values") value)}))
+    {"seen" {} "values" []} values) "values"))
+(defn fl-static-set [values] (reduce (fn [result value] (assoc result value true)) {} values))
+(defn fl-static-bare [name]
+  (if (and (string? name) (str-starts-with name "$")) (str-slice name 1 (length name)) name))
+(defn fl-static-name [node]
+  (cond
+    [(= (get node "kind") "variable") (fl-static-bare (get node "name"))]
+    [(and (= (get node "kind") "literal") (= (get node "type") "symbol")) (fl-static-bare (get node "value"))]
+    [true nil]))
+(defn fl-static-op [name] (if (string? name) (str-replace-in name "_" "-") ""))
+(defn fl-static-items [node] (or (get (get node "fields") "items") []))
+(defn fl-static-pairs [node]
+  (let [items (fl-static-items node)]
+    (if (and (> (length items) 0) (= (get (first items) "kind") "block"))
+      (map fl-static-items items)
+      (loop [index 0 pairs []]
+        (if (>= (+ index 1) (length items)) pairs
+          (recur (+ index 2) (push pairs [(get items index) (get items (+ index 1))])))))))
+(defn fl-static-header-names [path marker]
+  (if (not (file_exists path)) (throw "Native SDK symbol header is missing") nil)
+  (let [source (file_read path) at (str-index-of source marker)]
+    (if (< at 0) (throw "Native SDK symbol header has an unexpected declaration") nil)
+    (let [body (str-slice source (+ at (length marker)) (length source)) end (str-index-of body "NULL")]
+      (if (< end 0) (throw "Native SDK symbol header has no terminator") nil)
+      (let [names (map json_parse (regex_find_all (str-slice body 0 end) "\"[^\"]+\""))]
+        (if (= (length names) 0) (throw "Native SDK symbol header is empty") nil)
+        (fl-static-unique names)))))
+(defn fl-static-library []
+  (let [include (or (env-get "FREELANG_NATIVE_RUNTIME_INCLUDE") "")]
+    (try
+      (let [public (fl-static-header-names (str include "/v11-ops.h") "v11_ops[] = {")
+            abi (fl-static-header-names (str include "/native-symbols.h") "fl_native_names[] = {")]
+        (if (not (every? (fn [name] (fl_v11_has name)) public)) (throw "Native SDK names do not match the running Native registry") nil)
+        {"ok" true "names" public "abi" (fl-static-set abi) "abiCount" (length abi)
+         "count" (length public) "headerSha256" (get (fl_file_sha256_result (str include "/v11-ops.h")) "data")})
+      (catch [error] {"ok" false "names" [] "abi" {} "abiCount" 0 "count" 0 "error" (error-message error)}))))
+(defn fl-static-top-name [node]
+  (if (fl-static-has? ["defn" "define" "server-fn" "server_fn"] (get node "op"))
+    (fl-static-name (get (get node "args") 0)) nil))
+(defn fl-static-definitions [units]
+  (reduce (fn [definitions unit]
+    (let [nodes (get unit "nodes") namespace (first (filter (fn [node] (= (get node "op") "ns")) nodes))
+          prefix (if (= namespace nil) "" (str (fl-static-name (get (get namespace "args") 0)) "-"))]
+      (reduce (fn [definitions node]
+        (let [name (fl-static-top-name node)]
+          (if (= name nil) definitions
+            (let [function (not (= (get node "op") "define")) params (fl-static-items (get (get node "args") 1))
+                  signature {"function" function "arity" (length params)
+                             "variadic" (any? (fn [param]
+                               (let [name (fl-static-name param)] (or (= name "&") (and (string? name) (str-includes name "..."))))) params)}
+                  definitions (if (has-key? definitions name) definitions (assoc definitions name signature))]
+              (if (or (= prefix "") (not function)) definitions (assoc definitions (str prefix name) signature)))))) definitions nodes))) {} units))
+(defn fl-static-known? [name context]
+  (let [bare (fl-static-bare name) normalized (fl-static-op bare)
+        other (if (str-includes bare "-") (str-replace-in bare "-" "_") normalized)]
+    (or (fl_v11_has bare) (has-key? (get context "libraryAbi") bare) (has-key? (get context "libraryAbi") other)
+        (has-key? (get context "definitions") bare) (has-key? (get context "definitions") other)
+        (has-key? (get context "front") bare) (has-key? (get context "front") other)
+        (fl-static-has? FL-STATIC-FORMS normalized))))
+(defn fl-static-units [plan]
+  (let [records (get plan "records")
+        sources (reduce (fn [units record]
+          (concat (push units {"file" (last (str-split (get record "relative") "/"))
+                               "relative" (get record "relative") "helper" (get record "helper")
+                               "source" (file_read (get record "file")) "nodes" (fl-metadata-ast (get record "ast"))})
+            (if (= (get record "client") nil) []
+              [{"file" (last (str-split (get record "relative") "/")) "relative" (get record "relative")
+                "helper" false "client" true "source" (file_read (get record "client"))
+                "nodes" (fl-metadata-ast (get record "clientAst"))}]))) [] records)
+        dependencies (map (fn [dependency]
+          {"file" (last (str-split (get dependency "file") "/")) "relative" (get dependency "file")
+           "helper" true "dependency" true "source" (file_read (get dependency "file"))
+           "nodes" (fl-metadata-ast (get dependency "ast"))}) (or (get plan "dependencies") []))]
+    (concat sources dependencies)))

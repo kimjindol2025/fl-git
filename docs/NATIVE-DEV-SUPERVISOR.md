@@ -67,8 +67,9 @@ Structured parser failures include source file, line and column. The control
 tool can translate a generated runtime location to its containing source
 function. The subsequent [source metadata implementation](NATIVE-FRONT-METADATA.md)
 adds the 19-entry catalog, store defaults/registry and real contract readiness.
-Live runtime log translation, expression-level precision, remaining static
-diagnostics and headless `/~ai/test` remain open. Explicit `NOT_RUN` fields
+The later [static checks](NATIVE-STATIC-DIAGNOSTICS.md) add preflight diagnostics
+and dependency error positions. Live runtime log translation, expression-level
+precision, remaining advisories and headless `/~ai/test` remain open. Explicit `NOT_RUN` fields
 describe that scope; empty metadata is not evidence of parity. Browser state restoration was
 validated separately in the preceding browser receipt; the metadata receipt
 also tests automatic supervisor-driven reloads in Chrome. Neither adds screenshot,

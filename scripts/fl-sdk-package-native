@@ -44,7 +44,7 @@ sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
     src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
     src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
-    tools/*.fl native/dev-watch.c scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native
+    tools/*.fl native/dev-watch.c web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native
 ) >"$RUN/provenance/frontend.before.sha256"
 "$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
 ar --version >"$RUN/provenance/ar.txt"

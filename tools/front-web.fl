@@ -75,7 +75,9 @@
             "script" (str web "/public/native-islands/route-" i ".js")
             "scriptUrl" (str "/public/native-islands/route-" i ".js")))))))]
       (let [plain {"schema" "fl-web-native/1" "status" "planned" "web" web "original" original "run" run "records" records
-                   "repoCommit" (or (env-get "FL_NATIVE_FRONT_COMMIT") "")}
+                   "repoCommit" (or (env-get "FL_NATIVE_FRONT_COMMIT") "")
+                   "serverSupport" (env-get "FL_NATIVE_FRONT_SERVER_SUPPORT")
+                   "serverSupportAst" (str run "/ast/server-support.json") "dependencies" []}
             raw-port (or (env-get "FL_HMR_PORT") "40851")
             development (= (env-get "FL_FRONT_NATIVE_DEV") "1")
             port (if development (str-to-num raw-port) 40851)
@@ -96,8 +98,48 @@
           (if (= (get record "client") nil) nil
             (print (str (get record "client") "\x00" (get record "clientAst") "\x00"))))))
   (let [plan (fl-web-json (str run "/plan.json"))]
+    (if (and (not browser) (string? (get plan "serverSupport")))
+      (print (str (get plan "serverSupport") "\x00" (get plan "serverSupportAst") "\x00")) nil)
     (if (and browser (get plan "development"))
       (print (str (get plan "devProgram") "\x00" (get plan "devScript") "\x00")) nil)))
+
+(defn fl-web-load-nodes [node]
+  (let [op (get node "op") kind (get node "kind")
+        children (cond
+          [(or (= kind "sexpr") (= kind "and") (= kind "or")) (get node "args")]
+          [(= kind "block") (get (get node "fields") "items")]
+          [(= kind "try") [(get node "body") (get node "catch") (get node "finally")]]
+          [(= kind "throw") [(get node "expr")]] [true []])]
+    (if (fl-web-includes ["quote" "defstore" "style" "island"] op) []
+      (concat (if (= op "load") [node] [])
+        (reduce (fn [nodes child] (concat nodes (fl-web-load-nodes child))) [] children)))))
+(defn fl-web-dependency-inputs [run]
+  (let [plan (fl-web-json (str run "/plan.json"))
+        records (concat (get plan "records")
+          (map (fn [dependency] (assoc dependency "origin" (get dependency "file"))) (or (get plan "dependencies") [])))
+        known (filter (fn [file] (not (= file nil))) (map (fn [record] (fl_compiler_realpath (get record "file"))) records))
+        dependencies (reduce (fn [dependencies record]
+          (if (not (file_exists (get record "ast"))) dependencies
+            (reduce (fn [dependencies load]
+              (let [arg (get (get load "args") 0)]
+                (if (not (= (get arg "type") "string")) (throw "E_WEB_LOAD: static load required") nil)
+                (let [file (fl-web-load-path (get arg "value") {"plan" plan "record" record})]
+                  (if (or (fl-web-includes known file) (any? (fn [item] (= (get item "file") file)) dependencies)) dependencies
+                    (push dependencies {"file" file "ast" (str run "/ast/dependency-" (length dependencies) ".json")})))))
+              dependencies (reduce (fn [nodes root] (concat nodes (fl-web-load-nodes root))) [] (fl-web-ast (get record "ast"))))))
+          (or (get plan "dependencies") []) records)
+        updated (assoc plan "dependencies" dependencies)]
+    (fl-web-write (str run "/plan.json") (json_stringify updated))
+    (doseq [dependency dependencies]
+      (if (file_exists (get dependency "ast")) nil
+        (print (str (get dependency "file") "\x00" (get dependency "ast") "\x00"))))))
+
+(defn fl-web-preflight [run]
+  (let [metadata (fl-front-metadata (fl-web-json (str run "/plan.json")))
+        state (assoc metadata "schema" "fl-web-native/1" "status" "checked")]
+    (fl-web-write (str run "/build-state.json") (json_stringify state))
+    (println (json_stringify state))
+    (if (> (get (get metadata "summary") "errors") 0) (process-exit 1) nil)))
 (defn fl-web-ast [file]
   (let [parsed (fl-web-json file)]
     (if (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok") (array? (get parsed "nodes")))
