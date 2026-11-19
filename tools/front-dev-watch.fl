@@ -1,0 +1,61 @@
+; Content snapshots for the Native development supervisor. No background IO.
+(defn fl-dev-watch-source? [name]
+  (> (length (filter (fn [suffix] (str-ends-with name suffix))
+                    [".fl" ".flx" ".flp" ".css" ".js"])) 0))
+(defn fl-dev-watch-hash [file]
+  (let [result (fl_file_sha256_result file)]
+    (if (and (get result "ok") (regex_match (get result "data") "^[a-f0-9]{64}$"))
+      (get result "data") (throw "Development source hash could not be read"))))
+(defn fl-dev-watch-tree [directory prefix assets]
+  (reduce (fn [files name]
+    (let [path (str directory "/" name) relative (str prefix name)]
+      (if (or (= name ".git") (= name ".hg") (= name ".svn") (= name "node_modules")
+              (= relative "public/native-islands") (= relative "public/app.css")) files
+        (if (file_is_file path)
+          (if (or assets (fl-dev-watch-source? name))
+            (push files {"path" relative "sha256" (fl-dev-watch-hash path)
+                         "kind" (if (str-ends-with name ".css") "css" "source")}) files)
+          (concat files (fl-dev-watch-tree path (str relative "/") assets))))))
+    [] (dir_list directory)))
+(defn fl-dev-watch-snapshot [web]
+  (let [entries (dir_list web)
+        nested (reduce (fn [files name]
+          (if (> (length (filter (fn [entry] (= entry name)) entries)) 0)
+            (concat files (fl-dev-watch-tree (str web "/" name) (str name "/") (= name "public"))) files))
+          [] ["pages" "islands" "public"])
+        top (reduce (fn [files name]
+          (let [path (str web "/" name)]
+            (if (and (file_is_file path) (fl-dev-watch-source? name)
+                     (not (str-starts-with name "_app."))
+                     (not (str-starts-with name "dev-server")))
+              (push files {"path" name "sha256" (fl-dev-watch-hash path)
+                           "kind" (if (str-ends-with name ".css") "css" "source")}) files))) [] entries)]
+    {"schema" "fl-dev/watch/1" "root" web
+     "files" (arr-sort-by (concat top nested) "path")}))
+(defn fl-dev-watch-index [snapshot]
+  (reduce (fn [index file]
+    (let [path (get file "path") hash (get file "sha256") kind (get file "kind")]
+      (if (not (and (string? path) (not (= path "")) (string? hash)
+                    (regex_match hash "^[a-f0-9]{64}$")
+                    (= kind (if (str-ends-with path ".css") "css" "source"))
+                    (not (has-key? index path))))
+        (throw "Development snapshot contains an invalid or duplicate source record") nil)
+      (assoc index path file))) {} (get snapshot "files")))
+(defn fl-dev-watch-diff [previous current]
+  (if (not (and (= (get previous "schema") "fl-dev/watch/1")
+                (= (get current "schema") "fl-dev/watch/1")
+                (= (get previous "root") (get current "root"))
+                (array? (get previous "files")) (array? (get current "files"))))
+    (throw "Development snapshots must describe the same source tree") nil)
+  (let [before (fl-dev-watch-index previous) after (fl-dev-watch-index current)
+        names (reduce (fn [names path]
+          (if (has-key? before path) names (push names path))) (keys before) (keys after))
+        changes (filter (fn [change] (not (= change nil)))
+          (map (fn [path]
+            (let [old (get before path) new (get after path)]
+              (if (= (get old "sha256") (get new "sha256")) nil
+                {"path" path "operation" (if (= old nil) "add" (if (= new nil) "remove" "change"))
+                 "kind" (get (or new old) "kind")}))) names))]
+    {"schema" "fl-dev/changes/1" "changed" (> (length changes) 0)
+     "cssOnly" (and (> (length changes) 0) (every? (fn [change] (= (get change "kind") "css")) changes))
+     "files" (arr-sort-by changes "path")}))

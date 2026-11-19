@@ -1,0 +1,12 @@
+; Native HMR/inspection service component; not the complete dev supervisor.
+(load "./front-dev.fl")
+(try
+  (do
+    (if (not (= (env-get "FL_HTTP_HOST") "127.0.0.1"))
+      (throw "Native development service requires FL_HTTP_HOST=127.0.0.1") nil)
+    (if (not (and (string? (env-get "FL_NATIVE_DEV_WEB")) (file_exists (str (env-get "FL_NATIVE_DEV_WEB") "/pages"))))
+      (throw "FL_NATIVE_DEV_WEB must select an existing project web directory") nil)
+    (fl-dev-service))
+  (catch [error]
+    (fl_stderr_write (str "FL_DEV_NATIVE_SERVICE=FAIL " (error-message error) "\n"))
+    (process-exit 1)))

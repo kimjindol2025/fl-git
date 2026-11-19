@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+if [[ -z "$COMPILER" || ! -x "$COMPILER" ]]; then
+  echo "BLOCKED: Set FREELANG_NATIVE_COMPILER to the verified Native compiler." >&2
+  exit 2
+fi
+
+run_bounded() {
+  set +e
+  timeout 15s "$@"
+  local code=$?
+  set -e
+  if [ "$code" -eq 124 ]; then
+    echo "BLOCKED: FreeLang Native command timed out; inspect the runtime before implementation." >&2
+    exit 2
+  fi
+  return "$code"
+}
+
+run_bounded "$COMPILER" --check "$ROOT/src/git.fl"
+run_bounded "$COMPILER" --check "$ROOT/src/main.fl"
+run_bounded "$COMPILER" --check "$ROOT/src/tui.fl"
+run_bounded "$ROOT/scripts/fl-git" --help
+run_bounded "$COMPILER" --check "$ROOT/tests/smoke.fl"
+run_bounded "$ROOT/scripts/fl-run-native" "$ROOT/tests/smoke.fl"
+"$ROOT/scripts/fl-test"
+"$ROOT/scripts/provider-gate-native"

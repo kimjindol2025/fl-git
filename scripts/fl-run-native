@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Run one FreeLang source with the explicitly configured matching Native SDK.
+set -Eeuo pipefail
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
+ulimit -c 0
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+ARCHIVE="${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}"
+INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
+NATIVE_CC="${CC:-gcc}"
+ARTIFACTS="${FREELANG_NATIVE_RUN_ARTIFACTS:-}"
+blocked() { printf 'FREELANG_NATIVE_RUN=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+[[ -n "$COMPILER" && -x "$COMPILER" ]] || blocked "Set FREELANG_NATIVE_COMPILER to the verified Native compiler."
+[[ -f "$ARCHIVE" && -f "$INCLUDE/runtime.h" ]] || blocked "Set the matching Native runtime archive and headers."
+command -v "$NATIVE_CC" >/dev/null 2>&1 || blocked "Configured C compiler is unavailable."
+[[ "$#" -gt 0 && -f "$1" ]] || blocked "Usage: fl-run-native <source.fl> [program arguments...]"
+case "$1" in
+  /*) SOURCE="$1" ;;
+  *) SOURCE="$PWD/$1" ;;
+esac
+shift
+if [[ -n "$ARTIFACTS" ]]; then
+  [[ -d "$ARTIFACTS" ]] || blocked "Native run artifact directory does not exist."
+  RUN="$(mktemp -d -- "$ARTIFACTS/fl-run-native.XXXXXX")" || blocked "Unable to retain Native run artifacts."
+else
+  RUN="$(mktemp -d -- "${TMPDIR:-/tmp}/fl-run-native.XXXXXX")" || blocked "Unable to create Native run directory."
+  trap 'rm -rf -- "$RUN"' EXIT
+fi
+code=0
+"$COMPILER" "$SOURCE" "$RUN/program.c" >"$RUN/generate.log" 2>&1 || code=$?
+if [[ "$code" -ne 0 ]]; then cat "$RUN/generate.log" >&2; exit "$code"; fi
+if [[ ! -s "$RUN/program.c" ]]; then
+  cat "$RUN/generate.log" >&2
+  echo 'FREELANG_NATIVE_RUN=FAIL: compiler did not generate a nonempty program' >&2
+  exit 1
+fi
+"$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-declaration -I "$INCLUDE" \
+  -o "$RUN/program" "$RUN/program.c" \
+  -Wl,--whole-archive "$ARCHIVE" -Wl,--no-whole-archive \
+  -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build.log" 2>&1 || code=$?
+if [[ "$code" -ne 0 ]]; then cat "$RUN/build.log" >&2; exit "$code"; fi
+"$RUN/program" "$@"

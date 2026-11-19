@@ -1,0 +1,16 @@
+; One-shot Native source snapshot/diff commands; supervision stays in the host.
+(load "./front-dev-watch.fl")
+(try
+  (let [args (cli-args) mode (get args 0)]
+    (cond
+      [(and (= mode "--snapshot") (= (length args) 2))
+       (println (json_stringify (fl-dev-watch-snapshot (get args 1))))]
+      [(and (= mode "--diff") (= (length args) 3))
+       (println (json_stringify
+         (fl-dev-watch-diff (json_parse (file_read (get args 1)))
+                            (json_parse (file_read (get args 2))))))]
+      [true (do (fl_stderr_write "Usage: fl-dev-watch --snapshot <web-root> | --diff <previous.json> <current.json>\n")
+                (process-exit 2))]))
+  (catch [error]
+    (fl_stderr_write (str "FL_DEV_NATIVE_WATCH=FAIL " (error-message error) "\n"))
+    (process-exit 1)))

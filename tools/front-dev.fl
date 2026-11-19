@@ -1,0 +1,106 @@
+; Native HMR inspection service. The default fl-dev is not migrated yet.
+(define fl-dev-errors (atom []))
+(define fl-dev-clients (atom []))
+
+(defn fl-dev-read-json [file fallback]
+  (if (and (string? file) (file_exists file))
+    (json_parse (file_read file)) fallback))
+(defn fl-dev-state []
+  (fl-dev-read-json (env-get "FL_NATIVE_DEV_STATE") {"ok" false "issues" [] "routes" []}))
+(defn fl-dev-browser []
+  (fl-dev-read-json (str (env-get "FL_NATIVE_DEV_WEB") "/.browser-state.json")
+                    {"ok" false "status" "missing"}))
+(defn fl-dev-cors [response]
+  (reduce (fn [value header] (server_header value (get header 0) (get header 1)))
+    response [["Access-Control-Allow-Origin" "*"]
+              ["Access-Control-Allow-Methods" "GET, POST, OPTIONS"]
+              ["Access-Control-Allow-Headers" "Content-Type"]]))
+(defn fl-dev-json [value status] (fl-dev-cors (server_json value status)))
+(defn fl-dev-options [req]
+  (if (= (get req "method") "OPTIONS") (fl-dev-cors (server_status 204 "")) nil))
+
+(defn fl-dev-source-files [directory]
+  (reduce (fn [files name]
+    (let [file (str directory "/" name)]
+      (if (str-starts-with name ".") files
+        (if (file_is_file file)
+          (if (or (str-ends-with name ".flx") (str-ends-with name ".fl")) (push files file) files)
+          (concat files (fl-dev-source-files file)))))) [] (dir_list directory)))
+(defn fl-dev-functions []
+  (let [entries (reduce (fn [entries file]
+          (reduce (fn [entries signature]
+            (let [name (regex_replace signature "^\\(defn\\s+([\\w-]+)\\s+\\[.*$" "$1")
+                  params (regex_replace (regex_replace signature "^\\(defn\\s+[\\w-]+\\s+\\[" "") "\\]$" "")
+                  base (last (str-split file "/")) key (str name ":" base)]
+              (assoc entries key {"name" name "params" (regex_find_all params "\\S+") "file" base})))
+            entries (regex_find_all (file_read file) "\\(defn\\s+[\\w-]+\\s+\\[[^\\]]*\\]")))
+          {} (fl-dev-source-files (str (env-get "FL_NATIVE_DEV_WEB") "/pages")))]
+    {"count" (length (keys entries)) "fns" (map (fn [key] (get entries key)) (keys entries))}))
+
+(defn fl-dev-summary []
+  (let [state (fl-dev-state)]
+    {"build" {"ok" (get state "ok") "time" (get state "time") "elapsed" (get state "elapsed")}
+     "issues" (or (get state "issues") [])
+     "routes" (map (fn [route] (get route "route")) (or (get state "routes") []))
+     "helpers" (or (get state "helpers") []) "store_keys" (or (get state "store_keys") [])
+     "contracts" (or (get state "contracts") []) "contract_summary" (or (get state "contractSummary") {})
+     "repo_commit" (or (get state "repoCommit") "") "browser_state" (fl-dev-browser)
+     "browser_errors" (slice @fl-dev-errors 0 10)
+     "endpoints" {"/~ai" "GET — summary" "/~ai/routes" "GET — routes"
+                    "/~ai/fns" "GET — functions" "/~ai/store" "GET — store keys"
+                    "/~ai/issues" "GET — build issues" "/~ai/errors" "GET — browser errors"
+                    "/~ai/contracts" "GET — contract readiness" "/~ai/browser" "GET — browser state"}}))
+(defn fl-dev-inspect [req]
+  (let [path (get req "path") state (fl-dev-state) issues (or (get state "issues") [])]
+    (cond
+      [(= path "/~ai") (fl-dev-json (fl-dev-summary) 200)]
+      [(= path "/~ai/routes") (fl-dev-json {"routes" (or (get state "routes") [])} 200)]
+      [(= path "/~ai/fns") (fl-dev-json (fl-dev-functions) 200)]
+      [(= path "/~ai/store") (fl-dev-json {"store_keys" (or (get state "store_keys") [])} 200)]
+      [(= path "/~ai/issues")
+       (let [errors (filter (fn [issue] (= (get issue "level") "error")) issues)
+             warns (filter (fn [issue] (= (get issue "level") "warn")) issues)]
+         (fl-dev-json {"ok" (= (length errors) 0) "errors" errors "warns" warns} 200))]
+      [(= path "/~ai/errors") (fl-dev-json {"count" (length @fl-dev-errors) "errors" (slice @fl-dev-errors 0 20)} 200)]
+      [(= path "/~ai/contracts")
+       (fl-dev-json {"repo_commit" (or (get state "repoCommit") "")
+                    "contract_summary" (or (get state "contractSummary") {})
+                    "contracts" (or (get state "contracts") []) "browser_state" (fl-dev-browser)} 200)]
+      [(= path "/~ai/browser") (fl-dev-json {"browser_state" (fl-dev-browser)} 200)]
+      [true (fl-dev-json {"error" "unknown /~ai endpoint"} 404)])))
+(defn fl-dev-add-error [req]
+  (let [entry (server_req_json req)]
+    (if (map? entry)
+      (do (swap! fl-dev-errors (fn [errors] (slice (concat [(assoc entry "time" (now-iso))] errors) 0 50)))
+          (fl-dev-json {"ok" true} 200))
+      (fl-dev-json {"error" "JSON error object required"} 400))))
+(defn fl-dev-clear-errors [req]
+  (reset! fl-dev-errors []) (fl-dev-json {"ok" true} 200))
+
+(defn fl-dev-stream [connection]
+  (sse_send connection "connected")
+  (swap! fl-dev-clients (fn [clients] (push clients connection)))
+  (try (loop [] (if (sse_alive connection) (do (sleep-ms 100) (recur)) nil))
+       (catch [error] (sse_close connection)))
+  (swap! fl-dev-clients (fn [clients] (filter sse_alive clients))))
+(defn fl-dev-broadcast [req]
+  (let [token (env-get "FL_NATIVE_DEV_TOKEN") event (get (server_req_json req) "event")]
+    (if (or (not (string? token)) (= token "") (not (= token (server_req_header req "x-fl-dev-token"))))
+      (fl-dev-json {"error" "Development supervisor token required"} 403)
+      (if (not (or (= event "reload") (= event "css-reload") (= event "soft-reload")))
+        (fl-dev-json {"error" "Unknown development event"} 400)
+        (do
+          (doseq [connection @fl-dev-clients] (sse_send connection event))
+          (swap! fl-dev-clients (fn [clients] (filter sse_alive clients)))
+          (fl-dev-json {"ok" true "clients" (length @fl-dev-clients)} 200))))))
+(defn fl-dev-service []
+  (server_use "/*" "fl-dev-options")
+  (server_sse "/~hmr" "fl-dev-stream")
+  (server_get "/~health" (fn [req] (fl-dev-json {"ok" true} 200)))
+  (server_get "/~errors" (fn [req] (fl-dev-json @fl-dev-errors 200)))
+  (server_post "/~errors" "fl-dev-add-error")
+  (server_delete "/~errors" "fl-dev-clear-errors")
+  (server_post "/~native/events" "fl-dev-broadcast")
+  (server_get "/~ai" "fl-dev-inspect")
+  (server_get "/~ai/*" "fl-dev-inspect")
+  (server_start (str-to-num (or (env-get "FL_HMR_PORT") "40851"))))

@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Package explicitly selected, matching Native inputs. Run under fl-heavy.lock.
+set -Eeuo pipefail
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
+ulimit -c 0
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+COMPILER_C="${FREELANG_NATIVE_COMPILER_C:-}"
+ARCHIVE="${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}"
+INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
+CURL_LIBRARY="${FREELANG_NATIVE_CURL_LIBRARY:-}"
+NATIVE_CC="${CC:-gcc}"
+blocked() { printf 'FL_NATIVE_SDK=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+[[ -f "$COMPILER" && -x "$COMPILER" ]] || blocked 'Configure the verified Native compiler.'
+[[ -s "$COMPILER_C" ]] || blocked 'Configure FREELANG_NATIVE_COMPILER_C with its verified fixed-point generated C.'
+[[ -f "$ARCHIVE" && -f "$INCLUDE/runtime.h" ]] || blocked 'Configure its matching runtime archive and headers.'
+[[ -d "$INCLUDE/ryu" ]] || blocked 'The complete matching runtime headers, including ryu, are required.'
+[[ -f "$CURL_LIBRARY" ]] || blocked 'Configure FREELANG_NATIVE_CURL_LIBRARY with the matching curl shared library.'
+[[ "$#" -eq 1 && -d "$1" ]] || blocked 'Usage: fl-sdk-package-native <existing-output-directory>'
+for command_name in "$NATIVE_CC" ar readelf sha256sum; do
+  command -v "$command_name" >/dev/null 2>&1 || blocked 'A required Native build command is unavailable.'
+done
+curl_soname="$(readelf -d -- "$CURL_LIBRARY" | sed -n 's/.*(SONAME).*\[\([^]]*\)\].*/\1/p')"
+[[ "$curl_soname" =~ ^libcurl\.so\.[0-9]+$ ]] || blocked 'The curl input has an unsupported shared library name.'
+OUTPUT="$(cd -- "$1" && pwd -P)"
+RUN="$(mktemp -d -- "$OUTPUT/fl-sdk.XXXXXX")"
+printf 'FL_NATIVE_SDK_ARTIFACTS=%s\n' "$RUN"
+step=INPUTS
+trap 'rc=$?; if [[ "$rc" -ne 0 ]]; then printf "FL_NATIVE_SDK=FAIL STEP=%s EXIT=%s\n" "$step" "$rc"; fi' EXIT
+mkdir -- "$RUN/bin" "$RUN/lib" "$RUN/include" "$RUN/build" "$RUN/provenance"
+cp -- "$COMPILER_C" "$RUN/provenance/compiler.c"
+cp -- "$ARCHIVE" "$RUN/lib/runtime.a"
+cp -L -- "$CURL_LIBRARY" "$RUN/lib/$curl_soname"
+ln -s -- "$curl_soname" "$RUN/lib/libcurl.so"
+for header in "$INCLUDE"/*.h; do cp -- "$header" "$RUN/include/"; done
+cp -R -- "$INCLUDE/ryu" "$RUN/include/ryu"
+export LD_LIBRARY_PATH="$RUN/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBRARY_PATH="$RUN/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h "$INCLUDE"/ryu/* >"$RUN/build/inputs.before.sha256"
+(
+  cd -- "$ROOT"
+  sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
+    src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
+    src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
+    tools/*.fl native/dev-watch.c scripts/fl-sdk-package-native
+) >"$RUN/provenance/frontend.before.sha256"
+"$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
+ar --version >"$RUN/provenance/ar.txt"
+uname -srm >"$RUN/provenance/platform.txt"
+step=COMPILER_RELINK
+env -u LD_RUN_PATH "$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-declaration \
+  -I "$RUN/include" -o "$RUN/bin/flc" "$RUN/provenance/compiler.c" \
+  -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
+  -Wl,--whole-archive "$RUN/lib/runtime.a" -Wl,--no-whole-archive \
+  -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build/flc.build.log" 2>&1
+specs=(
+  'fl-git|src/main.fl' 'fl-tui|src/tui.fl' 'fl-check|tools/fl-check.fl'
+  'flp-compile|tools/flp-compile.fl' 'fl-front-build|tools/fl-front-build.fl'
+  'fl-style-compile|tools/fl-style-compile.fl' 'fl-island-compile|tools/fl-island-compile.fl'
+  'fl-dev-server|tools/fl-dev-server.fl' 'fl-dev-watch|tools/fl-dev-watch.fl'
+)
+for spec in "${specs[@]}"; do
+  IFS='|' read -r name source <<< "$spec"
+  step="$name"
+  "$RUN/bin/flc" "$ROOT/$source" "$RUN/build/$name.c" >"$RUN/build/$name.generate.log" 2>&1
+  [[ -s "$RUN/build/$name.c" ]]
+  if grep -q '\[CGC-ERR\]\|\[IR-ERR\]' "$RUN/build/$name.generate.log"; then exit 1; fi
+  env -u LD_RUN_PATH "$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-declaration \
+    -I "$RUN/include" -o "$RUN/bin/$name" "$RUN/build/$name.c" \
+    -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
+    -Wl,--whole-archive "$RUN/lib/runtime.a" -Wl,--no-whole-archive \
+    -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build/$name.build.log" 2>&1
+done
+step=WATCH_HOST
+"$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -o "$RUN/bin/fl-dev-watch-host" \
+  "$ROOT/native/dev-watch.c" >"$RUN/build/watch-host.build.log" 2>&1
+step=SOURCE_UNCHANGED
+sha256sum -c -- "$RUN/build/inputs.before.sha256" >"$RUN/build/inputs.check.log"
+(
+  cd -- "$ROOT"
+  sha256sum -c -- "$RUN/provenance/frontend.before.sha256"
+) >"$RUN/build/frontend.check.log"
+step=ACTIVATION
+cat >"$RUN/env.sh" <<'SH'
+# Source this file from Bash; paths are resolved after relocating the SDK.
+fl_sdk_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export FREELANG_NATIVE_COMPILER="$fl_sdk_root/bin/flc"
+export FREELANG_NATIVE_COMPILER_C="$fl_sdk_root/provenance/compiler.c"
+export FREELANG_NATIVE_RUNTIME_ARCHIVE="$fl_sdk_root/lib/runtime.a"
+export FREELANG_NATIVE_RUNTIME_INCLUDE="$fl_sdk_root/include"
+export FREELANG_NATIVE_FLGIT="$fl_sdk_root/bin/fl-git"
+export FREELANG_NATIVE_FLGIT_TUI="$fl_sdk_root/bin/fl-tui"
+export FREELANG_NATIVE_FLCHECK="$fl_sdk_root/bin/fl-check"
+export FREELANG_NATIVE_FLP_TOOL="$fl_sdk_root/bin/flp-compile"
+export FREELANG_NATIVE_WEB_TOOL="$fl_sdk_root/bin/fl-front-build"
+export FREELANG_NATIVE_STYLE_TOOL="$fl_sdk_root/bin/fl-style-compile"
+export FREELANG_NATIVE_ISLAND_TOOL="$fl_sdk_root/bin/fl-island-compile"
+export FREELANG_NATIVE_DEV_SERVER="$fl_sdk_root/bin/fl-dev-server"
+export FREELANG_NATIVE_DEV_WATCH="$fl_sdk_root/bin/fl-dev-watch"
+export FREELANG_NATIVE_DEV_WATCH_HOST="$fl_sdk_root/bin/fl-dev-watch-host"
+export FREELANG_NATIVE_CURL_LIBRARY="$fl_sdk_root/lib/libcurl.so"
+export LD_LIBRARY_PATH="$fl_sdk_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBRARY_PATH="$fl_sdk_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+unset fl_sdk_root
+SH
+cat >"$RUN/verify.sh" <<'SH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+sha256sum --strict -c SDK.SHA256
+SH
+chmod +x -- "$RUN/verify.sh"
+cat >"$RUN/README.txt" <<'TXT'
+Native SDK for the platform recorded in provenance/platform.txt.
+
+Run ./verify.sh, then source ./env.sh from Bash. The repository's Native
+launchers use these explicit tool paths. Source env.sh again after moving the
+SDK. The C toolchain, libc, OpenSSL, SQLite and the shared libraries required by
+the recorded platform must be available; libcurl is included. The compiler is
+relinked from the configured fixed-point generated C with a relative RUNPATH;
+the generated C is preserved in provenance/compiler.c. This is a build
+tool bundle. Packaging does not establish application or DB release acceptance.
+Build logs and generated C are retained in build/ for diagnosis.
+TXT
+(
+  cd -- "$RUN"
+  sha256sum -- env.sh verify.sh README.txt bin/* include/*.h include/ryu/* lib/runtime.a lib/libcurl.so "lib/$curl_soname" \
+    provenance/*.txt provenance/compiler.c provenance/frontend.before.sha256 >SDK.SHA256
+)
+step=MANIFEST
+"$RUN/verify.sh" >"$RUN/build/manifest.check.log"
+printf 'FL_NATIVE_SDK=PASS\nAPP_ACCEPTANCE=NOT_RUN\n' | tee "$RUN/completion.txt"
