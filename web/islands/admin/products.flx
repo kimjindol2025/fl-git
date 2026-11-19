@@ -1,5 +1,6 @@
 (island AdminProductForm []
-  (let [authorized (atom false)
+  (let [authorized (atom true)
+        loaded (atom false)
         password (atom "")
         products (atom [])
         message (atom "")
@@ -9,6 +10,16 @@
         description (atom "")
         photo (atom "")
         stock (atom "")
+        product-photo (fn [product]
+          (let [value (str (or (get product "photo") ""))]
+            (if (and (.test (RegExp "^/public/[A-Za-z0-9._/-]+$") value)
+                     (not (.includes value ".."))) value "/public/product-default.svg")))
+        reload (fn []
+          (fetch! "POST" "/api/admin/products" {} {}
+            (fn [result]
+              (if (= (get result "ok") true)
+                (reset! products (or (get (get result "data") "products") []))
+                (reset! message "상품 목록을 불러오지 못했습니다.")))))
         clear-form (fn []
                      (reset! product-id "")
                      (reset! name "")
@@ -83,11 +94,8 @@
                                                  (get data "error")
                                                  "상품을 저장하지 못했습니다."))))))))))
         logout (fn []
-                 (reset! password "")
-                 (reset! products [])
-                 (reset! authorized false)
-                 (clear-form)
-                 (reset! message "로그아웃했습니다."))]
+                 (.submit (.getElementById document "admin-session-logout")))]
+    (if (not @loaded) (do (reset! loaded true) (reload)))
     (if (not @authorized)
       (h "section" {"class" "card"}
         (h "h2" {} "관리자 인증")
@@ -107,7 +115,7 @@
           (h "div" {"class" "admin-grid" "id" "admin-products-list"}
             (map (fn [product]
                    (h "article" {"class" "admin-product card"}
-                     (h "img" {"src" (fl-product-photo product) "alt" (str (get product "name") " 상품 사진") "loading" "lazy"})
+                     (h "img" {"src" (product-photo product) "alt" (str (get product "name") " 상품 사진") "loading" "lazy"})
                      (h "div" {}
                        (h "strong" {} (get product "name"))
                        (h "p" {} (str "가격: " (get product "price") "원 · 재고: " (get product "stock") "개"))

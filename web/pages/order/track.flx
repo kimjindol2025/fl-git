@@ -1,6 +1,6 @@
 ; 주문번호와 연락처 뒤 네 자리만 제출하고, 조회 결과에는 주문자 정보를 넣지 않는다.
 (defn render [req]
   (server_html
-    (fl-layout "주문 조회" "주문번호와 연락처 뒤 네 자리로 주문 상태를 확인합니다."
+    (fl-layout req "주문 조회" "주문번호와 연락처 뒤 네 자리로 주문 상태를 확인합니다."
       (str "<style>.track-form{display:grid;gap:12px;max-width:520px}.track-form input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #bbb;border-radius:8px}.track-result{margin-top:20px}.track-error{color:#b42318}</style><h1>주문 조회</h1><div id='order-track-root'>"
            "ISLAND_PLACEHOLDER_0" "</div>" "ISLAND_SCRIPTS"))))

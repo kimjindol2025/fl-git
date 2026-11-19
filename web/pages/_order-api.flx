@@ -63,20 +63,27 @@
 (defn fl-order-total [items]
   (reduce (fn [sum item] (+ sum (get item "line_total"))) 0 items))
 
-(defn fl-order-create [req]
+(defn fl-order-create-locked [req]
   (let [body (server_req_json req)
         raw-items (or (get body "items") [])
+        request-id (str (or (get body "request_id") ""))
+        request-key (if (= request-id "") "" (sha256 (str (fl-shop-session req) ":" request-id)))
+        fingerprint (sha256 (json_stringify {"items" raw-items
+          "recipient" (fl-order-text body "recipient") "phone" (fl-order-text body "phone")
+          "address" (fl-order-text body "address") "note" (fl-order-text body "note")}))
         products (fl-products-load)
         orders (fl-orders-load)
+        prior (if (= request-key "") nil
+                (first (filter (fn [saved] (= (get saved "request_key") request-key)) orders)))
         prepared (fl-order-prepare-items raw-items products)
         items (get prepared "items")
         errors (concat (fl-order-errors body)
                  (if (= (length raw-items) 0)
                    [{"field" "items" "message" "주문 상품이 필요합니다."}]
                    (get prepared "errors")))
-        order-id (str "ORD-" (now_ms) "-" (length (or orders [])))
+        order-id (str "ORD-" (random_bytes 24))
         total (fl-order-total items)
-        order {"order_id" order-id
+        order {"order_id" order-id "request_key" request-key "request_fingerprint" fingerprint
                "created_at" (now_iso)
                "recipient" (fl-order-text body "recipient")
                "phone" (fl-order-text body "phone")
@@ -86,20 +93,26 @@
                "total" total
                "status" "접수"}
         next-products (fl-order-reduce-stock products items)]
-    (if (= orders nil)
-      (server_status 500 {"error" "주문 자료를 읽지 못했습니다."})
+    (cond
+      (and (not (= request-id "")) (not (regex_match request-id "^[A-Za-z0-9_-]{16,128}$")))
+        (server_status 400 {"error" "요청 식별자 형식이 올바르지 않습니다."})
+      (not (array? raw-items)) (server_status 400 {"error" "주문 상품 목록 형식이 올바르지 않습니다."})
+      (not (= prior nil))
+        (if (= (get prior "request_fingerprint") fingerprint)
+          (server_json {"order_id" (get prior "order_id") "total" (get prior "total")})
+          (server_status 409 {"error" "같은 요청 식별자의 주문 내용이 다릅니다."}))
+      (not (fl-shop-money total)) (server_status 400 {"error" "주문 금액이 저장 범위를 벗어납니다."})
+      true
       (if (> (length errors) 0)
       (server_status 400 {"errors" errors})
-      (if (not (fl-products-save next-products))
-        (server_status 500 {"error" "재고를 저장하지 못했습니다."})
-        (if (fl-orders-save (concat orders [order]))
-          (do
-            (fl-cart-clear!)
-            (server_json {"order_id" order-id "total" total}))
-          (do
-            (fl-products-save products)
-            (fl-orders-save orders)
-            (server_status 500 {"error" "주문을 저장하지 못했습니다."}))))))))
+      (do (fl-shop-commit next-products (concat orders [order]) req)
+          (server_json {"order_id" order-id "total" total}))))))
+
+(defn fl-order-create [req]
+  (let [body (server_req_json req)]
+    (if (not (and (map? body) (array? (get body "items"))))
+      (server_status 400 {"error" "주문 상품 목록 형식이 올바르지 않습니다."})
+      (fl-shop-locked (fn [] (fl-order-create-locked req))))))
 
 (defn fl-order-done [req]
   (let [id (server_req_query req "order_id")
@@ -107,22 +120,10 @@
     (if (= order nil)
       (server_status 404 {"error" "주문을 찾을 수 없습니다."})
       (server_html
-        (fl-layout "주문 완료" "주문이 정상적으로 접수되었습니다."
+        (fl-layout req "주문 완료" "주문이 정상적으로 접수되었습니다."
           (str "<section class='done'><h1>주문이 완료되었습니다</h1><p>주문번호: "
                (fl-product-html-escape (get order "order_id"))
                "</p><strong>주문 금액: " (get order "total") "원</strong><p><a href='/order/track'>주문 조회</a></p></section>"))))))
-
-(define fl-order-track-failures (atom []))
-
-(defn fl-order-track-limited [req]
-  (let [now (now_ms)
-        ip (or (server_req_client_ip req) "unknown")
-        recent (filter (fn [entry] (> (get entry "at") (- now 60000))) @fl-order-track-failures)
-        same-ip (filter (fn [entry] (= (get entry "ip") ip)) recent)
-        limited (>= (length same-ip) 10)]
-    (reset! fl-order-track-failures
-      (if limited recent (concat recent [{"ip" ip "at" now}])))
-    limited))
 
 (defn fl-order-track-item-view [items]
   (map (fn [item]
@@ -132,7 +133,7 @@
           "line_total" (get item "line_total")})
        items))
 
-(defn fl-order-track [req]
+(defn fl-order-track-locked [req]
   (let [body (server_req_json req)
         order-id (str-trim (str (or (get body "order_id") "")))
         last4 (str-trim (str (or (get body "phone_last4") "")))
@@ -140,21 +141,34 @@
         order (if (= orders nil) nil
                 (first
                   (filter (fn [item]
-                            (let [digits (regex-replace (str (get item "phone")) "[^0-9]" "")]
+                            (let [digits (regex_replace (str (get item "phone")) "[^0-9]" "")]
                               (and (= (str (get item "order_id")) order-id)
                                    (regex_match last4 "^[0-9]{4}$")
                                    (str-ends-with digits last4))))
                           orders)))]
-    (cond
-      (= orders nil) (server_status 500 {"error" "주문 조회를 처리하지 못했습니다."})
-      (not (= order nil))
-        (server_json {"status" (get order "status")
-                      "created_at" (get order "created_at")
-                      "items" (fl-order-track-item-view (get order "items"))
-                      "total" (get order "total")})
-      (fl-order-track-limited req)
-        (server_status 429 {"error" "조회 요청이 많습니다. 잠시 후 다시 시도하세요."})
-      true (server_status 404 {"error" "주문 정보를 확인할 수 없습니다."}))))
+    (let [state (fl-shop-throttles)
+          now (now_ms)
+          ip-key (fl-shop-limit-key "track-ip" (server_req_client_ip req))
+          order-key (fl-shop-limit-key "track-order" order-id)]
+      (cond
+        (= orders nil) (server_status 500 {"error" "주문 조회를 처리하지 못했습니다."})
+        (or (fl-shop-limit-blocked state ip-key now 10)
+            (fl-shop-limit-blocked state order-key now 10))
+          (server_status 429 {"error" "조회 요청이 많습니다. 잠시 후 다시 시도하세요."})
+        (not (= order nil))
+          (server_json {"status" (get order "status")
+                        "created_at" (get order "created_at")
+                        "items" (fl-order-track-item-view (get order "items"))
+                        "total" (get order "total")})
+        true (do
+          (fl-shop-write-json (fl-shop-path "security-limits.json")
+            (fl-shop-limit-fail
+              (fl-shop-limit-fail state ip-key now 10 60000)
+              order-key now 10 60000))
+          (server_status 404 {"error" "주문 정보를 확인할 수 없습니다."}))))))
+
+(defn fl-order-track [req]
+  (fl-shop-locked (fn [] (fl-order-track-locked req))))
 
 (defn fl-order-get [req]
   (let [id (server_req_param req "id")
@@ -163,7 +177,7 @@
       (server_status 404 {"error" "주문을 찾을 수 없습니다."})
       (server_redirect (str "/order/done?order_id=" id)))))
 
-(defn fl-admin-orders-list [req]
+(defn fl-admin-orders-list-locked [req]
   (let [orders (fl-orders-load)]
     (cond
       (not (fl-admin-authorized req)) (server_status 401 {"error" "관리자 인증이 필요합니다."})
@@ -177,7 +191,7 @@
     (= status "발송") "완료"
     true nil))
 
-(defn fl-admin-order-update [req]
+(defn fl-admin-order-update-locked [req]
   (let [body (server_req_json req)
         id (server_req_param req "id")
         status (get body "status")
@@ -190,7 +204,8 @@
         (server_status 500 {"error" "주문 자료를 읽지 못했습니다."})
       (= order nil)
         (server_status 404 {"error" "주문을 찾을 수 없습니다."})
-      (not (= status (fl-order-next-status (get order "status"))))
+      (or (= (fl-order-next-status (get order "status")) nil)
+          (not (= status (fl-order-next-status (get order "status")))))
         (server_status 400 {"error" "주문 상태는 다음 단계로만 변경할 수 있습니다."})
       true
         (let [updated (assoc order "status" status)
@@ -206,3 +221,9 @@
 (server-get "/api/admin/orders" "fl-admin-orders-list")
 (server-put "/api/admin/order/:id" "fl-admin-order-update")
 (server-get "/order/:id" "fl-order-get")
+
+(defn fl-admin-orders-list [req]
+  (fl-admin-run req (fn [] (fl-admin-orders-list-locked req))))
+
+(defn fl-admin-order-update [req]
+  (fl-admin-run req (fn [] (fl-admin-order-update-locked req))))

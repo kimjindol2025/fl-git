@@ -1,8 +1,69 @@
 ; FE-8 관리자 상품 API — 암호 값은 환경변수와 요청을 비교만 하고 저장·출력하지 않는다.
 (defn fl-admin-authorized [req]
-  (let [expected (env-get "FL_ADMIN_PASSWORD")
-        provided (or (server_req_header req "x-admin-password") "")]
-    (and (not (= expected nil)) (> (length (str expected)) 0) (= (str provided) (str expected)))))
+  (let [expected (or (env-get "FL_ADMIN_PASSWORD") "")
+        provided (or (server_req_header req "x-admin-password") "")
+        token (or (server_req_cookie req "fl_admin") "")
+        session (get (fl-shop-throttles) (fl-shop-limit-key "admin-session" token))]
+    (and (> (length expected) 0)
+      (or (hash_eq (sha256 provided) (sha256 expected))
+          (and (regex_match token "^[a-f0-9]{64}$")
+               (> (or (get session "until") 0) (now_ms))
+               (hash_eq (or (get session "credential") "") (hmac_sha256 expected token)))))))
+
+(defn fl-admin-run [req operation]
+  (fl-shop-locked (fn []
+    (let [state (fl-shop-throttles)
+          key (fl-shop-limit-key "admin-ip" (server_req_client_ip req))
+          now (now_ms)]
+      (cond
+        (fl-shop-limit-blocked state key now 5)
+          (server_status 429 {"error" "인증 시도가 많습니다. 잠시 후 다시 시도하세요."})
+        (not (fl-admin-authorized req))
+          (do (fl-shop-write-json (fl-shop-path "security-limits.json")
+                (fl-shop-limit-fail state key now 5 900000))
+              (server_status 401 {"error" "관리자 인증이 필요합니다."}))
+        true (do
+          (fl-shop-write-json (fl-shop-path "security-limits.json")
+            (assoc state key {"count" 0 "until" 0}))
+          (let [response (operation)]
+            (assoc response "headers"
+              (assoc (or (get response "headers") {}) "Cache-Control" "no-store")))))))))
+
+(defn fl-admin-login [req]
+  (let [body (server_req_json req)
+        password (or (get body "password") "")
+        authenticated-req (assoc req "headers"
+          (assoc (get req "headers") "x-admin-password" password "cookie" ""))]
+    (fl-admin-run authenticated-req (fn []
+      (let [token (random_bytes 32)
+            state (fl-shop-throttles)]
+        (fl-shop-write-json (fl-shop-path "security-limits.json")
+          (assoc state (fl-shop-limit-key "admin-session" token)
+            {"until" (+ (now_ms) 3600000)
+             "credential" (hmac_sha256 (env-get "FL_ADMIN_PASSWORD") token)}))
+        (assoc (server_redirect "/admin/products") "headers"
+          {"Location" "/admin/products" "Cache-Control" "no-store"
+           "Set-Cookie" (server_set_cookie "fl_admin" token
+             {"http_only" true "same_site" "Strict" "max_age" 3600
+              "secure" (not (= (env-get "FL_SHOP_LOCAL_HTTP") "1"))})}))))))
+
+(defn fl-admin-logout [req]
+  (fl-shop-locked (fn []
+    (let [token (or (server_req_cookie req "fl_admin") "")
+          state (fl-shop-throttles)]
+      (if (regex_match token "^[a-f0-9]{64}$")
+        (fl-shop-write-json (fl-shop-path "security-limits.json")
+          (assoc state (fl-shop-limit-key "admin-session" token) {"until" 0})))
+      (assoc (server_redirect "/login/admin") "headers"
+        {"Location" "/login/admin" "Cache-Control" "no-store"
+         "Set-Cookie" (server_set_cookie "fl_admin" "" {"max_age" 0
+           "secure" (not (= (env-get "FL_SHOP_LOCAL_HTTP") "1"))})})))))
+(server-post "/api/admin/logout" "fl-admin-logout")
+
+(defn fl-admin-login-page [req]
+  (server_html "<!doctype html><html lang='ko'><meta charset='utf-8'><title>관리자 로그인</title><form method='post' action='/api/admin/login'><label>관리자 암호<input type='password' name='password' autocomplete='current-password' required></label><button>로그인</button></form></html>"))
+(server-get "/login/admin" "fl-admin-login-page")
+(server-post "/api/admin/login" "fl-admin-login")
 
 (defn fl-admin-error-list [body]
   (let [name (str-trim (str (or (get body "name") "")))
@@ -11,9 +72,9 @@
         photo (str-trim (str (or (get body "photo") "")))
         errors (atom [])]
     (if (= name "") (reset! errors (concat @errors [{"field" "name" "message" "상품 이름은 필수입니다."}])) nil)
-    (if (or (not (number? price)) (< price 0))
-      (reset! errors (concat @errors [{"field" "price" "message" "가격은 0 이상의 숫자여야 합니다."}])) nil)
-    (if (or (not (number? stock)) (< stock 0) (not (integer? stock)))
+    (if (not (fl-shop-money price))
+      (reset! errors (concat @errors [{"field" "price" "message" "가격은 0 이상이며 안전하게 저장할 수 있는 숫자여야 합니다."}])) nil)
+    (if (or (not (number? stock)) (< stock 0) (> stock 9007199254740991) (not (integer? stock)))
       (reset! errors (concat @errors [{"field" "stock" "message" "재고는 0 이상의 정수여야 합니다."}])) nil)
     (if (and (not (= photo "")) (or (not (regex_match photo "^/public/[A-Za-z0-9._/-]+$")) (str-includes photo "..")))
       (reset! errors (concat @errors [{"field" "photo" "message" "사진은 /public/ 아래의 경로여야 합니다."}])) nil)
@@ -27,7 +88,7 @@
    "photo" (str (or (get body "photo") ""))
    "stock" (get body "stock")})
 
-(defn fl-admin-create-product [req]
+(defn fl-admin-create-product-locked [req]
   (let [body (server_req_json req)]
     (if (not (fl-admin-authorized req))
       (server_status 401 {"error" "관리자 인증이 필요합니다."})
@@ -38,7 +99,7 @@
             (fl-products-upsert product)
             (server_json {"product" product})))))))
 
-(defn fl-admin-update-product [req]
+(defn fl-admin-update-product-locked [req]
   (let [body (server_req_json req)
         id (server_req_param req "id")]
     (if (not (fl-admin-authorized req))
@@ -52,7 +113,7 @@
               (fl-products-upsert product)
               (server_json {"product" product}))))))))
 
-(defn fl-admin-list [req]
+(defn fl-admin-list-locked [req]
   (if (not (fl-admin-authorized req))
     (server_status 401 {"error" "관리자 인증이 필요합니다."})
     (server_json {"products" (fl-products-load)})))
@@ -60,3 +121,12 @@
 (server-post "/api/admin/products" "fl-admin-list")
 (server-post "/api/admin/product" "fl-admin-create-product")
 (server-put "/api/admin/product/:id" "fl-admin-update-product")
+
+(defn fl-admin-create-product [req]
+  (fl-admin-run req (fn [] (fl-admin-create-product-locked req))))
+
+(defn fl-admin-update-product [req]
+  (fl-admin-run req (fn [] (fl-admin-update-product-locked req))))
+
+(defn fl-admin-list [req]
+  (fl-admin-run req (fn [] (fl-admin-list-locked req))))

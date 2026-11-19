@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Shop profile only. Reuses prebuilt, explicitly selected Native tools.
+set -Eeuo pipefail
+umask 077
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+COMPILER="${FREELANG_NATIVE_COMPILER:-}"
+FRONT_TOOL="${FREELANG_NATIVE_FRONT_TOOL:-}"
+OUTPUT_ARG="${1:-}"
+
+blocked() { echo "FL_FRONT_NATIVE_BUILD=BLOCKED"; echo "CAUSE=$1" >&2; exit 2; }
+[[ $# -eq 1 && -n "$OUTPUT_ARG" ]] || blocked "A fresh output directory is required."
+[[ -n "$COMPILER" && -x "$COMPILER" ]] || blocked "Set FREELANG_NATIVE_COMPILER to a verified Native compiler ELF."
+[[ -n "$FRONT_TOOL" && -x "$FRONT_TOOL" ]] || blocked "Set FREELANG_NATIVE_FRONT_TOOL to the prebuilt Native assembler ELF."
+# Reject scripts, including accidental Node launchers. No tool is rebuilt here.
+[[ "$(od -An -tx1 -N4 -- "$COMPILER" | tr -d ' \n')" == '7f454c46' ]] || blocked "Compiler must be an ELF executable."
+[[ "$(od -An -tx1 -N4 -- "$FRONT_TOOL" | tr -d ' \n')" == '7f454c46' ]] || blocked "Assembler must be an ELF executable."
+COMPILER="$(readlink -f -- "$COMPILER")"
+FRONT_TOOL="$(readlink -f -- "$FRONT_TOOL")"
+OUTPUT_PARENT="$(cd -- "$(dirname -- "$OUTPUT_ARG")" && pwd -P)"
+OUTPUT_NAME="$(basename -- "$OUTPUT_ARG")"
+[[ "$OUTPUT_NAME" != '.' && "$OUTPUT_NAME" != '..' && "$OUTPUT_NAME" != '/' ]] || blocked "Invalid output directory."
+OUTPUT="$OUTPUT_PARENT/$OUTPUT_NAME"
+[[ ! -e "$OUTPUT" && ! -L "$OUTPUT" ]] || blocked "Output already exists; previous artifacts are preserved."
+
+# Every input is explicit. A profile omission cannot silently pass the build.
+PAGES=('products.flx' 'products/[id].flx' 'cart.flx' 'checkout.flx' 'admin/products.flx' 'admin/orders.flx' 'order/track.flx')
+SLUGS=('products' 'product-detail' 'cart' 'checkout' 'admin-products' 'admin-orders' 'order-track')
+HELPERS=('_00-shop.flx' '_products-store.flx' '_orders-store.flx' '_cart-api.flx' '_admin-api.flx' '_layout.flx' '_order-api.flx')
+INPUTS=('tools/fl-front-native.fl' 'web/public/product-default.svg')
+for helper in "${HELPERS[@]}"; do INPUTS+=("web/pages/$helper"); done
+for page in "${PAGES[@]}"; do INPUTS+=("web/pages/$page" "web/islands/$page"); done
+for input in "${INPUTS[@]}"; do [[ -s "$ROOT/$input" && ! -L "$ROOT/$input" ]] || blocked "A required storefront input is missing or is a symlink."; done
+
+STAGE="$(mktemp -d -- "$OUTPUT_PARENT/.fl-front-native.XXXXXXXX")"
+complete=0
+on_exit() {
+  local status=$?
+  if [[ "$complete" -ne 1 ]]; then
+    echo "FL_FRONT_NATIVE_BUILD=FAIL" >&2
+    echo "PARTIAL_ARTIFACTS_PRESERVED=1" >&2
+  fi
+  exit "$status"
+}
+trap on_exit EXIT
+mkdir -- "$STAGE/public" "$STAGE/public/native" "$STAGE/logs"
+compiler_sha="$(sha256sum -- "$COMPILER" | cut -d' ' -f1)"
+front_sha="$(sha256sum -- "$FRONT_TOOL" | cut -d' ' -f1)"
+(cd -- "$ROOT"; sha256sum -- "${INPUTS[@]}") > "$STAGE/inputs.before.sha256"
+printf 'COMPILER_SHA256=%s\nFRONT_TOOL_SHA256=%s\n' "$compiler_sha" "$front_sha" > "$STAGE/tools.sha256"
+cp -- "$ROOT/web/public/product-default.svg" "$STAGE/public/product-default.svg"
+
+for i in "${!PAGES[@]}"; do
+  "$COMPILER" --browser-js "$ROOT/web/islands/${PAGES[$i]}" "$STAGE/public/native/${SLUGS[$i]}.js" \
+    > "$STAGE/logs/${SLUGS[$i]}.log" 2>&1
+  [[ -s "$STAGE/public/native/${SLUGS[$i]}.js" ]]
+done
+FL_FRONT_NATIVE_SOURCE_ROOT="$ROOT" FL_FRONT_NATIVE_OUTPUT="$STAGE/server.fl" \
+  "$FRONT_TOOL" > "$STAGE/logs/assembler.log" 2>&1
+[[ -s "$STAGE/server.fl" && -s "$STAGE/server.fl.manifest.json" ]]
+grep -qx 'FL_FRONT_NATIVE_ASSEMBLE=PASS' "$STAGE/logs/assembler.log"
+"$COMPILER" "$STAGE/server.fl" "$STAGE/server.c" > "$STAGE/logs/server-c.log" 2>&1
+[[ -s "$STAGE/server.c" ]]
+(cd -- "$ROOT"; sha256sum -- "${INPUTS[@]}") > "$STAGE/inputs.after.sha256"
+cmp -s -- "$STAGE/inputs.before.sha256" "$STAGE/inputs.after.sha256"
+[[ "$(sha256sum -- "$COMPILER" | cut -d' ' -f1)" == "$compiler_sha" ]]
+[[ "$(sha256sum -- "$FRONT_TOOL" | cut -d' ' -f1)" == "$front_sha" ]]
+(cd -- "$STAGE"; sha256sum -- server.fl server.fl.manifest.json server.c public/native/*.js public/product-default.svg) > "$STAGE/artifacts.sha256"
+# No linking or compiler/assembler bootstrap is implicit. Root's approved
+# runtime/link recipe consumes server.c, preserving the source-to-ELF receipt.
+mv -T -- "$STAGE" "$OUTPUT"
+complete=1
+printf 'FL_FRONT_NATIVE_BUILD=PASS\nPROFILE=shop\nSERVER_PAGES=7\nISLANDS=7\nNODE_LAUNCHER=NONE\nLINK=NOT_RUN\n'

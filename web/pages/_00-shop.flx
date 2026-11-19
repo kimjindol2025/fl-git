@@ -1,0 +1,193 @@
+; Shared file boundary. All commerce writers take the same exclusive directory lock.
+; A dead owner leaves the lock in place: never auto-delete an unverified lock.
+(defn fl-shop-root [] (str (or (env-get "FL_GIT_REPO") ".") "/data"))
+(defn fl-shop-quote [value]
+  (str "'" (str-replace-in (str value) "'" "'\\''") "'"))
+(defn fl-shop-path [name] (str (fl-shop-root) "/" name))
+
+(defn fl-shop-sync [path]
+  (if (= (env-get "FL_SHOP_NATIVE") "1")
+    (dir-fsync path)
+  (let [descriptor (fd_open path "r")]
+    (try (fd_fsync descriptor) (finally (fd_close descriptor))))))
+
+(defn fl-shop-write-json-afj [path value]
+  (let [temporary (str path "." (random_bytes 16) ".tmp")
+        encoded (json_stringify value)
+        created (atom false)]
+    (try
+      (do
+        ; Create empty 0600 file exclusively before any sensitive bytes are written.
+        (if (not (= (get (shell-exec-result
+          (str "umask 077; set -C; : > " (fl-shop-quote temporary))) "exit") 0))
+          (throw "SHOP_TEMP_CREATE_FAILED"))
+        (reset! created true)
+        ; Constrain an inherited default ACL while the file is still empty.
+        (if (not (= (get (shell-exec-result (str "chmod 600 -- " (fl-shop-quote temporary))) "exit") 0))
+          (throw "SHOP_TEMP_PERMISSIONS_FAILED"))
+        (file_write temporary encoded)
+        (if (not (= (file_read temporary) encoded)) (throw "SHOP_WRITE_INCOMPLETE"))
+        (fl-shop-sync temporary)
+        (if (not (= (get (shell-exec-result
+                    (str "mv -T -- " (fl-shop-quote temporary) " " (fl-shop-quote path))) "exit") 0))
+          (throw "SHOP_PUBLISH_FAILED"))
+        (fl-shop-sync (fl-shop-root))
+        true)
+      (finally (if (and @created (file_exists temporary)) (file_delete temporary))))))
+
+
+; Native exclusive descriptor retains its directory through durable publication.
+; Only the trusted writer may write this directory; hostile same-UID access is
+; outside this file API boundary. A failure after rename is an unknown outcome.
+(defn fl-shop-write-json-native [path value]
+  (let [temporary (str path "." (random_bytes 16) ".tmp")
+        encoded (json_stringify value)
+        descriptor (fd-create temporary)]
+    (try
+      (do
+        (fd-write descriptor encoded)
+        (if (not (= (file_read temporary) encoded)) (throw "SHOP_WRITE_INCOMPLETE"))
+        (fd-publish descriptor path)
+        true)
+      (finally
+        (do (fd-close descriptor)
+            (if (file_exists temporary) (file_delete temporary)))))))
+
+(defn fl-shop-write-json [path value]
+  (if (= (env-get "FL_SHOP_NATIVE") "1")
+    (fl-shop-write-json-native path value)
+    (fl-shop-write-json-afj path value)))
+
+(defn fl-shop-records-valid [records]
+  (and (array? records)
+       (= (length (filter (fn [record] (map? record)) records)) (length records))))
+
+(defn fl-shop-nonempty-text [value]
+  (and (= (type-of value) "string") (> (length value) 0)))
+(defn fl-shop-money [value]
+  (and (number? value) (>= value 0) (<= value 9007199254740991)))
+(defn fl-shop-products-valid [products]
+  (and (fl-shop-records-valid products)
+    (= (length products)
+       (length (filter (fn [product]
+         (and (fl-shop-nonempty-text (str (or (get product "id") "")))
+              (fl-shop-nonempty-text (get product "name"))
+              (fl-shop-money (get product "price"))
+              (integer? (get product "stock")) (>= (get product "stock") 0)
+              (<= (get product "stock") 9007199254740991))) products)))))
+(defn fl-shop-orders-valid [orders]
+  (and (fl-shop-records-valid orders)
+    (= (length orders)
+       (length (filter (fn [order]
+         (let [items (get order "items")]
+           (and (fl-shop-nonempty-text (get order "order_id"))
+                (fl-shop-nonempty-text (get order "created_at"))
+                (fl-shop-nonempty-text (get order "recipient"))
+                (fl-shop-nonempty-text (get order "phone"))
+                (fl-shop-nonempty-text (get order "address"))
+                (fl-shop-money (get order "total"))
+                (or (= (get order "status") "접수") (= (get order "status") "준비중")
+                    (= (get order "status") "발송") (= (get order "status") "완료"))
+                (fl-shop-records-valid items) (> (length items) 0)
+                (= (length items) (length (filter (fn [item]
+                  (and (fl-shop-nonempty-text (str (or (get item "id") "")))
+                       (fl-shop-nonempty-text (get item "name"))
+                       (integer? (get item "quantity")) (> (get item "quantity") 0)
+                       (<= (get item "quantity") 9007199254740991)
+                       (fl-shop-money (get item "unit_price"))
+                       (fl-shop-money (get item "line_total")))) items)))))) orders)))))
+
+(defn fl-shop-pending []
+  (let [path (fl-shop-path "commerce-journal.json")]
+    (try
+      (let [raw (file_read path)]
+        (if (= raw nil) nil
+          (let [state (json_parse raw)]
+            (if (or (not (map? state)) (not (= (get state "version") 1))
+                    (not (fl-shop-products-valid (get state "products")))
+                    (not (fl-shop-orders-valid (get state "orders")))
+                    (and (not (= (or (get state "cart_id") "") ""))
+                         (not (regex_match (get state "cart_id") "^[a-f0-9]{64}$"))))
+              (throw "SHOP_JOURNAL_INVALID") state))))
+      (catch journal-error
+        ; Rename/unlink by a concurrent publisher can make an optional journal vanish.
+        ; A present invalid journal remains a hard failure.
+        (if (not (file_exists path)) nil (throw journal-error))))))
+
+(defn fl-shop-publish [state]
+  (do
+    (fl-shop-write-json (fl-shop-path "products.json") (get state "products"))
+    (fl-shop-write-json (fl-shop-path "orders.json") (get state "orders"))
+    (let [cart-id (or (get state "cart_id") "")]
+      (if (not (= cart-id ""))
+        (fl-shop-write-json (fl-shop-path (str "cart-" cart-id ".json")) {})))
+    (file_delete (fl-shop-path "commerce-journal.json"))
+    (fl-shop-sync (fl-shop-root))
+    true))
+
+(defn fl-shop-commit [products orders req]
+  (let [session (fl-shop-session req)
+        state {"version" 1 "products" products "orders" orders
+               "cart_id" (if (= session "") "" (sha256 session))}]
+    (if (not (and (fl-shop-products-valid products) (fl-shop-orders-valid orders)))
+      (throw "SHOP_COMMIT_SHAPE_INVALID"))
+    (fl-shop-write-json (fl-shop-path "commerce-journal.json") state)
+    (fl-shop-publish state)))
+
+(defn fl-shop-locked [operation]
+  (let [root (fl-shop-root)
+        lock-path (fl-shop-path ".commerce-lock")]
+    (if (= (env-get "FL_SHOP_NATIVE") "1") (dir-private root) (dir_create root))
+    (let [reserved (shell-exec-result (str "mkdir -m 700 -- " (fl-shop-quote lock-path)))]
+      (if (not (= (get reserved "exit") 0))
+        (server_status 503 {"error" "저장 처리가 진행 중입니다. 잠시 후 다시 시도하세요."})
+        (try
+          (do (let [pending (fl-shop-pending)]
+                (if (not (= pending nil)) (fl-shop-publish pending)))
+              (operation))
+          (catch shop-error
+            (server_status 503 {"error" "저장 처리를 확인해야 합니다. 잠시 후 다시 시도하세요."}))
+          (finally
+            (shell-exec-result (str "rmdir -- " (fl-shop-quote lock-path)))))))))
+
+(defn fl-shop-session [req]
+  (let [candidate (if (= req nil) "" (or (server_req_cookie req "fl_cart") ""))]
+    (if (regex_match candidate "^[a-f0-9]{64}$") candidate "")))
+
+(defn fl-shop-session-response [response session]
+  (assoc response "headers"
+    {"Cache-Control" "no-store"
+     "Set-Cookie" (server_set_cookie "fl_cart" session
+       {"http_only" true "same_site" "Strict" "path" "/"
+        "secure" (not (= (env-get "FL_SHOP_LOCAL_HTTP") "1"))})}))
+
+; Persisted throttles share the commerce lock. No secret or raw phone is stored.
+(defn fl-shop-throttles-valid [state]
+  (and (map? state)
+    (= (length (keys state)) (length (filter (fn [limit-key]
+      (let [entry (get state limit-key)
+            until (get entry "until")]
+        (and (map? entry) (fl-shop-money until)
+          (if (regex_match limit-key "^admin-session:[a-f0-9]{64}$")
+            (or (= until 0) (regex_match (str (or (get entry "credential") "")) "^[a-f0-9]{64}$"))
+            (and (regex_match limit-key "^(admin-ip|track-ip|track-order):[a-f0-9]{64}$")
+                 (integer? (get entry "count")) (>= (get entry "count") 0)
+                 (<= (get entry "count") 9007199254740991)))))) (keys state))))))
+
+(defn fl-shop-throttles []
+  (let [path (fl-shop-path "security-limits.json")]
+    (if (file_exists path)
+      (let [state (json_parse (file_read path))]
+        (if (not (fl-shop-throttles-valid state)) (throw "SHOP_LIMITS_INVALID") state)) {})))
+(defn fl-shop-limit-key [kind identity] (str kind ":" (sha256 (str identity))))
+(defn fl-shop-limit-active [state key now]
+  (> (or (get (get state key) "until") 0) now))
+(defn fl-shop-limit-fail [state key now maximum duration]
+  (let [previous (get state key)
+        active (> (or (get previous "until") 0) now)
+        count (+ 1 (if active (or (get previous "count") 0) 0))]
+    (assoc state key {"count" count "until" (if (>= count maximum) (+ now duration)
+                                (if active (get previous "until") (+ now duration)))})))
+(defn fl-shop-limit-blocked [state key now maximum]
+  (and (fl-shop-limit-active state key now)
+       (>= (or (get (get state key) "count") 0) maximum)))

@@ -3,16 +3,15 @@
   (str (or (env-get "FL_GIT_REPO") ".") "/data/orders.json"))
 
 (defn fl-orders-load []
-  (let [path (fl-orders-path)]
-    (if (not (file_exists path))
-      []
-      (let [raw (file_read path)]
-        (if (or (= raw nil) (= (str-trim raw) ""))
-          []
-          (json_parse raw))))))
+  (let [pending (fl-shop-pending)]
+    (if (not (= pending nil)) (get pending "orders")
+      (if (not (file_exists (fl-orders-path))) []
+        (let [parsed (json_parse (file_read (fl-orders-path)))]
+          (if (not (fl-shop-orders-valid parsed)) (throw "SHOP_ORDERS_INVALID") parsed))))))
 
 (defn fl-orders-save [orders]
-  (file_write (fl-orders-path) (json_stringify orders)))
+  (if (not (fl-shop-orders-valid orders)) (throw "SHOP_ORDERS_SAVE_INVALID"))
+  (fl-shop-write-json (fl-orders-path) orders))
 
 (defn fl-orders-find [id]
   (let [orders (fl-orders-load)]

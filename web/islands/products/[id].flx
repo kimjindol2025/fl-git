@@ -5,8 +5,7 @@
                     id (.getAttribute slot "data-product-id")]
                 (fetch-post! "/api/cart/add" {"id" id "quantity" 1}
                   (fn [res]
-                    (let [data (get res "data")]
-                      (reset! count (get data "count")))))))]
+                    (reset! count (get res "count"))))))]
     (h "section" {}
       (h "p" {} (str "장바구니 개수: " @count))
       (h "button" {"id" "cart-add" :on-click add} "담기"))))

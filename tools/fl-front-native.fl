@@ -1,0 +1,121 @@
+; Native storefront profile assembler. Does not include Git Provider, TTY or DB.
+; Input is the real server-only page/helper source; browser Islands are compiled
+; separately by the same pinned Native compiler, never by Node or a substitute.
+(defn native-front-require [condition reason]
+  (if condition true (throw reason)))
+
+(defn native-front-has [source token]
+  (>= (str-index-of source token) 0))
+
+(defn native-front-read [root relative]
+  (let [path (str root "/" relative)]
+    (native-front-require (file_exists path) (str "FRONT_NATIVE_INPUT_MISSING:" relative))
+    (let [source (file_read path)]
+      (native-front-require (and (= (type-of source) "string") (> (length source) 0))
+        (str "FRONT_NATIVE_INPUT_UNREADABLE:" relative))
+      source)))
+
+(defn native-front-replace [source old replacement label]
+  (do
+    (native-front-require (native-front-has source old) (str "FRONT_NATIVE_SOURCE_CONTRACT:" label))
+    (str-replace-in source old replacement)))
+
+(define NATIVE-FRONT-HELPERS
+  ["_00-shop.flx" "_products-store.flx" "_orders-store.flx"
+   "_cart-api.flx" "_admin-api.flx" "_layout.flx" "_order-api.flx"])
+
+; All seven page/client pairs are mandatory in this bounded storefront profile.
+(define NATIVE-FRONT-PAGES
+  [{"page" "products.flx" "island" "ProductList" "slug" "products" "route" "/products" "handler" "fl-native-products"}
+   {"page" "products/[id].flx" "island" "CartButton" "slug" "product-detail" "route" "/products/:id" "handler" "fl-native-product-detail"}
+   {"page" "cart.flx" "island" "CartPage" "slug" "cart" "route" "/cart" "handler" "fl-native-cart"}
+   {"page" "checkout.flx" "island" "OrderForm" "slug" "checkout" "route" "/checkout" "handler" "fl-native-checkout"}
+   {"page" "admin/products.flx" "island" "AdminProductForm" "slug" "admin-products" "route" "/admin/products" "handler" "fl-native-admin-products"}
+   {"page" "admin/orders.flx" "island" "AdminOrders" "slug" "admin-orders" "route" "/admin/orders" "handler" "fl-native-admin-orders"}
+   {"page" "order/track.flx" "island" "OrderTrack" "slug" "order-track" "route" "/order/track" "handler" "fl-native-order-track"}])
+
+(defn native-front-helper [root relative]
+  (let [source (native-front-read root (str "web/pages/" relative))]
+    ; Keep the real product store, but register assets only from the configured
+    ; synthetic/app root. The old cwd-dependent registration would shadow it.
+    (cond
+      (= relative "_products-store.flx")
+        (native-front-replace source
+          "(server_static (if (file_exists \"public/product-default.svg\") \"public\" \"web/public\") \"/public\")"
+          "(server_static (str (env-get \"FL_GIT_REPO\") \"/public\") \"/public\")"
+          "public-assets")
+      (= relative "_order-api.flx")
+        ; Native HTTP uses first-match routing. Register this dynamic route
+        ; after /order/track, retaining its real order redirect handler.
+        (native-front-replace source
+          "(server-get \"/order/:id\" \"fl-order-get\")" "" "order-route-priority")
+      true source)))
+
+(defn native-front-page [root page]
+  (let [relative (get page "page")
+        server (native-front-read root (str "web/pages/" relative))
+        client (native-front-read root (str "web/islands/" relative))
+        handler (get page "handler")
+        mount (str "<div id='island-" (str-lower (get page "island")) "-0'></div>")
+        script (str "<script defer src='/public/native/" (get page "slug") ".js'></script>")
+        has-post (native-front-has server "(defn render_post [req]")
+        renamed (native-front-replace server "(defn render [req]"
+                  (str "(defn " handler " [req]") relative)
+        with-post (if has-post
+                    (native-front-replace renamed "(defn render_post [req]"
+                      (str "(defn " handler "-post [req]") relative)
+                    renamed)
+        mounted (native-front-replace with-post "\"ISLAND_PLACEHOLDER_0\""
+                  (json_stringify mount) relative)
+        result (native-front-replace mounted "\"ISLAND_SCRIPTS\""
+                 (json_stringify script) relative)]
+    (native-front-require
+      (native-front-has client (str "(island " (get page "island") " []"))
+      (str "FRONT_NATIVE_ISLAND_CONTRACT:" relative))
+    (native-front-require (not (native-front-has server "(island "))
+      (str "FRONT_NATIVE_SERVER_CONTAINS_ISLAND:" relative))
+    (native-front-require (not (native-front-has result "ISLAND_PLACEHOLDER"))
+      (str "FRONT_NATIVE_UNRESOLVED_MOUNT:" relative))
+    (str "; Native route: " (get page "route") "\n" result "\n"
+         "(server-get " (json_stringify (get page "route")) " " (json_stringify handler) ")\n"
+         (if has-post
+           (str "(server-post " (json_stringify (get page "route")) " " (json_stringify (str handler "-post")) ")\n")
+           ""))))
+
+(defn native-front-source-receipt [root relative]
+  {"file" relative "sha256" (sha256 (native-front-read root relative))})
+
+(let [root (or (env-get "FL_FRONT_NATIVE_SOURCE_ROOT") "")
+      output (or (env-get "FL_FRONT_NATIVE_OUTPUT") "")]
+  (native-front-require (and (> (length root) 0) (> (length output) 0))
+    "FRONT_NATIVE_SOURCE_ROOT_AND_OUTPUT_REQUIRED")
+  (native-front-require (not (file_exists output)) "FRONT_NATIVE_OUTPUT_ALREADY_EXISTS")
+  (native-front-require (not (file_exists (str output ".manifest.json")))
+    "FRONT_NATIVE_MANIFEST_ALREADY_EXISTS")
+  (let [helpers (str-join (map (fn [relative] (native-front-helper root relative)) NATIVE-FRONT-HELPERS) "\n")
+        pages (str-join (map (fn [page] (native-front-page root page)) NATIVE-FRONT-PAGES) "\n")
+        source (str "; SHOP-NATIVE profile: real commerce + seven server/Island pairs.\n"
+          "; Deliberately excludes Git Provider index, TTY and DB; not full-app Native certification.\n"
+          "(if (not (= (env-get \"FL_SHOP_NATIVE\") \"1\")) (throw \"SHOP_NATIVE_BACKEND_REQUIRED\"))\n"
+          "(if (not (= (env-get \"FL_HTTP_LOOPBACK_ONLY\") \"1\")) (throw \"SHOP_NATIVE_LOOPBACK_REQUIRED\"))\n"
+          "(if (= (or (env-get \"FL_GIT_REPO\") \"\") \"\") (throw \"SHOP_NATIVE_DATA_ROOT_REQUIRED\"))\n"
+          helpers "\n" pages "\n"
+          "(server-get \"/order/:id\" \"fl-order-get\")\n"
+          "(defn fl-native-shop-root [req] (server_redirect \"/products\"))\n"
+          "(server-get \"/\" \"fl-native-shop-root\")\n"
+          "(let [port (str-to-num (or (env-get \"PORT\") \"40850\"))]\n"
+          "  (if (not (and (integer? port) (>= port 1024) (<= port 65535))) (throw \"SHOP_NATIVE_INVALID_PORT\"))\n"
+          "  (server-start port))\n")
+        helper-files (map (fn [relative] (str "web/pages/" relative)) NATIVE-FRONT-HELPERS)
+        page-files (map (fn [page] (str "web/pages/" (get page "page"))) NATIVE-FRONT-PAGES)
+        client-files (map (fn [page] (str "web/islands/" (get page "page"))) NATIVE-FRONT-PAGES)
+        inputs (concat helper-files (concat page-files client-files))
+        receipt {"schema" "fl-front-native/1" "profile" "shop" "server_pages" 7 "islands" 7
+                 "excluded" ["git-provider" "tty" "db"]
+                 "source_sha256" (sha256 source)
+                 "inputs" (map (fn [relative] (native-front-source-receipt root relative)) inputs)}]
+    (native-front-require (file_write output source) "FRONT_NATIVE_SOURCE_WRITE_FAILED")
+    (native-front-require (= (file_read output) source) "FRONT_NATIVE_SOURCE_READBACK_FAILED")
+    (native-front-require (file_write (str output ".manifest.json") (json_stringify receipt))
+      "FRONT_NATIVE_MANIFEST_WRITE_FAILED")
+    (println "FL_FRONT_NATIVE_ASSEMBLE=PASS")))

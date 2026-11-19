@@ -8,14 +8,15 @@
   (str (or (env-get "FL_GIT_REPO") ".") "/data/products.json"))
 
 (defn fl-products-load []
-  (let [raw (file_read (fl-products-path))]
-    (if (or (= raw nil) (= (str-trim raw) ""))
-      FL-PRODUCTS-FALLBACK
-      (let [parsed (json_parse raw)]
-        (if (= parsed nil) FL-PRODUCTS-FALLBACK parsed)))))
+  (let [pending (fl-shop-pending)]
+    (if (not (= pending nil)) (get pending "products")
+      (if (not (file_exists (fl-products-path))) (throw "SHOP_PRODUCTS_MISSING")
+        (let [parsed (json_parse (file_read (fl-products-path)))]
+          (if (not (fl-shop-products-valid parsed)) (throw "SHOP_PRODUCTS_INVALID") parsed))))))
 
 (defn fl-products-save [products]
-  (file_write (fl-products-path) (json_stringify products)))
+  (if (not (fl-shop-products-valid products)) (throw "SHOP_PRODUCTS_SAVE_INVALID"))
+  (fl-shop-write-json (fl-products-path) products))
 
 ; script raw-text 경계에서 태그로 해석될 수 있는 문자를 JSON escape로 보낸다.
 (defn fl-json-script-safe [value]

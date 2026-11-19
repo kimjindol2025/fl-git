@@ -1,6 +1,7 @@
 ; AdminProductsPage contract: admin/products.flp
 (defn render [req]
-  (server_html
-    (fl-layout "관리자 상품 관리" "관리자 상품 추가와 수정"
-      (str "<style>.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px}.admin-product{display:flex;gap:14px;align-items:center}.admin-product img{width:120px;aspect-ratio:8/5;object-fit:cover;border-radius:8px}.admin-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}.admin-fields input,.admin-fields textarea{box-sizing:border-box;width:100%;padding:11px;border:1px solid #bbb;border-radius:8px}.admin-error{color:#b42318}.admin-actions{display:flex;gap:10px;flex-wrap:wrap}</style><h1>관리자 상품 관리</h1><p>관리자 암호로 인증한 뒤 상품을 추가하거나 수정하세요. 사진이 없으면 기본 그림을 표시합니다.</p><div id='admin-products-root'>"
-           "ISLAND_PLACEHOLDER_0" "</div>" "ISLAND_SCRIPTS"))))
+  (fl-admin-run req (fn []
+    (server_html
+    (fl-layout req "관리자 상품 관리" "관리자 상품 추가와 수정"
+      (str "<form id=\"admin-session-logout\" method=\"post\" action=\"/api/admin/logout\"><button>관리자 로그아웃</button></form><style>.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px}.admin-product{display:flex;gap:14px;align-items:center}.admin-product img{width:120px;aspect-ratio:8/5;object-fit:cover;border-radius:8px}.admin-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}.admin-fields input,.admin-fields textarea{box-sizing:border-box;width:100%;padding:11px;border:1px solid #bbb;border-radius:8px}.admin-error{color:#b42318}.admin-actions{display:flex;gap:10px;flex-wrap:wrap}</style><h1>관리자 상품 관리</h1><p>관리자 암호로 인증한 뒤 상품을 추가하거나 수정하세요. 사진이 없으면 기본 그림을 표시합니다.</p><div id='admin-products-root'>"
+           "ISLAND_PLACEHOLDER_0" "</div>" "ISLAND_SCRIPTS"))))))

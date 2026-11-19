@@ -1,44 +1,66 @@
-; FE-5 장바구니 API — 프로세스 메모리만 사용한다.
-(define fl-cart-state (atom {}))
+; Session carts contain only product IDs and quantities; every writer uses the commerce lock.
+(defn fl-cart-path [session] (fl-shop-path (str "cart-" (sha256 session) ".json")))
 
-(defn fl-cart-clear! []
-  (reset! fl-cart-state {}))
+(defn fl-cart-load [session]
+  (if (not (regex_match session "^[a-f0-9]{64}$")) {}
+    (if (file_exists (fl-cart-path session))
+      (let [cart (json_parse (file_read (fl-cart-path session)))]
+        (if (not (and (map? cart)
+          (= (length (keys cart)) (length (filter (fn [cart-key]
+            (let [value (get cart cart-key)]
+              (and (integer? value) (>= value 0) (<= value 9007199254740991)))) (keys cart))))))
+          (throw "SHOP_CART_INVALID") cart)) {})))
+
+(defn fl-cart-clear! [req]
+  (let [session (fl-shop-session req)]
+    (if (not (= session "")) (fl-shop-write-json (fl-cart-path session) {}))))
 
 (defn fl-cart-product [id]
   (fl-products-find id))
 
-(defn fl-cart-quantity [id]
-  (or (get @fl-cart-state (str id)) 0))
+(defn fl-cart-quantity [session id]
+  (or (get (fl-cart-load session) (str id)) 0))
 
-(defn fl-cart-row [product]
+(defn fl-cart-row [session product]
   (let [id (get product "id")
-        quantity (fl-cart-quantity id)]
+        quantity (fl-cart-quantity session id)]
     (assoc product "quantity" quantity
            "line_total" (* (get product "price") quantity))))
 
-(defn fl-cart-summary []
-  (let [rows (filter (fn [row] (> (get row "quantity") 0))
-                     (map (fn [product] (fl-cart-row product)) (fl-products-load)))
+(defn fl-cart-summary [req]
+  (let [session (fl-shop-session req)
+        rows (filter (fn [row] (> (get row "quantity") 0))
+                     (map (fn [product] (fl-cart-row session product)) (fl-products-load)))
         total (reduce (fn [sum row] (+ sum (get row "line_total"))) 0 rows)
         count (reduce (fn [sum row] (+ sum (get row "quantity"))) 0 rows)]
     {"items" rows "count" count "total" total}))
 
 (defn fl-cart-get [req]
-  (server_json (fl-cart-summary)))
+  (let [session (fl-shop-session req)
+        selected (if (= session "") (random_bytes 32) session)]
+    (fl-shop-session-response (server_json (fl-cart-summary req)) selected)))
 
-(defn fl-cart-add [req]
+(defn fl-cart-add-locked [req]
   (let [body (server_req_json req)
         id (get body "id")
         quantity (get body "quantity")
+        candidate (fl-shop-session req)
+        session (if (= candidate "") (random_bytes 32) candidate)
+        session-req (assoc req "headers" (assoc (get req "headers") "cookie" (str "fl_cart=" session)))
         product (fl-cart-product id)
-        numeric (and (number? quantity) (integer? quantity) (> quantity 0))]
+        numeric (and (number? quantity) (integer? quantity) (> quantity 0) (<= quantity 9007199254740991))]
     (cond
       (= product nil) (server_status 404 {"error" "상품을 찾을 수 없습니다."})
       (not numeric) (server_status 400 {"error" "quantity는 1 이상의 숫자여야 합니다."})
+      (> (+ (fl-cart-quantity session id) quantity) (get product "stock"))
+        (server_status 400 {"error" "재고보다 많은 수량입니다."})
       true (do
-        (reset! fl-cart-state
-                (assoc @fl-cart-state (str id) (+ (fl-cart-quantity id) quantity)))
-        (server_json (fl-cart-summary))))))
+        (fl-shop-write-json (fl-cart-path session)
+          (assoc (fl-cart-load session) (str id) (+ (fl-cart-quantity session id) quantity)))
+        (fl-shop-session-response (server_json (fl-cart-summary session-req)) session)))))
 
 (server-get "/api/cart" "fl-cart-get")
 (server-post "/api/cart/add" "fl-cart-add")
+
+(defn fl-cart-add [req]
+  (fl-shop-locked (fn [] (fl-cart-add-locked req))))

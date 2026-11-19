@@ -16,3 +16,10 @@ web/pages/products/[id].flx
 web/pages/products/\[id\].flx
 web/pages/cart.flx
 web/pages/checkout.flx
+
+# Local commerce security state and incomplete file transaction evidence
+/data/security-limits.json
+/data/commerce-journal.json
+/data/.commerce-lock/
+/data/*.tmp
+/data/cart-*.json

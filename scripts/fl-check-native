@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+BIN="${FREELANG_NATIVE_FLCHECK:-}"
+if [[ -z "$BIN" || ! -f "$BIN" || ! -x "$BIN" ]]; then
+  printf '%s\n' 'FL_CHECK_NATIVE=BLOCKED' >&2
+  exit 2
+fi
+TARGET="${1:-$ROOT/web/pages}"
+set +e
+output="$(FL_CHECK_ROOT="$ROOT" FL_CHECK_TARGET="$TARGET" "$BIN")"
+status=$?
+set -e
+if [[ "$status" -ne 0 ]]; then
+  printf '%s\n' "$output"
+  exit "$status"
+fi
+markers="$(printf '%s\n' "$output" | grep -Ec '^FL_CHECK_EXIT=[01]$' || true)"
+if [[ "$markers" -ne 1 ]]; then
+  printf '%s\n' 'FL_CHECK_NATIVE=INCOMPLETE' >&2
+  exit 2
+fi
+printf '%s\n' "$output" | grep -v '^FL_CHECK_EXIT=' || true
+if printf '%s\n' "$output" | grep -q '^FL_CHECK_EXIT=1$'; then exit 1; fi

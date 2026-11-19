@@ -4,8 +4,8 @@
    "background" "#f5f7fb" "text" "#172033" "muted" "#667085"
    "border" "#dfe4ec" "radius" "14px"})
 
-(defn fl-layout [title description content]
-  (let [cart (fl-cart-summary)
+(defn fl-layout [req title description content]
+  (let [cart (fl-cart-summary req)
         count (get cart "count")
         safe-description (str-replace-in description " " "&#32;")
         css (str ":root{--primary:" (get DESIGN-TOKENS "primary") ";--primary-dark:" (get DESIGN-TOKENS "primary-dark") ";--surface:" (get DESIGN-TOKENS "surface") ";--background:" (get DESIGN-TOKENS "background") ";--text:" (get DESIGN-TOKENS "text") ";--muted:" (get DESIGN-TOKENS "muted") ";--border:" (get DESIGN-TOKENS "border") ";--radius:" (get DESIGN-TOKENS "radius") ";}"

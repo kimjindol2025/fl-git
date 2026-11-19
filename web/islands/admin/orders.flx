@@ -1,5 +1,6 @@
 (island AdminOrders []
-  (let [authorized (atom false)
+  (let [authorized (atom true)
+        loaded (atom false)
         password (atom "")
         orders (atom [])
         message (atom "")
@@ -49,10 +50,8 @@
                                 (reset! message "주문 상태를 변경했습니다."))
                               (reset! message (or (get data "error") "상태 변경에 실패했습니다.")))))))))
         logout (fn []
-                 (reset! password "")
-                 (reset! orders [])
-                 (reset! authorized false)
-                 (reset! message "로그아웃했습니다."))]
+                 (.submit (.getElementById document "admin-session-logout")))]
+    (if (not @loaded) (do (reset! loaded true) (reload)))
     (if (not @authorized)
       (h "section" {"class" "card"}
         (h "h2" {} "관리자 인증")

@@ -1,12 +1,22 @@
 (island OrderForm []
   (let [items (atom [])
+        request-id (atom (.randomUUID crypto))
         loaded (atom false)
+        ready (atom false)
+        draft (atom {"recipient" "" "phone" "" "address" "" "note" ""})
         submit-error (atom "")
         load (fn []
                (if (= @loaded false)
                  (do
                    (reset! loaded true)
-                   (fetch! "/api/cart" (fn [res] (reset! items (map (fn [item] {"id" (get item "id") "quantity" (get item "quantity")}) (or (get res "items") []))))))
+                   (fetch! "GET" "/api/cart" nil {}
+                     (fn [reply]
+                       (let [data (get reply "data")]
+                         (if (= (get reply "ok") true)
+                           (do
+                             (reset! items (map (fn [item] {"id" (get item "id") "quantity" (get item "quantity")}) (or (get data "items") [])))
+                             (reset! ready true))
+                           (reset! submit-error "장바구니를 불러오지 못했습니다. 새로고침 후 다시 시도하세요."))))))
                  nil))
         recipient-error (atom "")
         phone-error (atom "")
@@ -18,12 +28,13 @@
                        address (.-value (.getElementById document "address"))
                        note (.-value (.getElementById document "note"))]
                    (do
+                     (reset! draft {"recipient" recipient "phone" phone "address" address "note" note})
                      (reset! recipient-error (if (= recipient "") "받는 사람은 필수입니다." (if (or (< (length recipient) 2) (> (length recipient) 50)) "받는 사람은 2~50자여야 합니다." "")))
                      (reset! phone-error (if (or (= phone "") (not (.test (RegExp "^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$") phone))) "전화번호 형식이 아닙니다." ""))
                      (reset! address-error (if (= address "") "주소는 필수입니다." (if (or (< (length address) 5) (> (length address) 200)) "주소는 5~200자여야 합니다." "")))
                      (reset! note-error (if (> (length note) 200) "요청사항은 200자 이하입니다." ""))
                      (if (and (>= (length recipient) 2) (<= (length recipient) 50) (.test (RegExp "^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$") phone) (>= (length address) 5) (<= (length address) 200) (<= (length note) 200))
-                       (fetch-result! "POST" "/api/order" {"items" @items "recipient" recipient "phone" phone "address" address "note" note}
+                       (fetch! "POST" "/api/order" {"items" @items "request_id" @request-id "recipient" recipient "phone" phone "address" address "note" note} {}
                          (fn [result]
                            (let [data (get result "data")
                                  errors (get data "errors")
@@ -35,16 +46,16 @@
     (load)
     (h "section" {}
       (h "label" {} "받는 사람")
-      (h "input" {"id" "recipient" "placeholder" "테스트 주문자"})
+      (h "input" {"id" "recipient" "disabled" (if @ready nil "disabled") "value" (get @draft "recipient") "placeholder" "테스트 주문자"})
       (if (= @recipient-error "") "" (h "p" {"class" "error"} @recipient-error))
       (h "label" {} "전화번호")
-      (h "input" {"id" "phone" "placeholder" "010-0000-0000"})
+      (h "input" {"id" "phone" "disabled" (if @ready nil "disabled") "value" (get @draft "phone") "placeholder" "010-0000-0000"})
       (if (= @phone-error "") "" (h "p" {"class" "error"} @phone-error))
       (h "label" {} "주소")
-      (h "input" {"id" "address" "placeholder" "테스트 주소 1"})
+      (h "input" {"id" "address" "disabled" (if @ready nil "disabled") "value" (get @draft "address") "placeholder" "테스트 주소 1"})
       (if (= @address-error "") "" (h "p" {"class" "error"} @address-error))
       (h "label" {} "요청사항")
-      (h "textarea" {"id" "note" "placeholder" "요청사항"})
+      (h "textarea" {"id" "note" "disabled" (if @ready nil "disabled") "placeholder" "요청사항"} (get @draft "note"))
       (if (= @note-error "") "" (h "p" {"class" "error"} @note-error))
       (if (= @submit-error "") "" (h "p" {"class" "error" "id" "order-submit-error" "role" "status"} @submit-error))
-      (h "button" {"id" "order-submit" :on-click submit} "주문하기"))))
+      (h "button" {"id" "order-submit" "disabled" (if @ready nil "disabled") :on-click submit} "주문하기"))))
