@@ -101,7 +101,11 @@
         pseudo (get parsed "pseudo")
         responsive (get parsed "responsive")
         key (json-str {"base" base "pseudo" pseudo "responsive" responsive})
-        cls (str (str-replace-in name "-" "_") "__" (fl-style-hash (str name key)))
+        ; CSS reload leaves existing DOM nodes alive. Development classes
+        ; must remain stable when declarations change; production retains
+        ; the content hash used by the original build.
+        cls (str (str-replace-in name "-" "_") "__"
+                 (fl-style-hash (if (= (env-get "FL_FRONT_NATIVE_DEV") "1") name (str name key))))
         declarations (fl-style-declarations base)
         rules (if (= declarations "") [] [(str "." cls "{" declarations "}")])
         with-pseudo
@@ -164,7 +168,7 @@
                   (= (get units (+ index 3)) "y")
                   (= (get units (+ index 4)) "l")
                   (= (get units (+ index 5)) "e")
-                  (= (get units (+ index 6)) " "))
+                  (str-includes " \t\r\n" (or (get units (+ index 6)) "\x00")))
              (let [end (fl-style-form-end units index)
                    block (str-slice source index end)
                    parsed (fl-style-parse block)]

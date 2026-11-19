@@ -73,7 +73,17 @@
             "program" (str run "/island-" i ".fl")
             "script" (str web "/public/native-islands/route-" i ".js")
             "scriptUrl" (str "/public/native-islands/route-" i ".js")))))))]
-      (let [plan {"schema" "fl-web-native/1" "status" "planned" "web" web "original" original "run" run "records" records}]
+      (let [plain {"schema" "fl-web-native/1" "status" "planned" "web" web "original" original "run" run "records" records}
+            raw-port (or (env-get "FL_HMR_PORT") "40851")
+            development (= (env-get "FL_FRONT_NATIVE_DEV") "1")
+            port (if development (str-to-num raw-port) 40851)
+            plan (if development
+                   (assoc plain "development" true "hmrPort" port
+                     "devProgram" (str run "/dev-hmr.fl")
+                     "devScript" (str web "/public/native-dev.js")
+                     "devUrl" "/public/native-dev.js") plain)]
+        (if (and development (not (and (regex_match raw-port "^[0-9]{1,5}$") (> port 0) (< port 65536))))
+          (throw "E_WEB_HMR_PORT: port 1..65535 required") nil)
         (fl-web-write (str run "/plan.json") (json_stringify plan)) plan))))
 (defn fl-web-inputs [run browser]
   (doseq [record (get (fl-web-json (str run "/plan.json")) "records")]
@@ -82,7 +92,10 @@
         (print (str (get record "program") "\x00" (get record "script") "\x00")))
       (do (print (str (get record "file") "\x00" (get record "ast") "\x00"))
           (if (= (get record "client") nil) nil
-            (print (str (get record "client") "\x00" (get record "clientAst") "\x00")))))))
+            (print (str (get record "client") "\x00" (get record "clientAst") "\x00"))))))
+  (let [plan (fl-web-json (str run "/plan.json"))]
+    (if (and browser (get plan "development"))
+      (print (str (get plan "devProgram") "\x00" (get plan "devScript") "\x00")) nil)))
 (defn fl-web-ast [file]
   (let [parsed (fl-web-json file)]
     (if (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok") (array? (get parsed "nodes")))
@@ -100,6 +113,10 @@
 (defn fl-web-symbol [name] {"kind" "literal" "type" "symbol" "value" name})
 (defn fl-web-string [value] {"kind" "literal" "type" "string" "value" value})
 (defn fl-web-array [items] {"kind" "block" "type" "Array" "fields" {"items" items}})
+(defn fl-web-dev-response [expression plan]
+  (if (get plan "development")
+    (str "(fl-front-server-dev-assets " expression " " (fl-source-quote (get plan "devUrl")) ")")
+    expression))
 (defn fl-web-path-dir [path]
   (str-join (slice (str-split path "/") 0 (- (length (str-split path "/")) 1)) "/"))
 (defn fl-web-load-path [path context]
@@ -251,12 +268,17 @@
              "entries" (concat (concat (get state "entries") (map (fn [entry] (assoc entry "file" (str "pages/" (get record "relative")))) prepared))
                  (concat (if helper []
                    [{"file" (str "pages/" (get record "relative")) "line" 1
-                     "source" (str "(defn " name " [req] (try (fl-front-server-assets (" name "-inner req) " (fl-source-quote (or (get plan "cssUrl") "/public/app.css")) ") "
-                                    "(catch [error] (fl-front-server-error " (fl-source-quote (get record "route")) " (error-message error)))))") }])
+                     "source" (str "(defn " name " [req] (try "
+                       (fl-web-dev-response (str "(fl-front-server-assets (" name "-inner req) "
+                         (fl-source-quote (or (get plan "cssUrl") "/public/app.css")) ")") plan) " "
+                       "(catch [error] " (fl-web-dev-response (str "(fl-front-server-error "
+                         (fl-source-quote (get record "route")) " (error-message error))") plan) ")))" ) }])
                  (if has-post
                    [{"file" (str "pages/" (get record "relative")) "line" 1
-                     "source" (str "(defn " name "-post [req] (try (" name "-post-inner req) "
-                                    "(catch [error] (fl-front-server-error " (fl-source-quote (get record "route")) " (error-message error)))))")}] [])))
+                     "source" (str "(defn " name "-post [req] (try "
+                       (fl-web-dev-response (str "(" name "-post-inner req)") plan) " "
+                       "(catch [error] " (fl-web-dev-response (str "(fl-front-server-error "
+                         (fl-source-quote (get record "route")) " (error-message error))") plan) ")))" )}] [])))
              "records" (push (get state "records") (assoc record "hasIslands" (> (length client) 0) "hasPost" has-post))}))
           {"names" [] "entries" [] "records" []} records)
         entries (get state "entries")
@@ -273,7 +295,11 @@
         not-found (if (fl-web-includes (get state "names") "fl-layout")
           "(defn fl-front-server-not-found [req] (assoc (server_html (fl-layout \"페이지를 찾을 수 없음\" \"요청한 페이지를 찾을 수 없습니다.\" \"<div class=done><h1>404</h1><p>요청하신 페이지를 찾을 수 없습니다.</p><a href=/>홈으로</a></div>\")) \"status\" 404))\n"
           "(defn fl-front-server-not-found [req] (server_status 404 \"Not found\"))\n")
-        tail (str routing not-found "(server_get \"/*\" \"fl-front-server-not-found\")\n"
+        dev-not-found (if (get plan "development")
+          (str "(defn fl-front-server-dev-not-found [req] "
+            (fl-web-dev-response "(fl-front-server-not-found req)" plan) ")\n") "")
+        tail (str routing not-found dev-not-found "(server_get \"/*\" \""
+                  (if (get plan "development") "fl-front-server-dev-not-found" "fl-front-server-not-found") "\")\n"
                   "(defn fl-front-subdomain-redirect [req] (if (= (get (get req \"headers\") \"host\") \"subs.skl.kr\") (server_redirect \"https://subscriptions.skl.kr/\") nil))\n"
                   "(server_use \"/*\" \"fl-front-subdomain-redirect\")\n"
                   "(server_start (str-to-num (or (env-get \"PORT\") \"40850\")))\n")
@@ -286,6 +312,8 @@
         updated (assoc plan "status" "generated" "records" (get state "records") "sourceMap" source-map "bindings" bindings)]
     (fl-web-write (str web "/public/app.css") css)
     (fl-web-write (str web "/_app.fl") full)
+    (if (get plan "development")
+      (fl-web-write (get plan "devProgram") (str "(island-dev-connect! " (get plan "hmrPort") ")\n")) nil)
     (fl-web-write (str run "/plan.json") (json_stringify updated))
     (fl-web-write (str run "/build-state.json")
       (json_stringify {"schema" "fl-web-native/1" "status" "generated" "routes" (filter (fn [r] (not (get r "helper"))) (get state "records"))
@@ -316,7 +344,13 @@
               (file_delete old)
               (assoc record "script" target "scriptUrl" (str "/public/native-islands/" name) "scriptSha256" hash)))) (get plan "records"))]
     (file_copy css (str web "/public/" css-name))
-    (fl-web-write (str run "/plan.json") (json_stringify (assoc plan "records" records "cssUrl" (str "/public/" css-name) "cssSha256" css-hash)))))
+    (let [updated (assoc plan "records" records "cssUrl"
+                    (if (get plan "development") (str "/public/app.css?fl_build=" css-hash) (str "/public/" css-name))
+                    "cssSha256" css-hash)
+          sealed (if (get plan "development")
+                   (let [hash (fl-web-hash (get plan "devScript"))]
+                     (assoc updated "devScriptSha256" hash "devUrl" (str "/public/native-dev.js?v=" hash))) updated)]
+      (fl-web-write (str run "/plan.json") (json_stringify sealed)))))
 (defn fl-web-verify-generated [run]
   (let [plan (fl-web-json (str run "/plan.json")) nodes (fl-web-ast (str run "/app.ast.json"))
         declared (filter (fn [name] (not (= name nil))) (map fl-web-top-name nodes))]
@@ -330,4 +364,7 @@
         (if (= (fl-web-hash (get record "script")) (get record "scriptSha256")) true
           (throw "E_WEB_ASSET_CHANGED: browser module changed")) nil))
     (if (= (fl-web-hash (str (get plan "web") "/public/app.css")) (get plan "cssSha256")) true
-      (throw "E_WEB_ASSET_CHANGED: stylesheet changed"))))
+      (throw "E_WEB_ASSET_CHANGED: stylesheet changed"))
+    (if (get plan "development")
+      (if (= (fl-web-hash (get plan "devScript")) (get plan "devScriptSha256")) true
+        (throw "E_WEB_ASSET_CHANGED: development module changed")) nil)))

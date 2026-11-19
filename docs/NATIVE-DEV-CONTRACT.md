@@ -58,7 +58,7 @@ from the language implementation.
 The earlier Native SSE application answered /health with 200 and /~hmr with 404:
 string callback registration only searched C symbols. The corrected FX runtime
 resolves FreeLang names and closures as ordinary HTTP does, handles complete SSE
-frames, and leaves final descriptor ownership to HTTP. The matching fresh SDK
+frames; that initial checkpoint left final descriptor ownership to HTTP. Its SDK
 passes 74/74 normal SSE contracts, 7/7 first-class function-value checks plus
 5/5 language assertions, and 19/19 legacy C/concurrent-route checks. Captured
 closures, forward registration, query strings, empty/Unicode/multiline/long data,
@@ -76,6 +76,54 @@ island execution. Those features remain open; scripts/fl-dev stays unchanged.
 The source compiler passes seed-to-Stage4 bootstrap, Stage2=3=4, existing core
 regressions and unchanged time/memory bounds. The receipt is
 native-sse-firstclass-20261120. No protected test or runner was edited.
+
+## Subsequent implementation checks
+
+The Native browser core now shares store, subscription and atom capabilities
+between independently generated modules in the same document. Development
+builds add a separate HMR module, including HTML pages without islands and HTML
+error responses. A saved store/atom snapshot is consumed once before mounting;
+restored atoms do not run their default initializer. CSS reload updates local
+stylesheet links; reload events save state first. Browser errors are forwarded
+to the existing inspection service.
+
+Actual Chrome execution passed 23 functional controls: shared-state updates,
+unsubscribe, cross-module dispatch, saved atom/store values, soft-reload restore,
+one-time snapshot consumption, computed CSS updates without page navigation,
+state retention, browser error forwarding, plain/error-page HMR modules and
+unchanged non-HTML 404 responses. Controls used real DOM click methods with
+layout-box checks. Pointer hit-testing and screenshot evidence remain unverified:
+the background browser did not acknowledge those protocol commands. Functional
+results therefore do not establish complete visual or all-app acceptance.
+
+The first HMR execution failed because a raw host `undefined` value bypassed a
+language `or` fallback and reached Object.defineProperty. Explicit nullish
+handling fixes initialization, with the failing bundle and console evidence
+retained. The private unsubscribe probe also initially counted a concatenated
+three-field callback record as one array element. Its original failure remains;
+the corrected diagnostic requires exactly one three-field record, so a second
+callback would still fail. Protected test sources and expectations were unchanged.
+
+Style/watch controls pass 24/24 plus the unchanged 23/23 watcher cases. Snapshots
+optionally include a logic hash for complete .flx style forms. Strings/comments
+remain source logic, malformed sources and old snapshots stay conservative, and
+additions/removals remain source changes. Under FL_FRONT_NATIVE_DEV=1, style
+classes stay stable across declaration edits so existing DOM can use reloaded
+CSS. Production retains its original content hashes and exact tested output.
+
+SSE task handoff passes eight streams with two ordinary HTTP workers (34/34).
+The combined runtime also passes 56/56 ordinary HTTP shutdown controls without
+changing header/body timeouts or cancelling the tested running/queued requests.
+The earlier SSE/API/function/C-route regression controls remain passing.
+
+Receipts: native-browser-hmr-20261120, native-browser-hmr-v2-20261120,
+native-dev-style-20261120 and native-http-idle-20261120. The coherent
+native-dev-coherent-20261120 checkpoint now passes seed-to-Stage4, fresh-runtime
+core regressions, relocated SDK and the same additional controls, including
+23 actual Chrome functional controls. Its [evidence](evidence/native-dev-coherent-20261120.json)
+retains the visual/pointer limitations. Rebuild supervision, complete metadata
+and diagnostics, headless execution, deployment migration and actual application
+flows remain required before switching the default development entry.
 
 
 ## Verification and deployment boundary

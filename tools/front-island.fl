@@ -18,6 +18,7 @@
    "Number" "island-number" "js_confirm" "island-confirm"
    "fetch!" "island-fetch" "fetch-post!" "island-fetch-post"
    "fetch-delete!" "island-fetch-delete" "fetch-result!" "island-fetch-result"
+   "get-store" "island-get-store" "dispatch" "island-dispatch" "watch-store" "island-watch-store"
    "fl-product-photo" "front-native-island-photo"})
 
 (defn fl-island-fresh []
@@ -112,16 +113,20 @@
   (if (= (length nodes) 0) "nil"
     (str "(do " (str-join (map (fn [node] (fl-island-emit node env update)) nodes) " ") ")")))
 
-(defn fl-island-initialize [record env update persistent]
+(defn fl-island-initialize [record env update persistent island-id]
   (let [name (get record "name")
-        assign (str "(reset! " name " [true " (fl-island-emit (get record "value") env update) " nil])")]
+        expression (fl-island-emit (get record "value") env update)
+        value (if persistent
+                (str "(island-hmr-atom " (fl-island-quote island-id) " "
+                     (fl-island-quote (get record "source")) " (fn [] " expression "))") expression)
+        assign (str "(reset! " name " [true " value " nil])")]
     (if persistent (str "(if (get (deref " name ") 0) nil " assign ")") assign)))
 
 (defn fl-island-emit-let [args env update]
   (let [prepared (fl-island-prepare-bindings (fl-island-pairs (get args 0)) env)
         records (get prepared "records") inner (get prepared "env")]
     (str "(let [" (str-join (map fl-island-cell records) " ") "] "
-      (str-join (map (fn [record] (fl-island-initialize record inner update false)) records) " ")
+      (str-join (map (fn [record] (fl-island-initialize record inner update false nil)) records) " ")
       " " (fl-island-body (slice args 1 (length args)) inner update) ")")))
 
 (defn fl-island-emit-fn [args env update]
@@ -250,9 +255,21 @@
   (let [value (get record "value")]
     (and (= (get value "kind") "sexpr") (= (get value "op") "atom"))))
 
+(defn fl-island-watch-keys [options]
+  ; Match the existing option-vector contract: :watch selects following strings.
+  (loop [index 0 keys []]
+    (if (>= index (length options)) keys
+      (let [option (get options index)]
+        (recur (+ index 1)
+          (if (and (= (get option "kind") "keyword") (= (get option "name") "watch"))
+            (concat keys (map (fn [key] (get key "value"))
+              (filter (fn [key] (and (= (get key "kind") "literal") (= (get key "type") "string")))
+                      (slice options (+ index 1) (length options))))) keys))))))
+
 (defn fl-island-one [node index]
   (let [args (get node "args") name (fl-island-binding-name (get args 0))
         options (fl-island-items (get args 1) "Array")
+        watch-keys (fl-island-watch-keys options)
         body (slice args 2 (length args))
         id (str "island-" (str-lower name) "-" index)
         update (fl-island-fresh)
@@ -262,15 +279,21 @@
         records (get prepared "records") env (get prepared "env")
         persistent (filter fl-island-atom-binding? records)
         local (filter (fn [record] (not (fl-island-atom-binding? record))) records)]
-    (if (> (length options) 0) (throw "E_ISLAND_OPTIONS: watch/store integration pending") nil)
     {"name" name "id" id
      "state" (map (fn [record] (get record "source")) persistent)
      "source" (str "(let [" (str-join (map fl-island-cell persistent) " ") "] "
-       "(island-mount " (fl-island-quote id) " (fn [" update "] "
+       "(" (if (> (length watch-keys) 0) "island-mount-reactive" "island-mount") " "
+         (fl-island-quote id) " (fn [" update "] "
          "(let [" (str-join (map fl-island-cell local) " ") "] "
-           (str-join (map (fn [record] (fl-island-initialize record env update (fl-island-atom-binding? record))) records) " ")
+           (str-join (map (fn [record] (fl-island-initialize record env update (fl-island-atom-binding? record) id)) records) " ")
+           " " (if (= (length persistent) 0) ""
+             (str "(island-hmr-register! " (fl-island-quote id) " {"
+               (str-join (map (fn [record]
+                 (str (fl-island-quote (get record "source")) " (front-native-island-read " (get record "name") ")")) persistent) " ") "})"))
            " " (if simple-let (fl-island-body (slice let-args 1 (length let-args)) env update)
-                                          (fl-island-body body {} update)) "))))\n")}))
+                                          (fl-island-body body {} update)) "))"
+         (if (> (length watch-keys) 0) (str " [" (str-join (map fl-island-quote watch-keys) " ") "]") "")
+         "))\n")}))
 
 (defn fl-island-program [parsed support]
   (if (not (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok")))
@@ -284,7 +307,7 @@
           (let [islands (loop [index 0 found []]
                           (if (>= index (length nodes)) found
                             (recur (+ index 1) (push found (fl-island-one (get nodes index) index)))))]
-            {"program" (str "(load " (fl-island-quote support) ")\n"
+            {"program" (str "(load " (fl-island-quote support) ")\n(island-hmr-restore!)\n"
                             (str-join (map (fn [island] (get island "source")) islands) "\n"))
              "manifest" {"schema" "fl-islands/1" "hasIslands" (> (length islands) 0)
                          "islands" (map (fn [island] {"name" (get island "name") "id" (get island "id")

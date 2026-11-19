@@ -1,4 +1,5 @@
 ; Content snapshots for the Native development supervisor. No background IO.
+(load "./front-style.fl")
 (defn fl-dev-watch-source? [name]
   (> (length (filter (fn [suffix] (str-ends-with name suffix))
                     [".fl" ".flx" ".flp" ".css" ".js"])) 0))
@@ -6,6 +7,24 @@
   (let [result (fl_file_sha256_result file)]
     (if (and (get result "ok") (regex_match (get result "data") "^[a-f0-9]{64}$"))
       (get result "data") (throw "Development source hash could not be read"))))
+(defn fl-dev-watch-logic-hash [file]
+  ; Keep strings and comments intact. Only complete style DSL forms are
+  ; omitted; malformed source falls back to an ordinary source rebuild.
+  (try
+    (let [source (file_read file) styles (fl-style-extract source)
+          stripped (loop [index 0 offset 0 parts []]
+            (if (= index (length styles))
+              (str-join (push parts (str-slice source offset (length source))) "")
+              (let [style (get styles index)]
+                (recur (+ index 1) (get style "end")
+                  (push (push parts (str-slice source offset (get style "start"))) " ")))))]
+      (sha256 stripped))
+    (catch [error] nil)))
+(defn fl-dev-watch-record [path relative]
+  (let [record {"path" relative "sha256" (fl-dev-watch-hash path)
+                "kind" (if (str-ends-with relative ".css") "css" "source")}]
+    (if (str-ends-with relative ".flx")
+      (assoc record "logicSha256" (fl-dev-watch-logic-hash path)) record)))
 (defn fl-dev-watch-tree [directory prefix assets]
   (reduce (fn [files name]
     (let [path (str directory "/" name) relative (str prefix name)]
@@ -13,8 +32,7 @@
               (= relative "public/native-islands") (= relative "public/app.css")) files
         (if (file_is_file path)
           (if (or assets (fl-dev-watch-source? name))
-            (push files {"path" relative "sha256" (fl-dev-watch-hash path)
-                         "kind" (if (str-ends-with name ".css") "css" "source")}) files)
+            (push files (fl-dev-watch-record path relative)) files)
           (concat files (fl-dev-watch-tree path (str relative "/") assets))))))
     [] (dir_list directory)))
 (defn fl-dev-watch-snapshot [web]
@@ -28,17 +46,20 @@
             (if (and (file_is_file path) (fl-dev-watch-source? name)
                      (not (str-starts-with name "_app."))
                      (not (str-starts-with name "dev-server")))
-              (push files {"path" name "sha256" (fl-dev-watch-hash path)
-                           "kind" (if (str-ends-with name ".css") "css" "source")}) files))) [] entries)]
+              (push files (fl-dev-watch-record path name)) files))) [] entries)]
     {"schema" "fl-dev/watch/1" "root" web
      "files" (arr-sort-by (concat top nested) "path")}))
 (defn fl-dev-watch-index [snapshot]
   (reduce (fn [index file]
-    (let [path (get file "path") hash (get file "sha256") kind (get file "kind")]
+    (let [path (get file "path") hash (get file "sha256") kind (get file "kind")
+          logic (get file "logicSha256")]
       (if (not (and (string? path) (not (= path "")) (string? hash)
                     (regex_match hash "^[a-f0-9]{64}$")
                     (= kind (if (str-ends-with path ".css") "css" "source"))
-                    (not (has-key? index path))))
+                    (not (has-key? index path))
+                    (or (= logic nil)
+                        (and (str-ends-with path ".flx") (string? logic)
+                             (regex_match logic "^[a-f0-9]{64}$")))))
         (throw "Development snapshot contains an invalid or duplicate source record") nil)
       (assoc index path file))) {} (get snapshot "files")))
 (defn fl-dev-watch-diff [previous current]
@@ -55,7 +76,11 @@
             (let [old (get before path) new (get after path)]
               (if (= (get old "sha256") (get new "sha256")) nil
                 {"path" path "operation" (if (= old nil) "add" (if (= new nil) "remove" "change"))
-                 "kind" (get (or new old) "kind")}))) names))]
+                 "kind" (if (and (not (= old nil)) (not (= new nil))
+                                  (str-ends-with path ".flx")
+                                  (string? (get old "logicSha256"))
+                                  (= (get old "logicSha256") (get new "logicSha256")))
+                            "css" (get (or new old) "kind"))}))) names))]
     {"schema" "fl-dev/changes/1" "changed" (> (length changes) 0)
      "cssOnly" (and (> (length changes) 0) (every? (fn [change] (= (get change "kind") "css")) changes))
      "files" (arr-sort-by changes "path")}))

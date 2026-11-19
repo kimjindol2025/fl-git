@@ -60,3 +60,9 @@
     (if (and (string? type) (str-starts-with type "text/html") (string? body))
       (assoc response "body" (if (str-includes body "</head>")
         (str-replace-in body "</head>" (str link "</head>")) (str link body))) response)))
+(defn fl-front-server-dev-assets [response script-url]
+  (let [type (get response "contentType") body (get response "body")
+        script (str "<script defer src=\"" (fl-front-server-escape script-url) "\"></script>")]
+    (if (and (string? type) (str-starts-with type "text/html") (string? body))
+      (assoc response "body" (if (str-includes body "</body>")
+        (str-replace-in body "</body>" (str script "</body>")) (str body script))) response)))

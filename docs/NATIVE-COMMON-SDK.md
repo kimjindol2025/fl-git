@@ -96,3 +96,39 @@ complete, so the default fl-dev remains unchanged. Deployment still has a Node
 path and has not run. Whole-app/browser acceptance and DB commercial
 qualification remain open. Commercial status is HOLD, overall goal active.
 No production service, foreign worktree changes or customer data were changed.
+
+## Current coherent checkpoint
+
+The subsequent native-dev-coherent-20261120 SDK includes the validated SSE task
+handoff, ordinary HTTP idle shutdown, shared browser state/HMR, development style
+handling and structural delimiter rejection. [Exact evidence](evidence/native-dev-coherent-20261120.json)
+keeps its hashes and scope distinct from the older package above.
+
+Fresh seed-to-Stage4 has exact Stage2=3=4 C. Generation takes 29.88/29.31 seconds
+with RSS 1545824/1545804 KiB under the unchanged bounds. Original core, CLI,
+checker, SSE/API/function/C-route regressions pass. The tracked cohort is 71/71;
+the actual working-tree common check separately passes all 80 assertions across
+eight suites, plus its Provider gate recheck. Foreign changes remain unchanged.
+
+The package again passes relocation to a path containing whitespace, apostrophe,
+Korean and LF, included-curl resolution, real default common/Provider/page
+entries, exact compiler self-generation and manifest tamper/restore detection.
+SDK self-generation takes 29.76 seconds with RSS 1547120 KiB. Collected product
+build/common-check traces contain zero Node-family execution.
+
+Current SDK compiler SHA-256:
+a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0.
+Compiler C SHA-256:
+26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0.
+SDK manifest SHA-256:
+4765ee3e97b5cb843a3cacc23bbf02efd3c3f9e5b948b431e23a5b2930370b1e.
+
+The packaged tools pass additional style 24/24, watcher 23/23, delimiter 65/65,
+HTTP lifecycle 56/56 and SSE capacity 34/34 controls. A newly built development
+bundle passes 23 actual Chrome functional controls; screenshots and pointer
+hit-testing remain unverified. One open stream 180 seconds passes 41 controls,
+with warm RSS growth 216 KiB and open FD growth 0; no commercial lifetime bound
+is inferred. Native supervision, complete diagnostics/metadata, headless and
+deployment migration and actual application acceptance remain unfinished.
+The default development entry still requires its complete migration. Overall
+goal active, commercial HOLD, deployment NO.

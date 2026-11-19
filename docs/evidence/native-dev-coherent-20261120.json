@@ -1,0 +1,196 @@
+{
+  "receipt": "native-dev-coherent-20261120",
+  "status": "SCOPED_PASS_VISUAL_QA_PARTIAL",
+  "commercial": "HOLD",
+  "overall_goal": "ACTIVE",
+  "deployment": "NO",
+  "compiler_c_sha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+  "compiler_stage3_elf_sha256": "16f1772378b93765dea9bd1c6149e48130324667db730bf98d5090627d131586",
+  "runtime_archive_sha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+  "sdk_compiler_sha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+  "sdk_manifest_sha256": "4765ee3e97b5cb843a3cacc23bbf02efd3c3f9e5b948b431e23a5b2930370b1e",
+  "seed_sha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767",
+  "generation_bounds": {
+    "limits": {
+      "seconds": 40,
+      "rss_gib": 1.6,
+      "vm_cap_kib": 2097152
+    },
+    "measurements": [
+      {
+        "name": "stage2_TO_stage3",
+        "elapsed_seconds": 29.88,
+        "rss_kib": 1545824
+      },
+      {
+        "name": "stage3_TO_stage4",
+        "elapsed_seconds": 29.31,
+        "rss_kib": 1545804
+      }
+    ]
+  },
+  "sdk_self_metrics": "ELAPSED=29.76 RSS_KIB=1547120 EXIT=0",
+  "core": [
+    "OP_LOOKUP_CONTRACT=2673/2673 PARALLEL_CALLS=32768 DIFFERENCE=0",
+    "JOIN_LINES_CONTRACT=24/24",
+    "FRESH_CONTRACT=hex-literals RESULT=PASS EXIT=0",
+    "FRESH_CONTRACT=template-contract RESULT=PASS EXIT=0",
+    "FRESH_CONTRACT=value-context RESULT=PASS EXIT=0",
+    "FRESH_CONTRACT=syntax-guard RESULT=PASS EXIT=0",
+    "FRESH_CONTRACT=split RESULT=PASS EXIT=0",
+    "FRESH_PUSH_ORDER=3/3",
+    "FRONTEND=71/71",
+    "NATIVE_CLI_CASES=22 PASS=22 FAIL=0",
+    "FX_CASE=tail-call-context RESULT=PASS EXIT=0",
+    "FX_CASE=tail-call-extra RESULT=PASS EXIT=0",
+    "FX_CASE=tail-while-mode RESULT=PASS EXIT=0",
+    "FX_CASE=swap-zero-extra RESULT=PASS EXIT=0",
+    "FX_CASE=call-error-context RESULT=PASS EXIT=0",
+    "FX_CASE=compiler-blockers RESULT=PASS EXIT=0",
+    "FX_CASE=try-scope RESULT=PASS EXIT=0",
+    "FX_CASE=atom-snapshot RESULT=PASS EXIT=0",
+    "FX_CASE=late-call RESULT=PASS EXIT=0",
+    "FX_CASE=tail-nonlast RESULT=PASS EXIT=0",
+    "FX_CASE=tail-let-sequence RESULT=PASS EXIT=0",
+    "DEFAULT_CHECK_EXIT=0",
+    "CHECK_FIXTURES_PASS=32 FAIL=0",
+    "DB95_CASE=7 EXIT=0",
+    "afj-db95 page PASS",
+    "PASS page set roundtrip",
+    "afj-db95 page set corruption PASS",
+    "afj-db95 page set PASS",
+    "PASS durable WAL replay",
+    "afj-db95 durable WAL PASS",
+    "afj-db95 corrupt WAL PASS",
+    "PASS torn WAL keeps committed rows",
+    "afj-db95 torn WAL PASS",
+    "afj-db95 oversized WAL PASS",
+    "DB95_CASE=13 EXIT=0",
+    "afj-db95 corrupt WAL PASS",
+    "PASS torn WAL keeps committed rows",
+    "afj-db95 torn WAL PASS",
+    "afj-db95 oversized WAL PASS",
+    "afj-db95 btree baseline PASS",
+    "afj-db95 btree duplicate-key PASS",
+    "afj-db95 btree leaf split PASS",
+    "afj-db95 btree root/leaf PASS",
+    "afj-db95 btree recursive split PASS",
+    "afj-db95 persistent recursive B+Tree PASS",
+    "DB95_CASE=36 EXIT=0",
+    "afj-db95 MariaDB aggregate/left-join parser PASS",
+    "afj-db95 SQL parser seed PASS",
+    "afj-db95 parser-to-engine INSERT/UPDATE/DELETE PASS",
+    "afj-db95 multi-row INSERT engine PASS",
+    "afj-db95 MariaDB aggregate/left-join engine PASS",
+    "afj-db95 schema constraints engine PASS",
+    "afj-db95 foreign-key/check engine PASS",
+    "afj-db95 protocol PASS",
+    "afj-db95 auth PASS",
+    "afj-db95 transaction isolation PASS",
+    "DB95_CASE=40 EXIT=0",
+    "afj-db95 MVCC PASS",
+    "afj-db95 row-version snapshot PASS",
+    "afj-db95 row-version rollback PASS",
+    "FORBIDDEN_EXEC=0",
+    "CORE_VALIDATION=PASS",
+    "CORE_EXIT=0 STEP=ALL_SOURCE_UNCHANGED"
+  ],
+  "pipeline": [
+    "NATIVE_COMMON_CHECK=PASS",
+    "NATIVE_WATCH_CHECK=PASS",
+    "SSE_CONCURRENT_REGISTRATION=PASS",
+    "PIPELINE_EXIT=0 STEP=COMPLETE"
+  ],
+  "sdk": [
+    "NATIVE_SDK_PACKAGE=PASS RELOCATION=PASS COMMON_CHECK=PASS PAGE_CHECK=PASS MANIFEST_CONTROL=PASS NODE_EXECUTIONS=0",
+    "SDK_VALIDATION_EXIT=0 STEP=COMPLETE"
+  ],
+  "postcheck": [
+    "BROWSER_PROCESS_EXIT=1",
+    "COHERENT_ADDITIONAL_FUNCTIONAL_CONTROLS=PASS VISUAL_QA=PARTIAL ALL_APP_ACCEPTANCE=NOT_COMPLETE",
+    "COHERENT_POSTCHECK_EXIT=0 STEP=COMPLETE"
+  ],
+  "checks": {
+    "style": {
+      "passed": 24,
+      "total": 24
+    },
+    "watch": {
+      "passed": 23,
+      "total": 23
+    },
+    "delimiter": {
+      "passed": 65,
+      "total": 65
+    },
+    "http_lifecycle": {
+      "passed": 56,
+      "total": 56
+    },
+    "sse_capacity": {
+      "passed": 34,
+      "total": 34
+    },
+    "browser": {
+      "functional": {
+        "passed": 23,
+        "total": 23
+      },
+      "visual": "UNVERIFIED: surface screenshot command timed out",
+      "pointer_hit_testing": "NOT_RUN",
+      "event_method": "real DOM element click with nonempty layout box; no physical pointer claim",
+      "unexpected_errors_before_intentional_throw": 0,
+      "owned_processes_exit": [
+        0,
+        0
+      ],
+      "owned_tabs_finalized": true
+    }
+  },
+  "actual_worktree_unit_summary": {
+    "suites": 8,
+    "passed": 80,
+    "total": 80,
+    "provider_gate_recheck_is_separate": true
+  },
+  "sse_lifetime": {
+    "seconds": 180,
+    "passed": 41,
+    "total": 41,
+    "warm_open_rss_growth_kib": 216,
+    "open_fd_growth": 0,
+    "normal_exit": 0,
+    "scope": "One open stream with periodic ordinary HTTP, not a commercial lifetime/load bound; explicit disconnect drain covered separately by capacity controls"
+  },
+  "remaining": [
+    "Native development supervisor and complete metadata/diagnostics",
+    "Native headless island execution",
+    "Node-free deployment path and actual application/browser acceptance",
+    "complete DB Native clients/TLS/concurrency/recovery/load/operations qualification"
+  ],
+  "source_base": {
+    "fx": "085c8c221567c4821073a2889a90bd5d22e89298",
+    "frontend": "2b76ea573016d92afb3fd4b38d2ae28734a3e60c"
+  },
+  "source_delta_sha256": {
+    "fx": {
+      "runtime/browser-core-data.h": "6b70f43851e7336705ed54cd0990f3ab506f84902b777d29e8b1f05c1b140f19",
+      "runtime/browser-target.h": "03d540e6b12de723bf5fb43b2b9c924d0c17a6d0d10e133275a251e9ef65d969",
+      "runtime/gc.c": "13cc03fc58ed650ddf9a79f10a5c06365057d7296940ad1a48344cb70b9de42d",
+      "runtime/http.c": "4a8f55534f5350279357389ae271debdab1e5bb9a3ba7abcf48eb2aaa00a2129",
+      "runtime/http-form.h": "ae629b2ead703d27c22d378751351e6c543e1be0523b114fc5846a83ecab6691",
+      "runtime/internal.h": "04030ebce30c3f2ac54d75f807d8cc2d125232386b11fb57c0bd303257b59c61",
+      "runtime/runtime.h": "274d5cf15e41283f80d561a03c87c3afe97ca2aa9fe88dcaaa75b8810339d460",
+      "runtime/sse.c": "010f39e4a3e93ced51420c056e9e40625b9436f475241f8c54ff0e0b3c63fbe3",
+      "self/browser-core.fl": "66f0016095215fa8fa58e0bc73528effe66d786527a0f2f2d55a1d8fe1da547a",
+      "self/cgc-main.fl": "6cce7a7625bc543d5c5538fe74d64c62cd1ae34e7a6d02132cb662e2acffa54d"
+    },
+    "frontend": {
+      "tools/front-dev-watch.fl": "a2a7d0fbcffad5e1916f9e3c6afb756d980385259e172244bea769e9f71d87bc",
+      "tools/front-island.fl": "8280d3addc76a9e00a9381bb2d62fc3df7262532a1c27c5b13db2238d70011f0",
+      "tools/front-style.fl": "defa13514a7af0646a6fffa3f3bf03abcc22663d12d6e368977b94c972e631ab",
+      "tools/front-web.fl": "f2597e14d2678b2b13081b48f3c528aacc7e0aef18b336b070454cb264071a0b",
+      "web/runtime/server-language.fl": "e6e210b3272de8c980b086828f8b7253d9a2e8e48eab987c30fcd826daeb71e2"
+    }
+  }
+}
