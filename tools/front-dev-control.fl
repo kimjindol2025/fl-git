@@ -1,0 +1,121 @@
+; Development lifecycle policy and evidence. Process/pipe IO stays in the host.
+(load "./front-dev-watch.fl")
+
+(defn fl-dev-control-read [file fallback]
+  (if (and (string? file) (not (= file "")) (file_exists file))
+    (json_parse (file_read file)) fallback))
+(defn fl-dev-control-write [value] (println (json_stringify value)))
+(defn fl-dev-control-elapsed [text]
+  (if (and (string? text) (<= (length text) 15) (regex_match text "^[0-9]+$"))
+    (str-to-num text) (throw "Development elapsed time requires nonnegative integer milliseconds")))
+(defn fl-dev-control-errors [state]
+  (map (fn [issue] (get issue "message"))
+       (filter (fn [issue] (= (get issue "level") "error")) (or (get state "issues") []))))
+(defn fl-dev-control-includes? [values value]
+  (> (length (filter (fn [entry] (= entry value)) values)) 0))
+(defn fl-dev-control-loop [previous issues]
+  (let [before (fl-dev-control-errors previous)
+        after (fl-dev-control-errors {"issues" issues})]
+    {"new" (filter (fn [message] (not (fl-dev-control-includes? before message))) after)
+     "resolved" (filter (fn [message] (not (fl-dev-control-includes? after message))) before)}))
+(defn fl-dev-control-decision [before after]
+  (let [changes (fl-dev-watch-diff before after)]
+    (if (not (get changes "changed")) "none" (if (get changes "cssOnly") "css" "source"))))
+
+(defn fl-dev-control-relative? [path]
+  (and (string? path) (not (= path "")) (not (str-starts-with path "/"))
+       (not (str-includes path (char-from-code 0)))
+       (every? (fn [part] (not (or (= part "") (= part ".") (= part "..")))) (str-split path "/"))))
+(defn fl-dev-control-css [bundle changes]
+  (if (not (= (get changes "schema") "fl-dev/changes/1"))
+    (throw "Development CSS publication requires a source diff") nil)
+  (print (str "replace\x00" bundle "/web/public/app.css\x00public/app.css\x00"))
+  (doseq [entry (get changes "files")]
+    (let [path (get entry "path")]
+      (if (not (fl-dev-control-relative? path)) (throw "Invalid development source-relative path") nil)
+      (if (and (str-starts-with path "public/") (str-ends-with path ".css") (not (= path "public/app.css")))
+        (if (= (get entry "operation") "remove")
+          (print (str "remove\x00\x00" path "\x00"))
+          (print (str "replace\x00" bundle "/web/" path "\x00" path "\x00"))) nil))))
+
+(defn fl-dev-control-success [bundle active elapsed head previous]
+  (let [plan (fl-dev-control-read (str bundle "/plan.json") nil)
+        raw (fl-dev-control-read (str bundle "/build-state.json") nil)
+        records (get plan "records")
+        issues (or (get raw "issues") [])]
+    (if (not (and (= (get plan "schema") "fl-web-native/1") (= (get plan "status") "generated")
+                  (array? records) (file_exists (str bundle "/web/app-native"))
+                  (file_exists (str bundle "/completion.txt"))
+                  (fl-dev-control-includes? (str-split (file_read (str bundle "/completion.txt")) "\n") "FL_WEB_NATIVE_BUILD=PASS")))
+      (throw "Development state requires a complete generated Native bundle") nil)
+    {"schema" "fl-dev/state/1" "status" "ready" "ok" true "time" (now-iso) "elapsed" elapsed
+     "generation" (+ (or (get previous "generation") 0) 1) "bundle" bundle "activeBundle" active
+     "routes" (map (fn [record]
+                    {"route" (get record "route") "file" (str "pages/" (get record "relative"))
+                     "fnName" (get record "fn") "hasIslands" (get record "hasIslands")})
+                   (filter (fn [record] (not (get record "helper"))) records))
+     "helpers" (map (fn [record] (get record "relative")) (filter (fn [record] (get record "helper")) records))
+     "sourceMap" (or (get raw "sourceMap") []) "issues" issues
+     "store_keys" (or (get raw "store_keys") []) "contracts" (or (get raw "contracts") [])
+     "contractSummary" (or (get raw "contractSummary") {}) "repoCommit" head
+     "diagnostics" (or (get raw "diagnostics") {"legacyFullCatalog" "NOT_RUN" "contractReadiness" "NOT_RUN"})
+     "errorLoop" (fl-dev-control-loop previous issues)}))
+
+(defn fl-dev-control-ast-issue [bundle]
+  (let [plan (fl-dev-control-read (str bundle "/plan.json") {})
+        records (or (get plan "records") [])]
+    (loop [index 0]
+      (if (>= index (length records)) nil
+        (let [record (get records index)
+              candidates [[(get record "ast") (str "pages/" (get record "relative"))]
+                          [(get record "clientAst") (str "islands/" (get record "relative"))]]
+              found (first (filter (fn [item] (not (= item nil)))
+                (map (fn [item]
+                  (let [file (get item 0)]
+                    (if (and (string? file) (file_exists file))
+                      (let [text (file_read file)]
+                        (if (str-includes (str-slice text 0 256) "\"status\":\"error\"")
+                          (let [error (json_parse text)]
+                            {"level" "error" "code" (get error "code") "file" (get item 1)
+                             "line" (get error "line") "column" (get error "column")
+                             "message" (get error "message")}) nil)) nil))) candidates)))]
+          (if (= found nil) (recur (+ index 1)) found))))))
+(defn fl-dev-control-build-message [bundle fallback]
+  (reduce (fn [message name]
+    (let [file (str bundle "/" name)]
+      (if (file_exists file)
+        (let [text (str-trim (file_read file))]
+          (if (= text "") message (str-replace-in text bundle "[build]"))) message)))
+    fallback ["stage.log" "flp.log" "plan.log" "emit.log" "seal.log" "emit-final.log"
+              "app.parse.stderr" "verify-generated.log" "app.generate.log" "app.build.log"]))
+(defn fl-dev-control-failure [stage bundle log elapsed previous]
+  (let [fallback (str-trim (file_read log))
+        issue (or (if (= bundle "") nil (fl-dev-control-ast-issue bundle))
+                  {"level" "error" "code" (str "NATIVE_DEV_" stage)
+                   "message" (if (= bundle "") fallback (fl-dev-control-build-message bundle fallback))})
+        issues [(assoc issue "stage" stage)]]
+    (assoc previous "schema" "fl-dev/state/1" "status" "failed" "ok" false "time" (now-iso)
+      "elapsed" elapsed "issues" issues "failedStage" stage "failedBundle" bundle
+      "errorLoop" (fl-dev-control-loop previous issues))))
+
+(defn fl-dev-control-airc [previous state]
+  (let [changes (get state "errorLoop") now (now-iso)
+        rows (or (get previous "auto_errors") [])
+        opened (reduce (fn [rows message]
+          (if (not (= nil (first (filter (fn [row] (and (= (get row "message") message) (= (get row "status") "open"))) rows))))
+            rows (concat [{"time" now "message" message "status" "open"}] rows))) rows (or (get changes "new") []))
+        updated (map (fn [row]
+          (if (fl-dev-control-includes? (or (get changes "resolved") []) (get row "message"))
+            (assoc row "status" "resolved" "resolved_at" now) row)) opened)]
+    (assoc previous "auto_errors" (slice updated 0 20))))
+
+(defn fl-dev-control-translate [state text]
+  (reduce (fn [result match]
+    (let [numbers (regex_find_all match "[0-9]+") line (str-to-num (get numbers 0))
+          column (get numbers 1)
+          applicable (filter (fn [entry] (<= (get entry "generatedLine") line)) (or (get state "sourceMap") []))
+          source (last applicable)]
+      (if (= source nil) result
+        (str-replace-in result match (str "at line " (get source "line") ", col " column
+          " ← " (get source "file") ":" (get source "line"))))))
+    text (regex_find_all text "at line [0-9]+, col [0-9]+")))

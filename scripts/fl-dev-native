@@ -1,0 +1,288 @@
+#!/usr/bin/env bash
+# Native development host: process/pipe IO here, lifecycle policy in FreeLang.
+set -Eeuo pipefail
+umask 077
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+WEB="$ROOT/web"
+ARTIFACT_PARENT="${FREELANG_NATIVE_DEV_ARTIFACTS:-${TMPDIR:-/tmp}}"
+usage() { printf 'Usage: fl-dev-native [web-root] [--artifacts existing-directory]\n'; }
+blocked() { printf 'FL_DEV_NATIVE=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+selected_web=0
+while (($#)); do
+  case "$1" in
+    --help|-h) usage; exit 0;;
+    --artifacts) (($# >= 2)) || blocked 'An artifact directory is required.'; ARTIFACT_PARENT="$2"; shift 2;;
+    --) shift; (($# == 1 && selected_web == 0)) || blocked 'One web directory is required after --.'; WEB="$1"; selected_web=1; shift;;
+    -*) blocked 'Unknown development option.';;
+    *) ((selected_web == 0)) || blocked 'Select only one web directory.'; WEB="$1"; selected_web=1; shift;;
+  esac
+done
+[[ -d "$WEB/pages" && -d "$ARTIFACT_PARENT" ]] || blocked 'Select existing web/pages and artifact directories.'
+WEB="$(cd -- "$WEB" && pwd -P)"
+ARTIFACT_PARENT="$(cd -- "$ARTIFACT_PARENT" && pwd -P)"
+case "$ARTIFACT_PARENT/" in "$WEB/"*) blocked 'Development artifacts must be outside the source web tree.';; esac
+for configured in FREELANG_NATIVE_DEV_CONTROL FREELANG_NATIVE_DEV_SERVER FREELANG_NATIVE_DEV_WATCH FREELANG_NATIVE_DEV_WATCH_HOST FREELANG_NATIVE_COMPILER FREELANG_NATIVE_WEB_TOOL; do
+  [[ -n "${!configured:-}" && -x "${!configured}" ]] || blocked "Configure $configured with the matching Native SDK."
+done
+[[ -f "${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}" && -f "${FREELANG_NATIVE_RUNTIME_INCLUDE:-}/runtime.h" ]] || blocked 'Configure matching Native runtime archive and headers.'
+for command_name in curl setsid flock mkfifo od tr find mktemp; do
+  command -v "$command_name" >/dev/null || blocked 'A required development host command is unavailable.'
+done
+[[ "${FL_HTTP_HOST:-127.0.0.1}" == 127.0.0.1 ]] || blocked 'Native development binds only to 127.0.0.1.'
+PORT="${PORT:-40850}"
+FL_HMR_PORT="${FL_HMR_PORT:-40851}"
+for number in "$PORT" "$FL_HMR_PORT"; do
+  [[ "$number" =~ ^[0-9]{1,5}$ ]] && ((10#$number > 0 && 10#$number < 65536)) || blocked 'Development ports must be integers in 1..65535.'
+done
+((10#$PORT != 10#$FL_HMR_PORT)) || blocked 'Application and HMR ports must differ.'
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
+ulimit -c 0
+export FL_HTTP_HOST=127.0.0.1 FL_FRONT_NATIVE_DEV=1 PORT FL_HMR_PORT
+export FL_HTTP_ALLOW="${FL_HTTP_ALLOW:-127.0.0.1,localhost}"
+export FL_GIT_REPO="${FL_GIT_REPO:-$(dirname -- "$WEB")}"
+cd -- "$WEB"
+CONTROL="$FREELANG_NATIVE_DEV_CONTROL"
+WATCH="$FREELANG_NATIVE_DEV_WATCH"
+monotonic_probe="$("$FREELANG_NATIVE_DEV_WATCH_HOST" --clock-ms)" || blocked 'Configure the matching Native notification/clock host.'
+[[ "$monotonic_probe" =~ ^[0-9]+$ ]] || blocked 'Native monotonic clock returned an invalid value.'
+RUN="$(mktemp -d -- "$ARTIFACT_PARENT/fl-dev-native.XXXXXX")"
+STATE="$RUN/state.json"
+export FL_NATIVE_DEV_WEB="$WEB" FL_NATIVE_DEV_STATE="$STATE"
+export FL_NATIVE_DEV_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$FL_NATIVE_DEV_TOKEN" =~ ^[0-9a-f]{64}$ ]] || blocked 'Unable to create the development supervisor token.'
+printf 'FL_NATIVE_DEV_ARTIFACTS=%s\n' "$RUN"
+APP_PID= HMR_PID= WATCH_PID= BUILD_PID= WATCH_FD= ACTIVE= CANDIDATE=
+DIRTY=0 DEBOUNCE=0 GENERATION=0
+now_ms() { "$FREELANG_NATIVE_DEV_WATCH_HOST" --clock-ms; }
+# SDK libcurl belongs to the Native binaries. The host curl command uses its
+# own system libraries; loading the SDK's older ABI into it can fail at startup.
+host_curl() { env -u LD_LIBRARY_PATH curl "$@"; }
+child_running() {
+  local candidate="$1" entry
+  [[ -n "$candidate" ]] || return 1
+  # Keep Bash job-table inspection in the owning shell, including signal
+  # cleanup. Forked command substitutions can race asynchronous job updates.
+  jobs -pr >"$RUN/jobs.running"
+  while IFS= read -r entry; do
+    [[ "$entry" != "$candidate" ]] || return 0
+  done <"$RUN/jobs.running"
+  return 1
+}
+stop_child() {
+  local role="$1" pid="$2" deadline group
+  [[ -n "$pid" ]] || return 0
+  if child_running "$pid"; then
+    group="$(ps -o pgid= -p "$pid")"; group="${group//[[:space:]]/}"
+    if [[ "$role" == build && "$group" == "$pid" ]]; then kill -TERM -- "-$pid" 2>/dev/null || true
+    else kill -TERM "$pid" 2>/dev/null || true; fi
+    deadline=$(($(now_ms) + 3000))
+    while child_running "$pid" && (($(now_ms) < deadline)); do sleep .025; done
+    if child_running "$pid"; then
+      printf 'FL_DEV_NATIVE_STOP=FAIL ROLE=%s\n' "$role" >&2
+      if [[ "$group" == "$pid" ]]; then kill -KILL -- "-$pid" 2>/dev/null || true
+      else kill -KILL "$pid" 2>/dev/null || true; fi
+      wait "$pid" 2>/dev/null || true
+      return 1
+    fi
+  fi
+  wait "$pid" 2>/dev/null || true
+}
+cleanup() {
+  local result=$?
+  trap - EXIT INT TERM
+  stop_child build "$BUILD_PID" || result=1
+  stop_child application "$APP_PID" || result=1
+  stop_child hmr "$HMR_PID" || result=1
+  stop_child watch "$WATCH_PID" || result=1
+  if [[ -n "$WATCH_FD" ]]; then exec {WATCH_FD}>&-; fi
+  printf 'FL_DEV_NATIVE_EXIT=%s\n' "$result"
+  exit "$result"
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+head_commit() { git -C "$FL_GIT_REPO" rev-parse --verify HEAD 2>/dev/null || true; }
+publish_airc() {
+  local file="$WEB/HANDOFF.airc" temporary
+  if [[ -f "$file" && ! -L "$file" ]]; then
+    temporary="$(mktemp -- "$WEB/.HANDOFF.airc.XXXXXX")"
+    if "$CONTROL" --airc "$file" "$STATE" >"$temporary" 2>>"$RUN/control.stderr"; then
+      if cmp -s -- "$file" "$temporary"; then rm -f -- "$temporary"; else mv -f -- "$temporary" "$file"; fi
+    else rm -f -- "$temporary"; printf 'FL_DEV_NATIVE_AIRC=FAIL\n' >&2; fi
+  fi
+}
+failure_state() {
+  local stage="$1" bundle="$2" log="$3" elapsed="$4"
+  "$CONTROL" --failure "$stage" "$bundle" "$log" "$elapsed" "$STATE" >"$RUN/state.next" || return 1
+  mv -f -- "$RUN/state.next" "$STATE" || return 1
+  publish_airc
+  printf 'FL_DEV_NATIVE_FAILURE=%s\n' "$stage" >&2
+}
+healthy_children() {
+  if [[ -n "$WATCH_PID" ]] && ! child_running "$WATCH_PID"; then printf 'Source notification host stopped.\n' >"$RUN/failure.log"; failure_state WATCH "" "$RUN/failure.log" 0; return 1; fi
+  if [[ -n "$HMR_PID" ]] && ! child_running "$HMR_PID"; then printf 'Development inspection service stopped.\n' >"$RUN/failure.log"; failure_state HMR "" "$RUN/failure.log" 0; return 1; fi
+  if [[ -n "$APP_PID" ]] && ! child_running "$APP_PID"; then printf 'Application stopped after readiness.\n' >"$RUN/failure.log"; failure_state RUNTIME "" "$RUN/failure.log" 0; return 1; fi
+}
+watch_event() {
+  local event
+  if IFS= read -r -t .05 -u "$WATCH_FD" event; then
+    [[ "$event" == CHANGE ]] || { printf 'Unexpected source notification.\n' >&2; return 1; }
+    DIRTY=1; DEBOUNCE=$(($(now_ms) + 250))
+  fi
+  return 0
+}
+ready() {
+  local role="$1" pid="$2" url="$3" instance="$4" deadline remaining budget seconds header
+  deadline=$(($(now_ms) + 3000))
+  while child_running "$pid"; do
+    remaining=$((deadline - $(now_ms))); ((remaining > 0)) || break
+    budget=$((remaining < 200 ? remaining : 200))
+    printf -v seconds '%d.%03d' "$((budget / 1000))" "$((budget % 1000))"
+    if host_curl --noproxy '*' --fail --silent --show-error --connect-timeout "$seconds" --max-time "$seconds" \
+        --dump-header "$RUN/ready.headers" --output "$RUN/ready.body" "$url" 2>"$RUN/ready.stderr"; then
+      while IFS= read -r header; do
+        header="${header%$'\r'}"
+        if [[ "${header,,}" == "x-fl-native-instance: $instance" ]] && child_running "$pid" && (($(now_ms) <= deadline)); then return 0; fi
+      done <"$RUN/ready.headers"
+    fi
+    sleep .025
+  done
+  printf 'FL_DEV_NATIVE_READY=FAIL ROLE=%s\n' "$role" >&2
+  return 1
+}
+start_application() {
+  local bundle="$1" instance
+  instance="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+  [[ "$instance" =~ ^[0-9a-f]{32}$ ]] || return 1
+  setsid env FL_NATIVE_DEV_INSTANCE="$instance" FL_WEB_PUBLIC="$bundle/web/public" \
+    "$bundle/web/app-native" >>"$RUN/application.log" 2>&1 &
+  APP_PID=$!
+  ready application "$APP_PID" "http://127.0.0.1:$PORT/~native/ready" "$instance"
+}
+notify() {
+  local event="$1"
+  if ! host_curl --noproxy '*' --fail --silent --show-error --max-time 2 \
+    --header 'Content-Type: application/json' --header "x-fl-dev-token: $FL_NATIVE_DEV_TOKEN" \
+    --data "{\"event\":\"$event\"}" "http://127.0.0.1:$FL_HMR_PORT/~native/events" >"$RUN/broadcast.json" 2>"$RUN/notify.stderr"; then
+    printf 'Development notification service failed after application readiness.\n' >"$RUN/failure.log"
+    failure_state HMR "" "$RUN/failure.log" 0 || return 1
+    return 1
+  fi
+  printf 'FL_DEV_NATIVE_EVENT=%s\n' "$event"
+}
+css_publish() {
+  local operation source relative destination stage index=0 changed=0 restore
+  local -a destinations=() operations=() originals=()
+  stage="$(mktemp -d -- "$RUN/css-stage.XXXXXX")" || return 1
+  "$CONTROL" --css "$CANDIDATE" "$RUN/changes.json" >"$RUN/css-operations.nul" || return 1
+  while IFS= read -r -d '' operation; do
+    IFS= read -r -d '' source && IFS= read -r -d '' relative || return 1
+    case "$relative" in public/*.css) ;; *) return 1;; esac
+    destination="$ACTIVE/web/$relative"
+    [[ ! -L "$destination" ]] || return 1
+    destinations+=("$destination"); operations+=("$operation")
+    if [[ -f "$destination" ]]; then cp -- "$destination" "$stage/old-$index" || return 1; originals+=(1)
+    else originals+=(0); fi
+    case "$operation" in
+      replace)
+        [[ -f "$source" && ! -L "$source" ]] || return 1
+        mkdir -p -- "$(dirname -- "$destination")" || return 1
+        cp -- "$source" "$stage/new-$index" || return 1;;
+      remove) ;;
+      *) return 1;;
+    esac
+    index=$((index + 1))
+  done <"$RUN/css-operations.nul"
+  for ((index=0; index<${#destinations[@]}; index++)); do
+    destination="${destinations[index]}"
+    if { [[ "${operations[index]}" == replace ]] && mv -f -- "$stage/new-$index" "$destination"; } ||
+       { [[ "${operations[index]}" == remove ]] && rm -f -- "$destination"; }; then changed=$((index + 1))
+    else
+      for ((restore=0; restore<changed; restore++)); do
+        if [[ "${originals[restore]}" == 1 ]]; then mv -f -- "$stage/old-$restore" "${destinations[restore]}" || return 1
+        else rm -f -- "${destinations[restore]}" || return 1; fi
+      done
+      return 1
+    fi
+  done
+  rm -rf -- "$stage"
+}
+build() {
+  local output="$1" result=0
+  mkdir -- "$output" || return 1
+  setsid flock -o /tmp/fl-heavy.lock "$ROOT/scripts/fl-front-build-native" "$WEB" "$output" >"$output/build.log" 2>&1 &
+  BUILD_PID=$!
+  while child_running "$BUILD_PID"; do healthy_children || return 1; watch_event || return 1; done
+  wait "$BUILD_PID" || result=$?; BUILD_PID=
+  local -a bundles=()
+  mapfile -d '' bundles < <(find "$output" -mindepth 1 -maxdepth 1 -type d -name 'fl-web.*' -print0)
+  CANDIDATE=
+  if ((${#bundles[@]} == 1)); then CANDIDATE="${bundles[0]}"; fi
+  if ((result != 0)) || [[ -z "$CANDIDATE" || ! -x "$CANDIDATE/web/app-native" ]] || ! grep -qx 'FL_WEB_NATIVE_BUILD=PASS' "$CANDIDATE/completion.txt"; then
+    tail -c 16384 -- "$output/build.log" >"$RUN/failure.log"
+    return 1
+  fi
+}
+rebuild() {
+  local kind="$1" started previous="$ACTIVE" output elapsed
+  GENERATION=$((GENERATION + 1)); output="$RUN/build-$GENERATION"; started=$(now_ms)
+  printf 'FL_DEV_NATIVE_BUILD=%s KIND=%s\n' "$GENERATION" "$kind"
+  if ! build "$output"; then
+    healthy_children || return 1
+    failure_state BUILD "$CANDIDATE" "$RUN/failure.log" "$(($(now_ms) - started))"
+    [[ -n "$ACTIVE" ]] || return 1
+    return 0
+  fi
+  if [[ "$kind" == css && -n "$ACTIVE" ]]; then
+    if ! css_publish; then
+      printf 'CSS publication failed; application retained.\n' >"$RUN/failure.log"
+      failure_state PUBLISH "$CANDIDATE" "$RUN/failure.log" "$(($(now_ms) - started))"
+      return 0
+    fi
+  else
+    stop_child application "$APP_PID"; APP_PID=
+    if ! start_application "$CANDIDATE"; then
+      stop_child application "$APP_PID" || true; APP_PID=
+      printf 'Application did not become ready within three seconds.\n' >"$RUN/failure.log"
+      failure_state START "$CANDIDATE" "$RUN/failure.log" "$(($(now_ms) - started))"
+      if [[ -n "$previous" ]]; then start_application "$previous" || return 1; else return 1; fi
+      return 0
+    fi
+    ACTIVE="$CANDIDATE"
+  fi
+  elapsed=$(($(now_ms) - started))
+  "$CONTROL" --success "$CANDIDATE" "$ACTIVE" "$elapsed" "$(head_commit)" "$STATE" >"$RUN/state.next"
+  mv -f -- "$RUN/state.next" "$STATE"; publish_airc
+  printf 'FL_DEV_NATIVE_READY=1 BUILD=%s\n' "$GENERATION"
+  if [[ "$kind" == css ]]; then notify css-reload; else notify soft-reload; fi
+}
+
+"$CONTROL" --initial "$(head_commit)" >"$STATE"
+instance="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+setsid env FL_NATIVE_DEV_INSTANCE="$instance" "$FREELANG_NATIVE_DEV_SERVER" >"$RUN/hmr.log" 2>&1 &
+HMR_PID=$!
+ready hmr "$HMR_PID" "http://127.0.0.1:$FL_HMR_PORT/~health" "$instance" || exit 1
+mkfifo -- "$RUN/watch.pipe"
+exec {WATCH_FD}<>"$RUN/watch.pipe"
+setsid "$FREELANG_NATIVE_DEV_WATCH_HOST" "$WEB" >"$RUN/watch.pipe" 2>"$RUN/watch.stderr" &
+WATCH_PID=$!
+if ! IFS= read -r -t 3 -u "$WATCH_FD" event || [[ "$event" != READY ]]; then printf 'Source notification host readiness failed.\n' >&2; exit 1; fi
+"$WATCH" --snapshot "$WEB" >"$RUN/previous.json"
+rebuild source
+while true; do
+  healthy_children || exit 1
+  watch_event || exit 1
+  if ((DIRTY && $(now_ms) >= DEBOUNCE)); then
+    DIRTY=0
+    "$WATCH" --snapshot "$WEB" >"$RUN/current.json"
+    "$WATCH" --diff "$RUN/previous.json" "$RUN/current.json" >"$RUN/changes.json"
+    kind="$("$CONTROL" --decision "$RUN/previous.json" "$RUN/current.json")"
+    mv -f -- "$RUN/current.json" "$RUN/previous.json"
+    case "$kind" in
+      none) printf 'FL_DEV_NATIVE_CHANGE=NONE\n';;
+      css|source) rebuild "$kind";;
+      *) printf 'Invalid Native rebuild decision.\n' >&2; exit 1;;
+    esac
+  fi
+done

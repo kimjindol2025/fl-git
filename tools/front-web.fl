@@ -287,6 +287,8 @@
                   (get state "records"))) "")
         prefix (str "; Native web bundle. Build artifacts only.\n"
                     "(if (= (env-get \"FL_HTTP_HOST\") \"127.0.0.1\") nil (throw \"Native web bundle requires FL_HTTP_HOST=127.0.0.1\"))\n(load " (fl-source-quote server-support) ")\n" css-source
+                    (if (get plan "development")
+                      "(server_get \"/~native/ready\" (fn [req] (server_header (server_json {\"ok\" true} 200) \"x-fl-native-instance\" (or (env-get \"FL_NATIVE_DEV_INSTANCE\") \"\"))))\n(server_get \"/public/app.css\" (fn [req] (server_header (server_header (server_status 200 (file_read (str (or (env-get \"FL_WEB_PUBLIC\") \"public\") \"/app.css\"))) \"Content-Type\" \"text/css; charset=utf-8\") \"Cache-Control\" \"no-store\")))\n" "")
                     "(server_static (or (env-get \"FL_WEB_PUBLIC\") \"public\") \"/public\")\n" static-routing)
         body (str-join (map (fn [entry] (get entry "source")) entries) "\n")
         routing (str-join (map fl-web-register-route

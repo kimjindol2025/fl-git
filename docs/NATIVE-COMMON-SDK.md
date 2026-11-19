@@ -30,7 +30,7 @@ flock -o /tmp/fl-heavy.lock ./scripts/fl-sdk-package-native <existing-output-dir
 
 The command builds a new fl-sdk directory without replacing an existing one.
 It bundles the compiler, CLI/TUI, page checker, FLP/web/style/island tools and
-initial Native development-service/watcher tools. The matching headers, archive
+Native development-service/watcher/control tools. The matching headers, archive
 and curl shared library accompany them. Build/generated-C logs and input/source
 hashes remain available. Memory is capped at 2 GiB. No package is downloaded or
 installed and no global configuration is written.
@@ -132,3 +132,10 @@ is inferred. Native supervision, complete diagnostics/metadata, headless and
 deployment migration and actual application acceptance remain unfinished.
 The default development entry still requires its complete migration. Overall
 goal active, commercial HOLD, deployment NO.
+
+The subsequent [Native supervisor milestone](NATIVE-DEV-SUPERVISOR.md) adds
+`fl-dev-control` and its activation variable to the SDK. The notification host
+also exposes a monotonic clock for the unchanged readiness/stop bounds. Its
+separate evidence records the rebuilt package and relocated execution. This
+does not replace the earlier complete compiler/runtime qualification or imply
+headless, complete metadata, deployment or application acceptance.

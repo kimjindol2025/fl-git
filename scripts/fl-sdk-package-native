@@ -44,7 +44,7 @@ sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
     src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
     src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
-    tools/*.fl native/dev-watch.c scripts/fl-sdk-package-native
+    tools/*.fl native/dev-watch.c scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native
 ) >"$RUN/provenance/frontend.before.sha256"
 "$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
 ar --version >"$RUN/provenance/ar.txt"
@@ -60,6 +60,7 @@ specs=(
   'flp-compile|tools/flp-compile.fl' 'fl-front-build|tools/fl-front-build.fl'
   'fl-style-compile|tools/fl-style-compile.fl' 'fl-island-compile|tools/fl-island-compile.fl'
   'fl-dev-server|tools/fl-dev-server.fl' 'fl-dev-watch|tools/fl-dev-watch.fl'
+  'fl-dev-control|tools/fl-dev-control.fl'
 )
 for spec in "${specs[@]}"; do
   IFS='|' read -r name source <<< "$spec"
@@ -100,6 +101,7 @@ export FREELANG_NATIVE_ISLAND_TOOL="$fl_sdk_root/bin/fl-island-compile"
 export FREELANG_NATIVE_DEV_SERVER="$fl_sdk_root/bin/fl-dev-server"
 export FREELANG_NATIVE_DEV_WATCH="$fl_sdk_root/bin/fl-dev-watch"
 export FREELANG_NATIVE_DEV_WATCH_HOST="$fl_sdk_root/bin/fl-dev-watch-host"
+export FREELANG_NATIVE_DEV_CONTROL="$fl_sdk_root/bin/fl-dev-control"
 export FREELANG_NATIVE_CURL_LIBRARY="$fl_sdk_root/lib/libcurl.so"
 export LD_LIBRARY_PATH="$fl_sdk_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LIBRARY_PATH="$fl_sdk_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"

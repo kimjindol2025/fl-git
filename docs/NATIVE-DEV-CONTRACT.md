@@ -125,6 +125,13 @@ retains the visual/pointer limitations. Rebuild supervision, complete metadata
 and diagnostics, headless execution, deployment migration and actual application
 flows remain required before switching the default development entry.
 
+The later [Native supervisor](NATIVE-DEV-SUPERVISOR.md) implements the explicit
+development entry, serialized content rebuilds, CSS publication, owned readiness,
+restart/rollback and failure bookkeeping. Its receipt is separate from the
+earlier component/browser checks. Complete metadata and diagnostics, headless
+execution, deployment migration and actual application flows remain required;
+the default entry is not switched by that supervisor milestone.
+
 
 ## Verification and deployment boundary
 

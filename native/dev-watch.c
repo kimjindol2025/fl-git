@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 typedef struct { int descriptor, seen; } Watch;
 static Watch* watches;
@@ -81,6 +82,12 @@ static int refresh(int count, char** roots) {
     return 0;
 }
 int main(int argc, char** argv) {
+    if (argc == 2 && !strcmp(argv[1], "--clock-ms")) {
+        struct timespec now;
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) { perror("Native monotonic clock"); return 1; }
+        printf("%lld\n", (long long)now.tv_sec * 1000 + now.tv_nsec / 1000000);
+        return 0;
+    }
     if (argc < 2) { fprintf(stderr, "Usage: fl-dev-watch-host <directory> [directory...]\n"); return 2; }
     struct sigaction action = {0};
     action.sa_handler = stop_watch;

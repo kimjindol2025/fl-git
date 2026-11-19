@@ -1,0 +1,30 @@
+(load "./front-dev-control.fl")
+(try
+  (let [args (cli-args) mode (get args 0) count (length args)]
+    (cond
+      [(and (= mode "--initial") (= count 2))
+       (fl-dev-control-write {"schema" "fl-dev/state/1" "status" "building" "ok" false
+         "generation" 0 "time" (now-iso) "repoCommit" (get args 1) "issues" [] "routes" []})]
+      [(and (= mode "--decision") (= count 3))
+       (println (fl-dev-control-decision (json_parse (file_read (get args 1))) (json_parse (file_read (get args 2)))))]
+      [(and (= mode "--css") (= count 3))
+       (fl-dev-control-css (get args 1) (json_parse (file_read (get args 2))))]
+      [(and (= mode "--success") (= count 6))
+       (fl-dev-control-write (fl-dev-control-success (get args 1) (get args 2) (fl-dev-control-elapsed (get args 3))
+         (get args 4) (fl-dev-control-read (get args 5) {})))]
+      [(and (= mode "--failure") (= count 6))
+       (fl-dev-control-write (fl-dev-control-failure (get args 1) (get args 2) (get args 3)
+         (fl-dev-control-elapsed (get args 4)) (fl-dev-control-read (get args 5) {})))]
+      [(and (= mode "--airc") (= count 3))
+       (let [text (file_read (get args 1)) previous (json_parse text)
+             state (json_parse (file_read (get args 2))) changes (get state "errorLoop")]
+         (if (not (map? previous)) (throw "Development HANDOFF.airc requires a JSON object") nil)
+         (if (= (+ (length (or (get changes "new") [])) (length (or (get changes "resolved") []))) 0)
+           (print text) (fl-dev-control-write (fl-dev-control-airc previous state))))]
+      [(and (= mode "--translate") (= count 3))
+       (print (fl-dev-control-translate (json_parse (file_read (get args 1))) (file_read (get args 2))))]
+      [true (do (fl_stderr_write "Usage: fl-dev-control --initial/--decision/--css/--success/--failure/--airc/--translate\n")
+                (process-exit 2))]))
+  (catch [error]
+    (fl_stderr_write (str "FL_DEV_NATIVE_CONTROL=FAIL " (error-message error) "\n"))
+    (process-exit 1)))

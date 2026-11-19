@@ -16,6 +16,10 @@
               ["Access-Control-Allow-Methods" "GET, POST, OPTIONS"]
               ["Access-Control-Allow-Headers" "Content-Type"]]))
 (defn fl-dev-json [value status] (fl-dev-cors (server_json value status)))
+(defn fl-dev-health [req]
+  (let [response (fl-dev-json {"ok" true} 200) instance (env-get "FL_NATIVE_DEV_INSTANCE")]
+    (if (and (string? instance) (not (= instance "")))
+      (server_header response "x-fl-native-instance" instance) response)))
 (defn fl-dev-options [req]
   (if (= (get req "method") "OPTIONS") (fl-dev-cors (server_status 204 "")) nil))
 
@@ -96,7 +100,7 @@
 (defn fl-dev-service []
   (server_use "/*" "fl-dev-options")
   (server_sse "/~hmr" "fl-dev-stream")
-  (server_get "/~health" (fn [req] (fl-dev-json {"ok" true} 200)))
+  (server_get "/~health" "fl-dev-health")
   (server_get "/~errors" (fn [req] (fl-dev-json @fl-dev-errors 200)))
   (server_post "/~errors" "fl-dev-add-error")
   (server_delete "/~errors" "fl-dev-clear-errors")

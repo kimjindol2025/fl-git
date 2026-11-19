@@ -1,0 +1,152 @@
+{
+  "schema": "native-dev-supervisor-evidence/1",
+  "date": "2026-11-20",
+  "status": {
+    "overallGoal": "ACTIVE",
+    "commercial": "HOLD",
+    "productionDeployment": "NO",
+    "defaultDevelopmentEntry": "UNCHANGED"
+  },
+  "source": {
+    "frontendBase": "17e000d5ece1041edde3f54ea647b9f8aa18ae6e",
+    "fxQualifiedBase": "a50d74bf28c2fd98d59a735251302fbf37547b17",
+    "ownedSourceSha256": {
+      "tools/front-dev-control.fl": "7e01c157de4ab2db23a85cc9fd3f206e3a372b46cf7f8393054c458ec8176076",
+      "tools/fl-dev-control.fl": "e5658f3570c7a14912b2f3b5705946690b580fd0ea08a88a9bea1e1b8e97b585",
+      "tools/front-dev.fl": "d3d7eee1564ae9fc9c11112ba81b1fbe2a5f6fe32e2fd7fdaf4dbe65725fb692",
+      "tools/front-web.fl": "5b7fe19b6f861e30b44f1201e314ccc05bb20e73c9487590f4ea173eb5875362",
+      "native/dev-watch.c": "c982067f9e96164ec7ff52634c40e4b70585430e6cf71e58795fc10341992774",
+      "scripts/fl-dev-native": "d267277a794088bc51ca5b6585c21e42c3710e4f2b9017da6902488f8a024413",
+      "scripts/fl-sdk-package-native": "6d0e906e8fca5d135bf658d99997a7f76083e7e28363798e29b5f2a0550ce4a3"
+    },
+    "foreignFilesPreserved": 4,
+    "seedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767"
+  },
+  "sdk": {
+    "compilerSha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+    "compilerCSha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+    "runtimeArchiveSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "manifestSha256": "f49da4c3c3d1d0c22aaba4ce23c4f1a0fb3f8ed879e4702e2e5462811f27916d",
+    "binaryCount": 12,
+    "compilerAndRuntimeReusedFrom": "native-dev-coherent-20261120",
+    "relocatedPathContains": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "LF"
+    ],
+    "activationAndManifest": "PASS",
+    "packagedSupervisor": "19/19",
+    "packagedControl": "23/23"
+  },
+  "checks": {
+    "originalApi": "83/83",
+    "originalWatcher": "23/23",
+    "normalIntegrationAccepted": {
+      "passed": 8,
+      "cases": [
+        "no-source-airc-created",
+        "new-quoted-css-atomically-published",
+        "removed-css-unpublished",
+        "burst-debounce-single-restart",
+        "edit-during-build-not-lost",
+        "actual-sse-after-readiness",
+        "normal-cleanup",
+        "product-node-execution-zero"
+      ],
+      "receipt": "lifecycle-v4",
+      "note": "The separate incorrect lock trace count failed and remains preserved; successful exec-only count is verified in the following receipt."
+    },
+    "boundaryAndTraceResume": {
+      "passed": 16,
+      "total": 16,
+      "cases": [
+        "six-successful-locked-builds-in-trace",
+        "hmr-occupied-refused",
+        "hmr-existing-listener-preserved",
+        "occupied-hmr-cleanup",
+        "application-occupied-refused",
+        "application-existing-listener-preserved",
+        "occupied-application-cleanup",
+        "initial-build-failure-nonzero",
+        "initial-failure-no-hmr-event",
+        "initial-malformed-cleanup",
+        "application-death-fails-loudly",
+        "unexpected-application-cleanup",
+        "hmr-death-fails-loudly",
+        "unexpected-hmr-cleanup",
+        "watch-death-fails-loudly",
+        "unexpected-watch-cleanup"
+      ],
+      "receipt": "lifecycle-resume-v6"
+    },
+    "rollbackAndBuildTermination": {
+      "passed": 6,
+      "total": 6,
+      "cases": [
+        "failed-start-rolls-back-prior-bundle",
+        "failed-start-no-success-event",
+        "startup-failure-repair-ready",
+        "rollback-cleanup",
+        "stop-building-cleanup",
+        "stop-during-build-no-live-descendants"
+      ]
+    },
+    "nodeFamilyExecutionInCollectedProductBuildTraces": 0,
+    "sharedLockSuccessfulBuildCallsInNormalTrace": 6,
+    "newHandwrittenProductJsTsPython": 0,
+    "protectedTestRunnerExpectationOrBoundChanges": 0,
+    "ownedNativeProcessesAfterChecks": 0
+  },
+  "bounds": {
+    "virtualMemoryKiB": 2097152,
+    "readinessMilliseconds": 3000,
+    "stopMillisecondsPerChild": 3000,
+    "debounceMilliseconds": 250
+  },
+  "retainedFailuresAndCorrections": [
+    {
+      "receipt": "smoke-v1",
+      "finding": "SDK libcurl made host curl fail symbol lookup; isolate host curl library lookup without global changes."
+    },
+    {
+      "receipt": "smoke-v2",
+      "finding": "18/19 passed; Bash exited SIGSEGV during normal termination and left three owned Native children. Those received normal TERM and drained. Job-table inspection now stays in the owning shell; subsequent normal termination checks pass. Exact internal Bash cause remains unproven."
+    },
+    {
+      "receipt": "lifecycle-v1",
+      "finding": "Private SSE request omitted Accept: text/event-stream and correctly received 404. The diagnostic now uses the original API control request header."
+    },
+    {
+      "receipt": "lifecycle-v2",
+      "finding": "http.client detaches its connection socket for an unbounded SSE response. The private driver retains its own socket reference before getresponse; readiness bounds are unchanged."
+    },
+    {
+      "receipt": "lifecycle-v3",
+      "finding": "Subscription raced initial startup notification. It received six valid ready/HTTP200 events. The diagnostic now completes startup notification before subscribing and still requires exactly five change events."
+    },
+    {
+      "receipt": "lifecycle-v4",
+      "finding": "Private lock audit counted PATH lookup failures and setsid arguments. The exact six successful flock execs are verified against the same retained trace."
+    },
+    {
+      "receipt": "lifecycle-resume-v5",
+      "finding": "Real HMR death between readiness and notification left ready state on curl failure. Product notification failure now records HMR failure and exits nonzero; identical boundary cases pass in v6."
+    },
+    {
+      "receipt": "resilience-v1",
+      "finding": "Private rollback polling raised ConnectionRefusedError during the normal restart gap. It now polls within the original three-second readiness bound and retains the real prior-content assertion."
+    }
+  ],
+  "remaining": [
+    "full legacy diagnostic catalog and metadata/store/contract readiness",
+    "live log translation and expression-level source maps",
+    "Native headless /~ai/test",
+    "default fl-dev switch",
+    "artifact retention policy",
+    "deployment Node removal",
+    "actual application/Git workflows and full visual/pointer browser acceptance",
+    "latest whole DB Native gate and commercial safety/recovery/concurrency/load/operations"
+  ],
+  "qualificationScope": "This changes frontend supervision only. The accepted R10 FX compiler/runtime pair is reused; no new bootstrap or whole DB qualification is claimed."
+}
