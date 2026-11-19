@@ -1,0 +1,168 @@
+{
+  "schema": "native-fix-preview-evidence/1",
+  "date": "2026-11-20",
+  "status": {
+    "goal": "ACTIVE",
+    "commercial": "HOLD",
+    "productionDeployment": "NO",
+    "defaultFlDev": "UNCHANGED",
+    "sourceApplication": "NOT_IMPLEMENTED"
+  },
+  "source": {
+    "frontendBase": "974a7b1db1bc8f0f2227bf3a8382d4334fb4ecbf",
+    "ownedSha256": {
+      "tools/front-fix-source.fl": "a47bdcd02e73dff4ac9f82f148d2775dba610c22d38c8b25f203bd71f8edf2a0",
+      "tools/front-fix.fl": "859ceb8196eed4c58a53f5929cd5dd91dd92219f14bbaa2ef37a576804faa0db",
+      "tools/fl-front-fix.fl": "94780c9ce7e4b8e935b726da5a87006bccc120a18cb7cbf4a16a8c6e4dcc85fe",
+      "scripts/fl-front-fix-native": "d3185d6c19aa4d6236569992e0a73f4f2ebfeff09d8036c85dbf8044c4dfc429",
+      "scripts/fl-front-build-native": "b5f9357354e7bb62ef09ceaefc9fb764fdbade8da861ba08533e92923314c23e",
+      "scripts/fl-sdk-package-native": "267f2d2e602f935ecdb5c6cdd0c05d0e276f87cd96707ca37295c7df761fd253",
+      "tools/fl-front-build.fl": "87f6868f623e11b7238a7352a2e2ca1d16d98184bb1099d4114230d57a4b2240",
+      "scripts/fl-dev-native": "b30345f35ba343026f4898fb9d83fe57840c843b952aea29874ca31cce57b0a3"
+    },
+    "foreignFilesPreserved": 4,
+    "bootstrapSeedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767"
+  },
+  "sdk": {
+    "manifestSha256": "5e4721f8a725c2cc9225e7f907fb128d68e526ad99fabbfc5d29b58570a7a93b",
+    "compilerSha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+    "compilerCSha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+    "runtimeArchiveSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "fixToolSha256": "3d8b5051803e81f224fd9a0c07b224af3592e0e2b8b73af8e27114ba3c074023",
+    "webToolSha256": "477e2c85f7b7ddc95597512c4708639d39673712b89844a5fcec36f1cfb25743",
+    "relocation": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "LF"
+    ],
+    "manifestBeforeAfter": "PASS",
+    "candidateGeneratedCMatchesPackage": [
+      "fl-front-fix(v6)",
+      "fl-front-build(v2)"
+    ],
+    "all13Sdk3BinariesIdenticalToValidatedSdk2": true,
+    "qualification": "Accepted R10 compiler/runtime reused. No new bootstrap or whole DB gate. SDK3 provenance includes corrected Bash watcher reader; preview/core/entry assertions use byte-identical SDK2 binaries and identical dry/build host sources. Final Chrome uses SDK3 and the corrected watcher host."
+  },
+  "coverage": {
+    "nativePreviewControls": "281/281",
+    "fileAndStateBoundaries": "37/37",
+    "builderEntryAndLiteralPaths": "18/18",
+    "nativeCoreAndHttpPreviewReconstruction": "61/61",
+    "watchFramingOldNewAndMalformed": "20/20",
+    "finalSdkChromeHmrReconstruction": "32/32",
+    "ruleFamilies": [
+      "reserved-word",
+      "json-parse-hyphen",
+      "let-shadow",
+      "helper-load-order",
+      "req-key-collision"
+    ],
+    "actualFrontendReadOnlyPreview": {
+      "status": "PASS",
+      "initialSources": 19,
+      "closureSources": 20,
+      "closureSourceBytes": 248860,
+      "additionalLiteralDependencies": 1,
+      "filesPlanned": 0,
+      "safe": true,
+      "sourceTreeMetadataUnchanged": true,
+      "allFlFlxFlpBytesUnchanged": true,
+      "wholePreviewLimitSeconds": 15,
+      "actualAppBrowserGitFlow": "NOT_RUN",
+      "qualification": "Source preview of preserved actual input only. Changed-file Native parse validation has zero changed files here; no whole-app runtime claim."
+    },
+    "nativeRuntimeScope": {
+      "beforeAfterExactCorePairs": 4,
+      "reservedBindingAfterOnlyCases": 3,
+      "realHttpFormBeforeAfter": true,
+      "fieldCollision": "Existing content field remains decoy; old text/new content2 field returns the same right value.",
+      "previewApplication": "Private diagnostic reconstruction only; product --fix refuses."
+    },
+    "browserScope": {
+      "baselineAssertions": 28,
+      "previewAssertions": 4,
+      "previewEdits": "Four let-shadow spans in one island; nested local helper calculation still initializes counter at2.",
+      "reconstruction": "Private diagnostic fixture only, not product source application.",
+      "preservedAssertions": "Real mount/click, store and atoms, CSS/source HMR, Git-head contract invalidation/repair, advisory removal, initializer nonexecution and normal owned cleanup.",
+      "snapshotCorrection": "One guarded DOM/store snapshot from a new performance.timeOrigin within the original3-second repair observation; no arbitrary JS exception swallowing."
+    },
+    "productNodeFamilyExecutions": 0,
+    "privatePython": "Diagnostics and fixture reconstruction only, not product policy/implementation.",
+    "newHandwrittenProductJsTsPython": 0,
+    "protectedTestRunnerExpectationBoundChanges": 0,
+    "ownedLiveNativeProcesses": 0,
+    "browserOwnedTabClosed": true,
+    "screenshotAndPhysicalPointer": "NOT_VERIFIED"
+  },
+  "bounds": {
+    "virtualMemoryKiB": 2097152,
+    "previewCaseSeconds": 5,
+    "actualWholePreviewSeconds": 15,
+    "nativeFixtureCompileSeconds": 15,
+    "nativeFixtureRuntimeSeconds": 3,
+    "browserObservationSeconds": 3,
+    "serviceReadinessSeconds": 3,
+    "normalStopSeconds": 3,
+    "existingBuildObservationSeconds": 90,
+    "watchPollSeconds": 0.05,
+    "watchDebounceMilliseconds": 250,
+    "sharedHeavyLock": "UNCHANGED"
+  },
+  "qualificationLimits": [
+    "Read-only previews only; source application, freshness transaction, backup/publication and rollback still pending.",
+    "Only qualified simple binding forms; namespaces, unsupported forms and deferred initializer references require review.",
+    "Request-key migration requires coordinated field/readers; raw-body/API writers and custom readers need explicit data-contract work.",
+    "Generated FLP output is not rewritten; FLP contracts, dynamic imports and consumers outside the selected graph are not certified.",
+    "Validation is Native parsing of changed files, not whole-program build/runtime acceptance.",
+    "Default development entry, headless runner, complete JSON/source-map parity, deployment and actual Git app flows remain open."
+  ],
+  "retainedFailuresAndCorrections": [
+    {
+      "receipt": "plan-controls-v1",
+      "failure": "Initial private fixture placed retained artifacts beneath the project while the initial new-host guard forbade it.",
+      "correction": "Private fixture moved artifacts outside the project. Final public host follows the existing builder output contract: artifacts may be inside the project but must remain outside web sources. No protected compiler path guard changed."
+    },
+    {
+      "receipt": "plan-controls-v2",
+      "failure": "Combined Unicode/CRLF fixture also contained #| block comments, which the Native parser rejects.",
+      "correction": "Valid Unicode/CRLF exact-byte assertion remains separately. The unchanged block-comment input is required to fail Native parsing without source changes; comments were not stripped and parser rules were not relaxed."
+    },
+    {
+      "receipt": "runtime-v1",
+      "failure": "Private form POST expectation incorrectly included the GET stylesheet prefix.",
+      "correction": "v2/v3 retain exact whole POST expectation received=right for both old and reconstructed sources. Existing content field stays distinct; no contains-only relaxation."
+    },
+    {
+      "receipt": "actual-preview-v1/v2/v3",
+      "failure": "Original Native policy exceeded the2GiB allocator limit; intermediate collection optimization hit the unchanged15-second deadline, then a string allocation failure.",
+      "correction": "Binary-carry token/tree/string/edit builders, balanced flattening, deduplicated key set, UTF16 slices instead of whole-source rescans, and local bounded selection avoid immutable filter-prefix copies. v4(candidate6) and v5(SDK2/final-identical binaries) pass the same full preserved input under the same2GiB/15s bounds. Runtime archive unchanged; failures retained."
+    },
+    {
+      "receipt": "preview-browser-v1",
+      "failure": "31/32: repeated store reads raced final navigation and saw window._fl unavailable.",
+      "correction": "Private observer samples DOM/store together with document timeOrigin in the same original3-second wait. Field assertions remain; no product behavior was changed to mask the observation."
+    },
+    {
+      "receipt": "preview-browser-v2",
+      "failure": "Watcher exited with NATIVE_DEV_WATCH: Unexpected source notification CHANGECHANGE after CSS reload.",
+      "correction": "Bash character reads preserve LF regardless of interrupted read status. Deterministic old/new controls reproduce old concatenation failure, preserve original partial-input tests and reject malformed records. Final SDK3 Chrome32/32 passes. Poll/debounce/readiness/stop bounds and Native producer unchanged."
+    }
+  ],
+  "legacyFixReference": {
+    "module": "web/fl-front-fix.js",
+    "availableCheckoutAndHistory": "ABSENT confirmed earlier",
+    "implementationParity": "NOT_CLAIMED",
+    "contract": "Five catalog machine-applicable families with explicit review cases."
+  },
+  "remaining": [
+    "Product --fix source application and recovery; complete fix-site/dataflow qualification",
+    "headless island tests and /~ai/test",
+    "full JSON fields/positions and live/expression source maps",
+    "advanced namespace/module/dependency HMR qualification",
+    "default development, retention and deployment tools",
+    "actual Git Provider app and visual/pointer workflows",
+    "latest whole DB safety/recovery/writer/concurrency/load/backup/operations"
+  ],
+  "privacy": "Paths/owners: <가림>"
+}

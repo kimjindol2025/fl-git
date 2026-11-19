@@ -1,0 +1,154 @@
+; Concrete source nodes keep UTF-16 spans; application expressions never run.
+(load "./front-source.fl")
+(load "./front-static-context.fl")
+
+; The runtime's immutable push copies its prefix. Binary carries keep collection
+; construction bounded without changing the runtime or source-language rules.
+(defn fl-fix-chunk-add [forest chunk]
+  (loop [nodes forest part chunk]
+    (if (and (not (= nodes nil)) (= (length (get nodes "chunk")) (length part)))
+      (recur (get nodes "rest") (concat (get nodes "chunk") part))
+      {"chunk" part "rest" nodes})))
+(defn fl-fix-chunks-finish [forest]
+  (loop [nodes forest result []]
+    (if (= nodes nil) result (recur (get nodes "rest") (concat (get nodes "chunk") result)))))
+(defn fl-fix-join-range [groups start end]
+  (let [size (- end start)]
+    (cond [(= size 0) []] [(= size 1) (get groups start)]
+      [true (let [middle (+ start (math-floor (/ size 2)))]
+        (concat (fl-fix-join-range groups start middle) (fl-fix-join-range groups middle end)))])))
+(defn fl-fix-join [groups] (fl-fix-join-range groups 0 (length groups)))
+(defn fl-fix-select-values [predicate values]
+  (loop [at 0 chunks nil]
+    (if (= at (length values)) (fl-fix-chunks-finish chunks)
+      (let [value (get values at)]
+        (recur (+ at 1) (if (predicate value) (fl-fix-chunk-add chunks [value]) chunks))))))
+
+(defn fl-fix-triple? [units at]
+  (and (= (get units at) "\"") (= (get units (+ at 1)) "\"") (= (get units (+ at 2)) "\"")))
+(defn fl-fix-string-end [units at]
+  (let [triple (fl-fix-triple? units at)]
+    (loop [i (+ at (if triple 3 1))]
+      (cond
+        [(>= i (length units)) (throw "E_FIX_STRING: unterminated string")]
+        [(and triple (fl-fix-triple? units i)) (+ i 3)]
+        [(and (not triple) (= (get units i) "\"")) (+ i 1)]
+        [(and (not triple) (= (get units i) "\\")) (recur (+ i 2))]
+        [true (recur (+ i 1))]))))
+(defn fl-fix-block-end [units at]
+  (loop [i (+ at 2) depth 1]
+    (cond
+      [(>= i (length units)) (throw "E_FIX_COMMENT: unterminated block comment")]
+      [(and (= (get units i) "#") (= (get units (+ i 1)) "|")) (recur (+ i 2) (+ depth 1))]
+      [(and (= (get units i) "|") (= (get units (+ i 1)) "#"))
+       (if (= depth 1) (+ i 2) (recur (+ i 2) (- depth 1)))]
+      [true (recur (+ i 1) depth)])))
+(defn fl-fix-line-end [units at]
+  (loop [i at] (if (or (>= i (length units)) (= (get units i) "\n")) i (recur (+ i 1)))))
+(defn fl-fix-space? [char]
+  (or (= char " ") (= char "\t") (= char "\r") (= char "\n") (= char ",") (= char "\x0b") (= char "\x0c")))
+(defn fl-fix-atom-end [units at]
+  (loop [i at]
+    (if (or (>= i (length units)) (fl-fix-space? (get units i))
+            (str-includes "()[]{}\";@'" (get units i))
+            (and (= (get units i) "#") (= (get units (+ i 1)) "|"))) i (recur (+ i 1)))))
+(defn fl-fix-position [units start end line column]
+  (loop [i start row line col column]
+    (if (= i end) {"line" row "column" col}
+      (recur (+ i 1) (+ row (if (= (get units i) "\n") 1 0))
+        (if (= (get units i) "\n") 1 (+ col 1))))))
+(defn fl-fix-tokens [source]
+  (let [units (str-split source "")]
+    (loop [i 0 line 1 column 1 tokens nil]
+      (if (= i (length units)) (fl-fix-chunks-finish tokens)
+        (let [char (get units i) comment (or (= char ";") (and (= char "#") (= (get units (+ i 1)) "|")))
+              space (fl-fix-space? char)
+              kind (cond [(= char "\"") "string"] [(or (= char "(") (= char "[") (= char "{")) "open"]
+                     [(and (= char "#") (= (get units (+ i 1)) "(")) "open"]
+                     [(or (= char ")") (= char "]") (= char "}")) "close"]
+                     [(or (= char "@") (= char "'")) "prefix"] [true "atom"])
+              end (cond [space (+ i 1)] [(= char ";") (fl-fix-line-end units i)]
+                    [comment (fl-fix-block-end units i)] [(= kind "string") (fl-fix-string-end units i)]
+                    [(and (= char "#") (= (get units (+ i 1)) "(")) (+ i 2)]
+                    [(= kind "atom") (fl-fix-atom-end units i)] [true (+ i 1)])
+              position (cond [(= char "\n") {"line" (+ line 1) "column" 1}]
+                         [(or comment (= kind "string")) (fl-fix-position units i end line column)]
+                         [true {"line" line "column" (+ column (- end i))}])]
+          (if (= i end) (throw "E_FIX_TOKEN: source reader made no progress") nil)
+          (recur end (get position "line") (get position "column")
+            (if (or space comment) tokens
+              (fl-fix-chunk-add tokens [{"kind" kind "text" (str-join (slice units i end) "") "start" i "end" end "line" line "column" column}]))))))))
+(defn fl-fix-read [tokens index]
+  (let [token (get tokens index) kind (get token "kind") text (get token "text")]
+    (cond
+      [(= token nil) (throw "E_FIX_FORM: expression required")]
+      [(= kind "close") (throw "E_FIX_FORM: unmatched closing delimiter")]
+      [(= kind "prefix")
+       (let [read (fl-fix-read tokens (+ index 1)) node (get read "node")]
+         {"node" (assoc token "items" [node] "end" (get node "end")) "next" (get read "next")})]
+      [(= kind "open")
+       (let [close (get {"(" ")" "#(" ")" "[" "]" "{" "}"} text)]
+         (loop [at (+ index 1) nodes nil]
+           (let [next (get tokens at)]
+             (cond
+               [(= next nil) (throw "E_FIX_FORM: missing closing delimiter")]
+               [(= (get next "kind") "close")
+                (if (not (= (get next "text") close)) (throw "E_FIX_FORM: delimiter mismatch")
+                  {"node" (assoc token "items" (fl-fix-chunks-finish nodes) "end" (get next "end")) "next" (+ at 1)})]
+               [true (let [read (fl-fix-read tokens at)] (recur (get read "next") (fl-fix-chunk-add nodes [(get read "node")])))]))))]
+      [true {"node" token "next" (+ index 1)}])))
+(defn fl-fix-parse [source]
+  (let [tokens (fl-fix-tokens source)]
+    (loop [at 0 nodes nil]
+      (if (= at (length tokens)) (fl-fix-chunks-finish nodes)
+        (let [read (fl-fix-read tokens at)] (recur (get read "next") (fl-fix-chunk-add nodes [(get read "node")])))))))
+(defn fl-fix-name [node]
+  (let [text (get node "text")]
+    (if (and (= (get node "kind") "atom") (string? text)
+             (regex_match text "^\\$?[A-Za-z_][A-Za-z0-9_!?-]*$"))
+      (fl-static-bare text) nil)))
+(defn fl-fix-items [node] (or (get node "items") []))
+(defn fl-fix-op [node]
+  (if (and (= (get node "kind") "open") (fl-static-has? ["(" "#("] (get node "text")))
+    (fl-fix-name (get (fl-fix-items node) 0)) nil))
+(defn fl-fix-hex [char]
+  (if (= char nil) -1 (let [at (str-index-of "0123456789abcdef" (str-to-lower char))] at)))
+(defn fl-fix-string [node]
+  (if (not (= (get node "kind") "string")) nil
+    (let [text (get node "text") units (str-split text "") triple (fl-fix-triple? units 0)]
+      (if triple (str-slice text 3 (- (length text) 3))
+        (loop [i 1 parts nil]
+          (if (>= i (- (length units) 1)) (str-join (fl-fix-chunks-finish parts) "")
+            (let [char (get units i) next (get units (+ i 1))]
+              (if (not (= char "\\")) (recur (+ i 1) (fl-fix-chunk-add parts [char]))
+                (let [high (fl-fix-hex (get units (+ i 2))) low (fl-fix-hex (get units (+ i 3)))
+                      hex (and (= next "x") (>= high 0) (>= low 0))]
+                  (recur (+ i (if hex 4 2))
+                    (fl-fix-chunk-add parts [(if hex (char-from-code (+ (* high 16) low))
+                      (or (get {"n" "\n" "t" "\t" "r" "\r" "\"" "\"" "\\" "\\"} next) next))])))))))))))
+(defn fl-fix-all-nodes [nodes]
+  (fl-fix-join (map (fn [node] (concat [node] (fl-fix-all-nodes (fl-fix-items node)))) nodes)))
+(defn fl-fix-code-nodes [nodes]
+  (fl-fix-join (map (fn [node]
+    (if (or (and (= (get node "kind") "prefix") (= (get node "text") "'")) (= (fl-fix-op node) "quote")) []
+      (concat [node] (fl-fix-code-nodes (fl-fix-items node))))) nodes)))
+(defn fl-fix-normal [name] (str-replace-in name "-" "_"))
+(defn fl-fix-dir [path]
+  (let [parts (str-split path "/")] (str-join (slice parts 0 (- (length parts) 1)) "/")))
+(defn fl-fix-relative [from to]
+  (let [left (str-split from "/") right (str-split to "/")
+        common (loop [i 0]
+          (if (and (< i (length left)) (< i (length right)) (= (get left i) (get right i))) (recur (+ i 1)) i))
+        parents (map (fn [unused] "..") (slice left common (length left)))
+        path (str-join (concat parents (slice right common (length right))) "/")]
+    (if (str-starts-with path "..") path (str "./" path))))
+(defn fl-fix-apply-edits [source edits]
+  (let [sorted (arr-sort-by edits "start")]
+    (loop [at 0 offset 0 parts nil]
+      (if (= at (length sorted))
+        (str-join (fl-fix-chunks-finish (fl-fix-chunk-add parts [(str-slice source offset (length source))])) "")
+        (let [edit (get sorted at) start (get edit "start") end (get edit "end")]
+          (if (or (< start offset) (< end start) (> end (length source))
+                  (not (= (str-slice source start end) (get edit "before"))))
+            (throw "E_FIX_EDITS: overlapping or stale source spans") nil)
+          (recur (+ at 1) end (fl-fix-chunk-add parts [(str-slice source offset start) (get edit "after")])))))))

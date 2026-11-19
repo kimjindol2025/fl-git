@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Read-only fix planning. Native FreeLang owns rules, scopes and source edits.
+set -Eeuo pipefail
+umask 077
+usage() { printf 'Usage: fl-front-fix-native <web-root> [--fix-dry] [--artifacts existing-directory]\n'; }
+blocked() { printf 'FL_FIX_NATIVE=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+WEB= ARTIFACT_PARENT="${TMPDIR:-/tmp}" RETAIN=0
+while (($#)); do
+  case "$1" in
+    --help|-h) usage; exit 0;;
+    --fix-dry) shift;;
+    --fix) blocked 'Source application is not implemented yet. Use --fix-dry to inspect the plan.';;
+    --artifacts) (($# >= 2)) || blocked 'An existing artifact directory is required.'; ARTIFACT_PARENT="$2"; RETAIN=1; shift 2;;
+    --) shift; (($# == 1)) && [[ -z "$WEB" ]] || blocked 'Select one web directory.'; WEB="$1"; shift;;
+    -*) blocked 'Unknown fix option.';;
+    *) [[ -z "$WEB" ]] || blocked 'Select one web directory.'; WEB="$1"; shift;;
+  esac
+done
+[[ -n "$WEB" && -d "$WEB/pages" && -d "$ARTIFACT_PARENT" ]] || blocked 'Select existing web/pages and artifact directories.'
+WEB="$(cd -- "$WEB" && pwd -P)"
+PROJECT="$(cd -- "$WEB/.." && pwd -P)"
+ARTIFACT_PARENT="$(cd -- "$ARTIFACT_PARENT" && pwd -P)"
+case "$ARTIFACT_PARENT/" in "$WEB/"*) blocked 'Artifacts must be outside the selected source web tree.';; esac
+for configured in FREELANG_NATIVE_FIX_TOOL FREELANG_NATIVE_COMPILER; do
+  [[ -n "${!configured:-}" && -x "${!configured}" ]] || blocked "Configure $configured with the matching Native SDK."
+done
+[[ -f "${FREELANG_NATIVE_RUNTIME_INCLUDE:-}/v11-ops.h" && -f "${FREELANG_NATIVE_RUNTIME_INCLUDE:-}/native-symbols.h" ]] || blocked 'Matching Native SDK declarations required.'
+for name in find sort mktemp cmp; do command -v "$name" >/dev/null || blocked 'A required file host command is unavailable.'; done
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
+ulimit -c 0
+for name in pages islands; do [[ ! -L "$WEB/$name" ]] || blocked 'Source directory symlinks are not selected automatically.'; done
+RUN="$(mktemp -d -- "$ARTIFACT_PARENT/fl-fix-native.XXXXXX")"
+cleanup() { local rc=$?; if ((RETAIN == 0)); then rm -rf -- "$RUN"; fi; exit "$rc"; }
+trap cleanup EXIT
+if ((RETAIN)); then printf 'FL_FIX_NATIVE_ARTIFACTS=%s\n' "$RUN" >&2; fi
+directories=("$WEB/pages")
+if [[ -d "$WEB/islands" ]]; then directories+=("$WEB/islands"); fi
+source_inputs() {
+  LC_ALL=C find -P "${directories[@]}" \( -type d -name '.*' -prune \) -o \
+    \( -type f \( -name '*.flx' -o -name '*.fl' \) -print0 \) | LC_ALL=C sort -z
+}
+source_inputs >"$RUN/inputs.nul"
+LC_ALL=C find -P "${directories[@]}" \( -type d -name '.*' -print0 -prune \) -o -type l -print0 >"$RUN/facts.nul"
+"$FREELANG_NATIVE_FIX_TOOL" --plan "$WEB" "$PROJECT" "$RUN/inputs.nul" "$RUN" >"$RUN/outputs.nul"
+while IFS= read -r -d '' source; do
+  IFS= read -r -d '' ast || blocked 'Truncated Native fix output list.'
+  IFS= read -r -d '' original && IFS= read -r -d '' destination || blocked 'Truncated Native fix output paths.'
+  if [[ "$original" != "$destination" && -L "$destination" && ! -e "$destination" ]]; then
+    printf '%s\0' "$destination" >>"$RUN/facts.nul"
+  fi
+  parse_exit=0
+  "$FREELANG_NATIVE_COMPILER" --parse-json "$source" >"$ast" 2>"$ast.stderr" || parse_exit=$?
+  printf '%s\n' "$parse_exit" >"$ast.exit"
+done <"$RUN/outputs.nul"
+source_inputs >"$RUN/current-inputs.nul"
+cmp -s -- "$RUN/inputs.nul" "$RUN/current-inputs.nul" || blocked 'Source inventory changed during planning.'
+"$FREELANG_NATIVE_FIX_TOOL" --finalize "$RUN" "$RUN/facts.nul"

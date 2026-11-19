@@ -15,7 +15,11 @@ blocked() { trap - EXIT; echo "FL_WEB_NATIVE_BUILD=BLOCKED"; printf 'CAUSE=%s\n'
 [[ -n "$COMPILER" && -x "$COMPILER" ]] || blocked "Set FREELANG_NATIVE_COMPILER to the verified Native compiler."
 [[ -n "$WEB_TOOL" && -x "$WEB_TOOL" ]] || blocked "Set FREELANG_NATIVE_WEB_TOOL to its matching Native web compiler."
 [[ -f "$ARCHIVE" && -d "$INCLUDE" ]] || blocked "Set matching FREELANG_NATIVE_RUNTIME_ARCHIVE and FREELANG_NATIVE_RUNTIME_INCLUDE."
-[[ "$#" -eq 2 && -d "$1" && -d "$2" ]] || blocked "Usage: fl-front-build-native <web-root> <existing-output-directory>"
+[[ ( "$#" -eq 2 || "$#" -eq 3 ) && -d "$1" && -d "$2" ]] || blocked "Usage: fl-front-build-native <web-root> <existing-output-directory> [--fix-dry]"
+if [[ "$#" -eq 3 ]]; then
+  [[ "$3" == --fix-dry ]] || blocked 'Only --fix-dry is implemented; source application is still pending.'
+  exec "$ROOT/scripts/fl-front-fix-native" --fix-dry --artifacts "$2" -- "$1"
+fi
 WEB="$(cd -- "$1" && pwd -P)"
 OUTPUT="$(cd -- "$2" && pwd -P)"
 case "$OUTPUT/" in "$WEB/"*) blocked "Output directory must be outside the source web tree.";; esac

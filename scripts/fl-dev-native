@@ -125,23 +125,27 @@ healthy_children() {
   if [[ -n "$APP_PID" ]] && ! child_running "$APP_PID"; then printf 'Application stopped after readiness.\n' >"$RUN/failure.log"; failure_state RUNTIME "" "$RUN/failure.log" 0; return 1; fi
 }
 watch_event() {
-  local event= result=0
-  # Bash can time out after consuming part of a line, including when a child
-  # completion interrupts the read. Preserve those bytes for the next read.
-  IFS= read -r -t .05 -u "$WATCH_FD" event || result=$?
-  WATCH_PENDING+="$event"
-  if ((result == 0)); then
-    event="$WATCH_PENDING"; WATCH_PENDING=
-    if [[ "$event" != CHANGE ]]; then
-      printf 'Unexpected source notification: %q\n' "$event" >"$RUN/failure.log"
+  local event=
+  # Keep the delimiter itself. An interrupted line read can consume its LF
+  # while reporting failure; combining its text with the next line loses the
+  # record boundary. -N preserves LF as data, regardless of read's status.
+  IFS= read -r -N 1 -t .05 -u "$WATCH_FD" event || true
+  [[ -n "$event" ]] || return 0
+  if [[ "$event" == $'\n' ]]; then
+    if [[ "$WATCH_PENDING" != CHANGE ]]; then
+      printf 'Unexpected source notification: %q\n' "$WATCH_PENDING" >"$RUN/failure.log"
       failure_state WATCH "" "$RUN/failure.log" 0
       exit 1
     fi
+    WATCH_PENDING=
     DIRTY=1; DEBOUNCE=$(($(now_ms) + 250))
-  elif [[ CHANGE != "$WATCH_PENDING"* ]]; then
-    printf 'Unexpected partial source notification.\n' >"$RUN/failure.log"
-    failure_state WATCH "" "$RUN/failure.log" 0
-    exit 1
+  else
+    WATCH_PENDING+="$event"
+    if [[ CHANGE != "$WATCH_PENDING"* ]]; then
+      printf 'Unexpected partial source notification.\n' >"$RUN/failure.log"
+      failure_state WATCH "" "$RUN/failure.log" 0
+      exit 1
+    fi
   fi
   return 0
 }

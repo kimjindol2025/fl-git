@@ -1,0 +1,284 @@
+; Fix policy produces source edits, never evaluates or applies application code.
+(load "./front-fix-source.fl")
+
+(defn fl-fix-sha [file]
+  (let [result (fl_file_sha256_result file)]
+    (if (= (get result "ok") true) (get result "data")
+      (throw "E_FIX_READ: source digest unavailable"))))
+(defn fl-fix-read-unit [file project]
+  (let [resolved (fl_compiler_realpath file)]
+    (if (or (= resolved nil) (not (str-starts-with resolved (str project "/")))
+            (not (or (str-ends-with resolved ".flx") (str-ends-with resolved ".fl"))))
+      (throw "E_FIX_SOURCE: readable project .fl/.flx source required") nil)
+    (let [before (fl-fix-sha resolved) source (file_read resolved) after (fl-fix-sha resolved)]
+      (if (or (not (= before after)) (str-includes source "\x00")) (throw "E_FIX_READ: source changed or contains NUL") nil)
+      {"file" resolved "relative" (str-slice resolved (+ (length project) 1) (length resolved))
+       "sha256" before "source" source "nodes" (fl-fix-parse source)})))
+(defn fl-fix-loads [nodes]
+  (reduce (fn [all node]
+    (if (or (fl-static-has? ["quote" "style" "defstore" "island"] (fl-fix-op node))
+            (and (= (get node "kind") "prefix") (= (get node "text") "'"))) all
+      (concat all (concat (if (= (fl-fix-op node) "load") [node] []) (fl-fix-loads (fl-fix-items node)))))) [] nodes))
+(defn fl-fix-load-path [path file web project]
+  (if (not (string? path)) (throw "E_FIX_LOAD: static source load required") nil)
+  (let [candidates (if (str-starts-with path "/") [path]
+         [(str (fl-fix-dir file) "/" path) (str web "/" path) (str web "/pages/" path)])
+        resolved (first (fl-fix-select-values (fn [value] (not (= value nil))) (map (fn [candidate] (fl_compiler_realpath candidate)) candidates)))]
+    (if (or (= resolved nil) (not (str-starts-with resolved (str project "/"))))
+      (throw "E_FIX_LOAD: missing or outside project") resolved)))
+(defn fl-fix-units [web project inputs]
+  (let [initial (map (fn [file] (fl-fix-read-unit file project)) (fl-fix-select-values (fn [file] (not (= file ""))) inputs))]
+    (loop [at 0 units initial]
+      (if (= at (length units)) units
+        (let [unit (get units at)
+              loads (map (fn [node]
+                (let [items (fl-fix-items node) path (fl-fix-string (get items 1))]
+                  (fl-fix-load-path path (get unit "file") web project))) (fl-fix-loads (get unit "nodes")))
+              added (reduce (fn [all file]
+                (if (any? (fn [unit] (= (get unit "file") file)) all) all
+                  (push all (fl-fix-read-unit file project)))) units loads)]
+          (recur (+ at 1) added))))))
+(defn fl-fix-block [state context node code message]
+  (assoc state "blockers" (push (get state "blockers")
+    {"code" code "file" (get context "relative") "line" (or (get node "line") 0)
+     "column" (or (get node "column") 0) "message" message})))
+(defn fl-fix-add-edit [state context node after code]
+  (if (= (get node "text") after) state
+    (let [file (get context "file") edits (or (get (get state "edits") file) [])
+          existing (first (fl-fix-select-values (fn [edit] (= (get edit "start") (get node "start"))) edits))
+          edit {"code" code "start" (get node "start") "end" (get node "end") "line" (get node "line")
+                "column" (get node "column") "before" (get node "text") "after" after}]
+      (if (= existing nil) (assoc state "edits" (assoc (get state "edits") file (push edits edit)))
+        (if (= existing edit) state (throw "E_FIX_CONFLICT: different edits target the same token"))))))
+(defn fl-fix-fresh [state base]
+  (let [name (loop [i 1]
+          (let [candidate (if (= i 1) base (str base i))]
+            (if (has-key? (get state "occupied") (fl-fix-normal candidate)) (recur (+ i 1)) candidate)))]
+    {"name" name "state" (assoc state "occupied" (assoc (get state "occupied") (fl-fix-normal name) true))}))
+(defn fl-fix-lookup [context name]
+  (let [key (fl-fix-normal name)]
+    (or (get (get context "bound") key) (get (get context "globals") key))))
+(defn fl-fix-bound [context name replacement]
+  (assoc context "bound" (assoc (get context "bound") (fl-fix-normal name)
+    {"replacement" replacement "rename" (not (= name replacement))})))
+(defn fl-fix-rename [node context state]
+  (let [name (fl-fix-name node) binding (if (= name nil) nil (fl-fix-lookup context name))
+        replacement (get binding "replacement")]
+    (if (not (get binding "rename")) state
+      (fl-fix-add-edit state context node
+        (str (if (str-starts-with (get node "text") "$") "$" "") replacement)
+        (if (= name "act") "reserved-word" "let-shadow")))))
+(defn fl-fix-binding [node kind context state]
+  (let [name (fl-fix-name node)
+        code (cond [(= name "act") "reserved-word"]
+               [(and (= kind "let") (fl-static-has? ["s" "h" "h!"] name)) "let-shadow"] [true nil])
+        global (if (= kind "global") (get (get context "globals") (fl-fix-normal (or name ""))) nil)
+        fresh (if (or (= code nil) (not (= global nil))) nil
+                (fl-fix-fresh state (if (= name "act") "action" (if (= name "s") "source_value" "html_value"))))
+        replacement (or (get global "replacement") (get fresh "name") name)
+        next (or (get fresh "state") state)]
+    (if (= name nil) {"context" context "state" (fl-fix-block state context node "unsupported-binding"
+        "Automatic identifier fixes require a simple named binding")}
+      {"context" (fl-fix-bound context name replacement)
+       "state" (if (= name replacement) next
+                 (fl-fix-add-edit next context node
+                   (str (if (str-starts-with (get node "text") "$") "$" "") replacement) (or code "reserved-word")))})))
+(defn fl-fix-parameters [node context state]
+  (if (not (= (get node "text") "["))
+    {"context" context "state" (fl-fix-block state context node "unsupported-parameters" "Parameter vector required")}
+    (reduce (fn [result param]
+      (if (fl-static-has? ["&" "..."] (get param "text")) result
+        (fl-fix-binding param "parameter" (get result "context") (get result "state"))))
+      {"context" context "state" state} (fl-fix-items node))))
+(defn fl-fix-pairs [node]
+  (let [items (fl-fix-items node) nested (= (get (get items 0) "text") "[")]
+    (if (not (= (get node "text") "[")) nil
+      (if nested
+        (if (every? (fn [item] (= (length (fl-fix-items item)) 2)) items) (map fl-fix-items items) nil)
+        (if (not (= (mod (length items) 2) 0)) nil
+          (loop [at 0 pairs []]
+            (if (= at (length items)) pairs (recur (+ at 2) (push pairs [(get items at) (get items (+ at 1))])))))))))
+(defn fl-fix-let [node context state kind]
+  (let [items (fl-fix-items node) pairs (fl-fix-pairs (get items 1))]
+    (if (= pairs nil) (fl-fix-block state context node "unsupported-binding" "Simple binding pairs required")
+      (let [bound (reduce (fn [result pair]
+              (let [inside (get result "context") state (fl-fix-walk (get pair 1) inside (get result "state"))]
+                (fl-fix-binding (get pair 0) kind inside state)))
+              {"context" (assoc context "top" false) "state" state} pairs)]
+        (fl-fix-walk-sequence (slice items 2 (length items)) (get bound "context") (get bound "state"))))))
+(defn fl-fix-definition [node context state]
+  (let [items (fl-fix-items node) op (fl-fix-op node)
+        binding (fl-fix-binding (get items 1) (if (get context "top") "global" "definition") context state)
+        inside (assoc (get binding "context") "top" false)
+        parameters (if (= op "define") nil (fl-fix-parameters (get items 2) inside (get binding "state")))
+        next (if (= op "define") (fl-fix-walk-sequence (slice items 2 (length items)) inside (get binding "state"))
+               (fl-fix-walk-sequence (slice items 3 (length items)) (get parameters "context") (get parameters "state")))]
+    {"context" (get binding "context") "state" next}))
+(defn fl-fix-walk-sequence [nodes context state]
+  (get (reduce (fn [result node]
+    (if (fl-static-has? ["define" "defn" "server-fn" "server_fn"] (fl-fix-op node))
+      (fl-fix-definition node (get result "context") (get result "state"))
+      (assoc result "state" (fl-fix-walk node (get result "context") (get result "state")))))
+    {"context" context "state" state} nodes) "state"))
+
+(defn fl-fix-field? [key value]
+  (and (or (= (get key "text") ":name") (= (fl-fix-string key) "name")) (= (fl-fix-string value) "text")))
+(defn fl-fix-map [node context state]
+  (let [items (fl-fix-items node)]
+    (loop [at 0 result state]
+      (if (>= (+ at 1) (length items)) (fl-fix-walk-sequence items context result)
+        (let [key (get items at) value (get items (+ at 1)) field (get context "field")
+              result (if (and (not (= field nil)) (fl-fix-field? key value))
+                       (fl-fix-add-edit result context value (fl-source-quote field) "req-key-collision") result)
+              ambiguous (and (not (= field nil)) (or (= (get key "text") ":text") (= (fl-fix-string key) "text")))]
+          (recur (+ at 2) (if ambiguous (fl-fix-block result context key "request-key-writer"
+            "A text map key may be an API payload; migrate its data contract explicitly") result)))))))
+(defn fl-fix-call [node context state]
+  (let [items (fl-fix-items node) op (fl-fix-op node) head (get items 0)
+        first (get items 1) second (get items 2) shadowed (not (= (fl-fix-lookup context (or op "")) nil))
+        read (and (= (length items) 3) (= (fl-fix-string second) "text")
+          (or (and (= op "get") (= (fl-fix-name first) "body"))
+              (and (fl-static-has? ["form-get" "form_get"] op) (= (fl-fix-name first) "req"))))
+        state (cond
+                [(and (= op "json-parse") (not shadowed)) (fl-fix-add-edit state context head "json_parse" "json-parse-hyphen")]
+                [(= op nil) (fl-fix-walk head (assoc context "top" false) state)]
+                [true (fl-fix-rename head context state)])
+        state (if (not read) state
+                (cond
+                  [shadowed (if (= (get context "field") nil) state (fl-fix-block state context node "request-key-reader"
+                     "A custom reader requires an explicit field migration"))]
+                  [(= (get context "field") nil) (fl-fix-block state context node "request-key-without-field"
+                     "No matching form field declaration; preserve raw body/API behavior until its writer is known")]
+                  [true (fl-fix-add-edit state context second (fl-source-quote (get context "field")) "req-key-collision")]))]
+    (if (= op "load")
+      (if (= (get context "serverLoads") false)
+        (if (= (length (keys (get state "moves"))) 0) state
+          (fl-fix-block state context node "deferred-load" "A deferred load needs review when a helper file moves"))
+        (let [path (fl-fix-string first) target (fl-fix-load-path path (get context "file") (get context "web") (get context "project"))
+              moved (get (get state "moves") target)]
+          (if (= moved nil) state
+            (fl-fix-add-edit state context first
+              (fl-source-quote (if (str-starts-with path "/") moved (fl-fix-relative (fl-fix-dir (get context "file")) moved)))
+              "helper-load-order"))))
+      (fl-fix-walk-sequence (slice items 1 (length items)) (assoc context "top" false) state))))
+(defn fl-fix-walk [node context state]
+  (let [kind (get node "kind") text (get node "text") op (fl-fix-op node) items (fl-fix-items node)]
+    (cond
+      [(= node nil) state]
+      [(and (= kind "prefix") (= text "'")) state]
+      [(or (= op "quote") (= op "ns") (= op "style")) state]
+      [(= kind "atom") (fl-fix-rename node context state)]
+      [(= kind "string") state]
+      [(= kind "prefix") (fl-fix-walk-sequence items (assoc context "top" false) state)]
+      [(= text "{") (fl-fix-map node (assoc context "top" false) state)]
+      [(= text "[") (fl-fix-walk-sequence items (assoc context "top" false) state)]
+      [(fl-static-has? ["defn" "define" "server-fn" "server_fn"] op)
+       (get (fl-fix-definition node context state) "state")]
+      [(= op "fn")
+       (let [parameters (fl-fix-parameters (get items 1) (assoc context "top" false) state)]
+         (fl-fix-walk-sequence (slice items 2 (length items)) (get parameters "context") (get parameters "state")))]
+      [(fl-static-has? ["let" "loop" "doseq" "dotimes"] op)
+       (fl-fix-let node context state (if (fl-static-has? ["let" "loop"] op) "let" "parameter"))]
+      [(= op "catch")
+       (let [binding (get items 1) inside (assoc context "top" false)
+             bound (if (= (get binding "text") "[") (fl-fix-parameters binding inside state)
+                     (fl-fix-binding binding "parameter" inside state))]
+         (fl-fix-walk-sequence (slice items 2 (length items)) (get bound "context") (get bound "state")))]
+      [(= op "island")
+       (fl-fix-walk-sequence (slice items 3 (length items)) (assoc context "top" false "serverLoads" false) state)]
+      [(= op "defstore")
+       (if (any? (fn [child]
+             (let [name (fl-fix-name child)] (and (not (= name nil)) (get (fl-fix-lookup context name) "rename"))))
+             (fl-fix-code-nodes (slice items 2 (length items))))
+         (fl-fix-block state context node "deferred-store-reference" "Store initializer references need client initialization qualification") state)]
+      [(fl-static-has? ["match" "defmacro" "deftype" "defstruct" "with-open"] op)
+       (fl-fix-block state context node "unsupported-binding-form" "This binding form needs separate rename qualification")]
+      [(= op "do") (fl-fix-walk-sequence (slice items 1 (length items)) context state)]
+      [true (fl-fix-call node context state)])))
+
+(defn fl-fix-field-count [units]
+  (reduce (fn [count unit]
+    (+ count (reduce (fn [count node]
+      (if (not (= (get node "text") "{")) count
+        (let [items (fl-fix-items node)]
+          (loop [at 0 count count]
+            (if (>= (+ at 1) (length items)) count
+              (recur (+ at 2) (+ count (if (fl-fix-field? (get items at) (get items (+ at 1))) 1 0))))))))
+      0 (fl-fix-code-nodes (fl-fix-select-values (fn [node] (not (fl-static-has? ["style" "defstore"] (fl-fix-op node)))) (get unit "nodes")))))) 0 units))
+(defn fl-fix-global-state [units state]
+  (let [definitions (reduce (fn [all unit]
+          (concat all (fl-fix-select-values (fn [node] (fl-static-has? ["define" "defn" "server-fn" "server_fn"] (fl-fix-op node)))
+            (get unit "nodes")))) [] units)
+        names (fl-fix-select-values (fn [name] (not (= name nil))) (map (fn [node] (fl-fix-name (get (fl-fix-items node) 1))) definitions))
+        fresh (if (fl-static-has? names "act") (fl-fix-fresh state "action") nil)
+        globals (reduce (fn [all name]
+          (assoc all (fl-fix-normal name) {"replacement" (if (= name "act") (get fresh "name") name) "rename" (= name "act")})) {} names)]
+    {"state" (or (get fresh "state") state) "globals" globals}))
+(defn fl-fix-moves [units web]
+  (let [pages (str web "/pages/") files (map (fn [unit] (get unit "file")) units)]
+    (reduce (fn [moves file]
+      (let [relative (if (str-starts-with file pages) (str-slice file (length pages) (length file)) "")
+            prefix (regex_find relative "^_[a-z][a-z0-9]*-")]
+        (if (or (= prefix nil) (str-includes relative "/") (not (str-ends-with relative ".flx"))) moves
+          (let [base (str-slice prefix 0 (- (length prefix) 1)) parent (str pages base ".flx")
+                next (str pages base "_" (str-slice relative (length prefix) (length relative)))]
+            (if (fl-static-has? files parent) (assoc moves file next) moves))))) {} files)))
+(defn fl-fix-name-set [names]
+  (reduce (fn [all name] (let [key (fl-fix-normal name)]
+    (if (has-key? all key) all (assoc all key true)))) {} names))
+(defn fl-fix-analyze [units web project]
+  (let [all (reduce (fn [nodes unit] (concat nodes (fl-fix-all-nodes (get unit "nodes")))) [] units)
+        library (fl-static-library)
+        names (fl-static-join [(fl-fix-select-values (fn [name] (not (= name nil))) (map fl-fix-name all))
+          (fl-fix-select-values (fn [value] (not (= value nil))) (map fl-fix-string all)) (get library "names") (keys (get library "abi"))])
+        occupied (fl-fix-name-set names)
+        state {"occupied" occupied "edits" {} "blockers" [] "moves" (fl-fix-moves units web)}
+        global (fl-fix-global-state units state)
+        field (if (> (fl-fix-field-count units) 0) (fl-fix-fresh (get global "state") "content") nil)
+        state (or (get field "state") (get global "state"))
+        state (if (get library "ok") state
+                (fl-fix-block state {} nil "sdk-declarations" "Matching Native SDK declarations required for collision-free renaming"))]
+    (reduce (fn [state unit]
+      (let [context {"file" (get unit "file") "relative" (get unit "relative") "web" web "project" project
+                     "globals" (get global "globals") "field" (get field "name") "bound" {} "top" true "serverLoads" true}
+            namespace (any? (fn [node] (= (fl-fix-op node) "ns")) (get unit "nodes"))
+            moved (get (get state "moves") (get unit "file"))
+            state (if (and (not (= moved nil)) (file_exists moved))
+                    (fl-fix-block state context nil "helper-destination-exists" "Helper rename destination already exists") state)
+            state (if (and namespace (get (get (get global "globals") "act") "rename"))
+                    (fl-fix-block state context nil "namespace-rename" "Namespace-qualified symbol references require separate qualification") state)
+            next (fl-fix-walk-sequence (get unit "nodes") context state)]
+        (if (and (= (last (str-split (get unit "file") "/")) "_flp-generated.flx")
+                 (or (not (= moved nil)) (> (length (or (get (get next "edits") (get unit "file")) [])) 0)))
+          (fl-fix-block (assoc next "edits" (dissoc (get next "edits") (get unit "file"))
+                                   "moves" (dissoc (get next "moves") (get unit "file"))) context nil "generated-source"
+            "Edit the source FLP contract instead of its generated FLX output") next))) state units)))
+(defn fl-fix-applied [edits moved]
+  (let [counts (reduce (fn [all edit]
+                  (let [code (get edit "code")] (assoc all code (+ (or (get all code) 0) 1)))) {} edits)
+        counts (if moved (assoc counts "helper-load-order" (+ (or (get counts "helper-load-order") 0) 1)) counts)]
+    (map (fn [code] {"code" code "count" (get counts code)}) (keys counts))))
+(defn fl-fix-plan [web project inputs run]
+  (let [units (fl-fix-units web project inputs) state (fl-fix-analyze units web project)
+        changed (fl-fix-select-values (fn [unit] (or (has-key? (get state "moves") (get unit "file"))
+                                  (> (length (or (get (get state "edits") (get unit "file")) [])) 0))) units)
+        results (loop [at 0 rows []]
+          (if (= at (length changed)) rows
+            (let [unit (get changed at) file (get unit "file") destination (or (get (get state "moves") file) file)
+                  edits (arr-sort-by (or (get (get state "edits") file) []) "start")
+                  source (fl-fix-apply-edits (get unit "source") edits) stage (str run "/new-" at ".flx")]
+              (if (not (file_write stage source)) (throw "E_FIX_STAGE: unable to write staged source") nil)
+              (recur (+ at 1) (push rows {"file" (get unit "relative")
+                "destination" (str-slice destination (+ (length project) 1) (length destination))
+                "sourceFile" file "destinationFile" destination "stage" stage "ast" (str stage ".ast.json")
+                "beforeSha256" (get unit "sha256") "afterSha256" (fl-fix-sha stage)
+                "applied" (fl-fix-applied edits (not (= file destination))) "edits" edits})))))]
+    {"schema" "fl-fix/1" "tool" "freelang-front-native" "dry" true "status" "planned"
+     "web" web "project" project "safe" (= (length (get state "blockers")) 0)
+     "filesChanged" (length results) "filesPlanned" (length results) "filesApplied" 0
+     "blockers" (get state "blockers") "results" results
+     "inputs" (map (fn [unit] {"file" (get unit "file") "sha256" (get unit "sha256")}) units)
+     "validation" "NOT_RUN" "application" "NOT_IMPLEMENTED"}))
+(defn fl-fix-report [plan]
+  (assoc (dissoc (dissoc (dissoc plan "inputs") "web") "project") "results"
+    (map (fn [row] (dissoc (dissoc (dissoc (dissoc row "sourceFile") "destinationFile") "stage") "ast")) (get plan "results"))))

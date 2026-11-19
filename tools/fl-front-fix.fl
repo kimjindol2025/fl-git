@@ -1,0 +1,38 @@
+(load "./front-fix.fl")
+(try
+  (let [args (cli-args) mode (get args 0)]
+    (cond
+      [(and (= mode "--plan") (= (length args) 5))
+       (let [run (get args 4) plan (fl-fix-plan (get args 1) (get args 2) (str-split (file_read (get args 3)) "\x00") run)]
+         (if (not (file_write (str run "/plan.json") (json_stringify plan))) (throw "E_FIX_STAGE: plan write failed") nil)
+         (doseq [row (get plan "results")]
+           (print (str (get row "stage") "\x00" (get row "ast") "\x00" (get row "sourceFile") "\x00" (get row "destinationFile") "\x00"))))]
+      [(and (= mode "--finalize") (or (= (length args) 2) (= (length args) 3)))
+       (let [run (get args 1) plan (json_parse (file_read (str run "/plan.json")))
+             facts (if (= (length args) 3) (fl-fix-select-values (fn [value] (not (= value ""))) (str-split (file_read (get args 2)) "\x00")) [])
+             blockers (reduce (fn [all fact]
+               (push all {"code" "filesystem-review"
+                 "file" (if (str-starts-with fact (str (get plan "project") "/"))
+                          (str-slice fact (+ (length (get plan "project")) 1) (length fact)) fact) "line" 0 "column" 0
+                 "message" "A source link, excluded directory or occupied helper destination requires review"})) (get plan "blockers") facts)
+             plan (assoc plan "blockers" blockers "safe" (= (length blockers) 0))]
+         (doseq [input (get plan "inputs")]
+           (if (not (= (fl-fix-sha (get input "file")) (get input "sha256"))) (throw "E_FIX_STALE: source changed during planning") nil))
+         (doseq [row (get plan "results")]
+           (let [ast (json_parse (file_read (get row "ast")))]
+             (if (not (= (fl-fix-sha (get row "stage")) (get row "afterSha256"))) (throw "E_FIX_STALE: staged source changed after planning") nil)
+             (if (not (and (= (str-trim (file_read (str (get row "ast") ".exit"))) "0")
+                           (= (get ast "schema") "freelang.ast.v1") (= (get ast "status") "ok")))
+               (do (fl_stderr_write (str (json_stringify
+                     (assoc ast "schema" "fl-fix/1" "parserSchema" (get ast "schema") "status" "error" "file" (get row "file")
+                       "diagnostics" (map (fn [diagnostic] (assoc diagnostic "file" (get row "file"))) (or (get ast "diagnostics") [])))) "\n"))
+                   (process-exit 1)) nil)))
+         (let [verified (assoc plan "validation" "NATIVE_PARSE_ONLY")]
+           (if (not (file_write (str run "/verified-plan.json") (json_stringify verified)))
+             (throw "E_FIX_STAGE: verified plan write failed") nil)
+           (println (json_stringify (fl-fix-report verified)))))]
+      [true (do (fl_stderr_write "Usage: fl-front-fix --plan <web> <project> <inputs.nul> <private-run> | --finalize <private-run> [facts.nul]\n")
+                (process-exit 2))]))
+  (catch [error]
+    (fl_stderr_write (str (json_stringify {"schema" "fl-fix/1" "status" "error" "message" (error-message error)}) "\n"))
+    (process-exit 1)))
