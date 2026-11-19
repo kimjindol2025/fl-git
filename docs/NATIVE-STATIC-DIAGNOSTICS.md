@@ -4,8 +4,9 @@ The web build now checks the original catalog's 17 remaining static rules before
 emitting application or browser source. Together with the earlier store-key
 check, 18 catalog rules have Native implementations. The island-test rule still
 requires the headless runner. This is not complete diagnostic/default-entry
-migration: console-only advisories, fix workflows and remaining metadata/source
-mapping work are still open.
+migration: fix workflows and remaining metadata/source mapping work are still
+open. The subsequent [Native advisory work](NATIVE-DIAGNOSTIC-ADVISORIES.md)
+adds the console guidance separately from these catalog issues.
 
 ## Detection and build behavior
 
@@ -92,8 +93,9 @@ and a bounded retry for document IDs invalidated by navigation. Assertions,
 original failures and corrected scope are retained separately. Protected tests,
 expectations, runners, time/memory bounds, seed and foreign files are unchanged.
 
-Console-only CSS/dangerous-pattern/name-collision advisories and suggestions,
-headless/island tests, automatic fixes, complete JSON-field/source-map parity,
+CSS/dangerous-pattern/name-collision advisories and function suggestions now
+have a [separate implementation and receipt](NATIVE-DIAGNOSTIC-ADVISORIES.md).
+Headless/island tests, automatic fixes, complete JSON-field/source-map parity,
 the default development entry and deployment migration remain open. Actual
 application/Git workflows and the latest whole DB safety/qualification gates are
 also required. The goal stays active, commercial readiness is HOLD, and no

@@ -59,6 +59,7 @@
      "store_keys" (or (get raw "store_keys") []) "contracts" (or (get raw "contracts") [])
      "contractSummary" (or (get raw "contractSummary") {}) "repoCommit" head
      "diagnostics" (or (get raw "diagnostics") []) "diagnosticCodes" (or (get raw "diagnosticCodes") [])
+     "advisories" (or (get raw "advisories") []) "suggestions" (or (get raw "suggestions") [])
      "diagnosticStatus" (or (get raw "diagnosticStatus") {"catalog" "NOT_RUN" "contractReadiness" "NOT_RUN"})
      "summary" (or (get raw "summary") {})
      "errorLoop" (fl-dev-control-loop previous issues)}))
@@ -109,6 +110,8 @@
         issues [(assoc issue "stage" stage)]]
     (assoc previous "schema" "fl-dev/state/1" "status" "failed" "ok" false "time" (now-iso)
       "elapsed" elapsed "issues" issues "failedStage" stage "failedBundle" bundle
+      "advisories" (or (get checked "advisories") []) "suggestions" (or (get checked "suggestions") [])
+      "summary" (assoc (or (get previous "summary") {}) "advisories" (length (or (get checked "advisories") [])))
       "errorLoop" (fl-dev-control-loop previous issues))))
 
 (defn fl-dev-control-airc [previous state]

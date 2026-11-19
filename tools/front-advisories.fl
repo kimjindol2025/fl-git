@@ -1,0 +1,126 @@
+; Nonfatal DX guidance is separate from the catalog's build issues.
+(defn fl-dx-distance [left right]
+  (let [a (str-split left "") b (str-split right "") n (length b)
+        initial (loop [i 0 row []] (if (> i n) row (recur (+ i 1) (push row i))))]
+    (loop [i 0 previous initial]
+      (if (= i (length a)) (get previous n)
+        (let [row (loop [j 0 row [(+ i 1)]]
+          (if (= j n) row
+            (let [value (if (= (get a i) (get b j)) (get previous j)
+                          (+ 1 (let [x (get previous j) y (get previous (+ j 1)) z (get row j)]
+                            (if (< x y) (if (< x z) x z) (if (< y z) y z)))))]
+              (recur (+ j 1) (push row value)))))]
+          (recur (+ i 1) row))))))
+(defn fl-dx-nearest [name candidates threshold limit normalize]
+  (let [names (fl-static-unique candidates) size (+ (length names) 1)
+        norm (fn [value] (if normalize (str-replace-in value "-" "_") value))
+        needle (norm name)
+        scored (loop [index 0 found []]
+          (if (= index (length names)) found
+            (let [candidate (get names index) value (norm candidate)
+                  difference (- (length needle) (length value))
+                  distance (if (or (> difference threshold) (< difference (- 0 threshold))) (+ threshold 1)
+                             (fl-dx-distance needle value))]
+              (recur (+ index 1) (if (> distance threshold) found
+                (push found {"name" candidate "rank" (+ (* distance size) index)}))))))]
+    (map (fn [row] (get row "name")) (slice (arr-sort-by scored "rank") 0 limit))))
+(defn fl-dx-advice [code context node message]
+  {"code" code "severity" "warning" "file" (get context "file")
+   "line" (or (get node "line") 0) "message" message})
+(defn fl-dx-css [node context]
+  (let [op (get node "op") args (get node "args") attrs (get args 1)
+        styles (get context "styles")]
+    (if (or (not (fl-static-has? ["h" "h!"] op)) (fl-static-bound? op context)
+            (= (length styles) 0) (not (= (get attrs "type") "Map"))) []
+      (let [items (fl-static-items attrs)]
+        (loop [i 0 issues []]
+          (if (>= (+ i 1) (length items)) issues
+            (let [key (get items i) value (get items (+ i 1)) name (fl-static-name value)
+                  class-key (or (and (= (get key "kind") "keyword") (= (get key "name") "class"))
+                                (and (= (get key "type") "string") (= (get key "value") "class")))
+                  known (or (= name nil) (fl-static-has? styles name)
+                            (fl-static-has? (map (fn [style] (str-replace-in style "-" "_")) styles) name)
+                            (fl-static-bound? name context) (not (= (fl-static-signature name context) nil)))]
+              (recur (+ i 2)
+                (if (and class-key (not known))
+                  (push issues (assoc (fl-dx-advice "css-class" context node
+                    (str "{:class " name "} — CSS 미정의"))
+                    "name" name "candidates" (fl-dx-nearest name styles 2 2 false))) issues)))))))))
+(defn fl-dx-walk-many [nodes context]
+  (reduce (fn [issues node] (concat issues (fl-dx-walk node context))) [] nodes))
+(defn fl-dx-walk [node context]
+  (let [kind (get node "kind") op (get node "op") args (or (get node "args") [])]
+    (cond
+      [(= kind "block") (fl-dx-walk-many (fl-static-items node) context)]
+      [(or (= kind "and") (= kind "or")) (fl-dx-walk-many args context)]
+      [(= kind "try") (fl-dx-walk-many [(get node "body") (get node "catch") (get node "finally")] context)]
+      [(= kind "throw") (fl-dx-walk (get node "expr") context)]
+      [(not (= kind "sexpr")) []]
+      [(fl-static-has? ["quote" "defstore" "style" "ns"] op) []]
+      [(fl-static-has? ["defn" "fn" "server-fn" "server_fn"] op)
+       (let [at (if (= op "fn") 0 1) params (fl-static-items (get args at))]
+         (fl-dx-walk-many (slice args (+ at 1) (length args))
+           (fl-static-with-bound context (map fl-static-name params))))]
+      [(fl-static-has? ["let" "loop"] op)
+       (let [pairs (fl-static-pairs (get args 0)) inside
+              (fl-static-with-bound context (map (fn [pair] (fl-static-name (get pair 0))) pairs))]
+         (concat (fl-dx-walk-many (map (fn [pair] (get pair 1)) pairs) inside)
+           (fl-dx-walk-many (slice args 1 (length args)) inside)))]
+      [(= op "catch")
+       (let [binding (get args 0) body (slice args 1 (length args)) first (get body 0)
+             params (if (= (get binding "kind") "block") (fl-static-items binding) [binding])]
+         (concat (if (and (= (get first "kind") "block") (= (get first "type") "Array")
+                          (= (length (fl-static-items first)) 0))
+                   [(fl-dx-advice "empty-catch" context node "(catch $e []) → (catch $e nil) 로 변경")] [])
+           (fl-dx-walk-many body (fl-static-with-bound context (map fl-static-name params)))))]
+      [(= op "define")
+       (let [name (fl-static-name (get args 0))]
+         (concat (if (fl-static-has? ["API" "URL" "SQL"] name)
+                   [(fl-dx-advice "short-uppercase" context node
+                     "API/URL/SQL 심볼 → api-base/url-base/sql-str 같이 소문자 사용 권장")] [])
+           (fl-dx-walk-many (slice args 1 (length args)) context)))]
+      [true (concat (fl-dx-css node context) (fl-dx-walk-many args context))])))
+(defn fl-dx-collisions [units]
+  (let [by-name (reduce (fn [names unit]
+          (let [nodes (get unit "nodes") namespace (any? (fn [node] (= (get node "op") "ns")) nodes)]
+            (if namespace names
+              (reduce (fn [names node]
+                (let [name (if (= (get node "op") "defn") (fl-static-top-name node) nil) file (get unit "file")]
+                  (if (or (= name nil) (fl-static-has? ["render" "render_post" "render_delete" "render_patch"] name)) names
+                    (assoc names name (fl-static-unique (push (or (get names name) []) file)))))) names nodes)))) {} units)]
+    (reduce (fn [issues name]
+      (let [files (get by-name name)]
+        (if (> (length files) 1)
+          (push issues {"code" "name-collision" "severity" "warning" "file" (get files 0) "line" 0
+            "name" name "files" files "message" (str "(" name ") — " (str-join files ", ") " — (ns name) 선언으로 격리 필요")}) issues))) [] (keys by-name))))
+(defn fl-dx-guidance [units context styles known issues]
+  (let [advisories (concat (reduce (fn [issues unit]
+          (concat issues (fl-dx-walk-many (get unit "nodes")
+            (assoc context "file" (get unit "file") "styles" styles)))) [] units)
+          (fl-dx-collisions units))
+        suggestions (map (fn [issue]
+          (let [quoted (regex_find (get issue "message") "^'[^']+'")
+                name (str-slice quoted 1 (- (length quoted) 1))
+                threshold (math-floor (* (length name) 0.45))]
+            {"file" (get issue "file") "line" (get issue "line") "name" name
+             "candidates" (fl-dx-nearest name known (if (< threshold 2) 2 threshold) 3 true)}))
+          (filter (fn [issue] (= (get issue "check") "undefined-fn")) issues))]
+    {"advisories" advisories "suggestions" suggestions}))
+
+(defn fl-dx-report [metadata]
+  (str-join (fl-static-join [
+    (map (fn [issue]
+      (str (if (= (get issue "level") "error") "error" "warning") " [" (get issue "check") "] "
+        (json_stringify (get issue "file")) ":" (get issue "line") " " (get issue "message") "\n"))
+      (or (get metadata "issues") []))
+    (map (fn [advice]
+      (str "advice [" (get advice "code") "] " (json_stringify (get advice "file")) ":" (get advice "line") " "
+        (get advice "message")
+        (if (> (length (or (get advice "candidates") [])) 0)
+          (str " → " (str-join (get advice "candidates") ", ")) "") "\n"))
+      (or (get metadata "advisories") []))
+    (map (fn [suggestion]
+      (str "suggestion " (json_stringify (get suggestion "file")) ":" (get suggestion "line") " "
+        (get suggestion "name") " → " (str-join (get suggestion "candidates") ", ") "\n"))
+      (filter (fn [suggestion] (> (length (get suggestion "candidates")) 0))
+        (or (get metadata "suggestions") [])))]) ""))

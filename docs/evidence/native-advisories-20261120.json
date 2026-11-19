@@ -1,0 +1,163 @@
+{
+  "schema": "native-advisories-evidence/1",
+  "date": "2026-11-20",
+  "status": {
+    "goal": "ACTIVE",
+    "commercial": "HOLD",
+    "productionDeployment": "NO",
+    "defaultFlDev": "UNCHANGED"
+  },
+  "source": {
+    "frontendBase": "1dd610494c67f41280c9abc9934dff9fc5aeee36",
+    "ownedSha256": {
+      "tools/front-advisories.fl": "a7622ae62b2addeafcda46eaa9fb1058c17af8dbbe9e20512291730fb4ea20fa",
+      "tools/front-static.fl": "8c7cb279a61c3f623311db2ba90ac50de32e6e7b69c5133f8f799f638c502ab3",
+      "tools/front-metadata.fl": "58fb9c70fd205dbc22255fa313bbd9772343604751561712918a3aa5a9f154b0",
+      "tools/front-web.fl": "ad2c72f28ffd65ebab7de2c8488542a361dea49ab88ee915df2ed36f609a19e0",
+      "tools/fl-front-build.fl": "16365cdac09744cf1f5917284bcdfc1091aa156bfbae6405154172097fe05b30",
+      "tools/front-dev.fl": "f62b117a6a2a163989a3db0677609ed7f8fd8a502a6c20f9668cdd6ef5d5ffee",
+      "tools/front-dev-control.fl": "f4498abba20f4bb4109ac276b9cbafcb96df323dffc906c12729e6eb10f5ecf5",
+      "scripts/fl-front-build-native": "2978215257a18c4471550ba2b3a1dc79d8d278b7f41d8f9666be85482dea9c21"
+    },
+    "foreignFilesPreserved": 4,
+    "bootstrapSeedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767"
+  },
+  "sdk": {
+    "manifestSha256": "70d909e036c0fa5f8e879ddbedb8a564ffbef4f23fc6875ad21612b88ca092bf",
+    "compilerSha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+    "runtimeArchiveSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "compilerCSha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+    "webToolSha256": "317ef8ec62ff8e73f29d5803b72173026ac2f601c17ef56efc7c4eb6b1b87f3e",
+    "controlToolSha256": "f6155b4c6a52b34d3a20a4a49e7ba601a5a5b6f19cc624c97e3f9219d5b05c58",
+    "serviceToolSha256": "a0b8a1a3b5bb554755488003b02c7283345aae55eef010d9e6ec983a5bf9ef80",
+    "relocation": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "LF"
+    ],
+    "manifestBeforeAfter": "PASS",
+    "testedGeneratedCMatchesPackage": [
+      "fl-front-build",
+      "fl-dev-server",
+      "fl-dev-control"
+    ],
+    "qualification": "Reuses accepted R10 compiler/runtime; no fresh bootstrap or DB qualification. Final SDK v2 changes only failure-guidance count from SDK v1; all other SDK binaries equal.",
+    "latestFailureCountFix": "15/15 on final SDK; final Chrome28/28 repeated after packaging."
+  },
+  "coverage": {
+    "nativeAdvisoryControls": "114/114",
+    "existingStaticChecksRegression": "43/43",
+    "realBuildHttpControls": "40/40",
+    "finalSdkFailureGuidanceControls": "15/15",
+    "unchangedDevServiceAssertions": "83/83",
+    "finalSdkChromeHmrRepairCleanup": "28/28",
+    "advisoryChecks": [
+      "css-class",
+      "empty-catch",
+      "short-uppercase",
+      "name-collision"
+    ],
+    "functionSuggestions": true,
+    "catalogEntriesUnchanged": 19,
+    "islandTestRule": "NOT_IMPLEMENTED",
+    "legacyReference": {
+      "total": 31,
+      "exact": 21,
+      "explicitAstDifferences": [
+        "css-underscore-alias",
+        "css-string-class-key",
+        "css-no-h-call",
+        "css-global-value",
+        "css-shadowed-h",
+        "dangerous-catch-binding-array",
+        "ignore-comment-string",
+        "ignore-triple",
+        "ignore-quote",
+        "fake-defn-in-string"
+      ],
+      "distanceAndNearestExactComparisons": 18,
+      "scope": "Unchanged original guidance functions and exact source-reader function with its original web-directory context; private Node oracle only. Matching Native inventory differs from Node bootstrap; no whole-builder parity claim."
+    },
+    "actualFrontendInputBuild": {
+      "command": "Established unchanged Native host command",
+      "preservedForeignInputs": 4,
+      "routes": 9,
+      "helpers": 6,
+      "dependencies": 1,
+      "errors": 0,
+      "warnings": 1,
+      "advisories": 0,
+      "status": "PASS",
+      "applicationElfSha256": "97ad366fa8814bb689b63670db50742f115b656928c968de5c2b702e78be4631",
+      "sameElfAsAcceptedR13": true,
+      "actualAppBrowserGitFlow": "NOT_RUN"
+    },
+    "additionalAggregateTimeControls": {
+      "seconds": 40,
+      "candidateExit": 124,
+      "acceptedPriorSdkExit": 124,
+      "phase": "sequential browser source generation",
+      "status": "TIMEOUT_BOTH",
+      "qualification": "New diagnostic aggregate deadline, separate from the established full-build command. Both failures retained; ordinary build success does not qualify either timed control."
+    },
+    "productNodeFamilyExecutions": 0,
+    "privateNodeOracleSeparate": true,
+    "ownedLiveNativeProcesses": 0,
+    "browserOwnedTabClosed": true,
+    "screenshotAndPhysicalPointer": "NOT_VERIFIED",
+    "newHandwrittenProductJsTsPython": 0,
+    "protectedTestRunnerExpectationBoundChanges": 0
+  },
+  "bounds": {
+    "virtualMemoryKiB": 2097152,
+    "serviceReadinessMilliseconds": 3000,
+    "browserObservationMilliseconds": 3000,
+    "normalStopMilliseconds": 3000,
+    "existingSupervisorBuildObservationSeconds": 90,
+    "existingFixtureBuildSeconds": 15,
+    "sharedHeavyLock": "UNCHANGED",
+    "additionalWholeBuildControlSeconds": 40
+  },
+  "retainedFailuresAndCorrections": [
+    {
+      "receipt": "controls-v1/v2",
+      "failure": "Initial private oracle used a raw source reader; v2 used the exact reader but an incorrect lexical __dirname and failed the paired-island comparison.",
+      "correction": "v3 uses the unchanged reader with each fixture web directory and unchanged island extraction.31 reference comparisons yield21 exact and10 explicit AST differences;18 distance/nearest comparisons are exact. Prior output retained; no production behavior weakened."
+    },
+    {
+      "receipt": "build-controls-v1",
+      "failure": "A new private fixture expected an undefined CSS variable to link. Native C correctly rejected the missing symbol after nonfatal preflight advice.",
+      "correction": "v2 explicitly requires this input to fail at SERVER_LINK and retain guidance/previous active bundle. A separate valid source verifies nonfatal advisories build and render. All original24 build/HTTP assertions retained."
+    },
+    {
+      "receipt": "failure-summary-v1",
+      "failure": "Failed attempt published an empty advisory array but retained summary.advisories=13 from the previous generation.",
+      "correction": "The final control tool derives the count from the latest attempt.15 assertions cover preflight failure, later C link failure and a watch failure without a bundle, preserving other state."
+    },
+    {
+      "receipt": "actual-build-v1 and actual-baseline-v1",
+      "failure": "Both candidate and accepted prior SDK exceeded the new aggregate40-second diagnostic deadline during sequential browser generation.",
+      "correction": "Failures remainTIMEOUT124. The established ordinary full-build command is verified separately, as in R13; its PASS is not an aggregate-deadline PASS."
+    }
+  ],
+  "missingLegacyFixModule": {
+    "reference": "web/fl-front-fix.js",
+    "repositoryAndAvailableHistory": "ABSENT",
+    "originalFixDryExit": 1,
+    "error": "MODULE_NOT_FOUND",
+    "ownedBaselineFilesUnchanged": true,
+    "legacyImplementationParity": "NOT_CLAIMED",
+    "nativeFixCode": "NOT_IMPLEMENTED"
+  },
+  "remaining": [
+    "Native fix/dry-run for five machine-applicable catalog rules",
+    "headless island runner and /~ai/test",
+    "complete JSON metadata/positions and source maps/live translation",
+    "advanced namespace/modules and dependency HMR qualification",
+    "default development entry, retention and deployment tools",
+    "actual application/Git workflows and visual/pointer acceptance",
+    "latest whole DB safety/recovery/concurrency/load/operations"
+  ],
+  "privacy": "Paths/owners: <가림>"
+}

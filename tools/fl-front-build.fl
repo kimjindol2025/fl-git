@@ -3,9 +3,13 @@
 (defn fl-web-command [args]
   (let [mode (get args 0)]
     (cond
+      [(and (= mode "--help") (= (length args) 1))
+       (println "Native web build host: fl-front-build-native <web-root> <existing-output-directory>\nInspection: fl-front-build --codes | --metadata <bundle> | --report <bundle>\n--metadata emits JSON; --report emits human diagnostics without writing files.\nInternal build phases: --stage, --plan, --inputs, --dependency-inputs, --preflight, --emit, --browser-inputs, --seal-assets, --verify-generated, --flp-mode.")]
       [(and (= mode "--codes") (= (length args) 1)) (println (json_stringify (fl-diagnostic-catalog)))]
       [(and (= mode "--metadata") (= (length args) 2))
        (println (json_stringify (fl-front-metadata (fl-web-json (str (get args 1) "/plan.json")))))]
+      [(and (= mode "--report") (= (length args) 2))
+       (print (fl-dx-report (fl-front-metadata (fl-web-json (str (get args 1) "/plan.json")))))]
       [(and (= mode "--dependency-inputs") (= (length args) 2)) (fl-web-dependency-inputs (get args 1))]
       [(and (= mode "--preflight") (= (length args) 2)) (fl-web-preflight (get args 1))]
       [(and (= mode "--flp-mode") (= (length args) 2))

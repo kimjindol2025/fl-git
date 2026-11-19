@@ -87,10 +87,12 @@
           (filter (fn [row] (not (= (get row "readiness") "complete"))) (get readiness "rows")))
           (map (fn [issue] (dissoc issue "storeKey")) (fl-metadata-store-issues records declarations))])]
     {"contracts" (get readiness "rows") "contractSummary" (get readiness "summary")
+     "advisories" (get static "advisories") "suggestions" (get static "suggestions")
      "store_keys" store-keys "storeDeclarations" declarations "issues" issues
      "diagnostics" (fl-diagnostic-items issues) "diagnosticCodes" FL-FRONT-DIAGNOSTIC-CODES
      "summary" (merge (get static "summary") {"errors" (length (filter (fn [issue] (= (get issue "level") "error")) issues))
                  "warnings" (length (filter (fn [issue] (= (get issue "level") "warn")) issues))
+                 "advisories" (length (get static "advisories"))
                  "diagnosticCodeCount" (length FL-FRONT-DIAGNOSTIC-CODES)
                  "contractCount" (get (get readiness "summary") "total")
                  "contractComplete" (get (get readiness "summary") "complete")
@@ -98,5 +100,7 @@
                  "contractMissing" (get (get readiness "summary") "missing")
                  "contractVerified" (get (get readiness "summary") "verified")})
      "diagnosticStatus" {"catalog" "PORTED" "contractReadiness" "PORTED" "storeRegistry" "PORTED"
-                          "remainingStaticChecks" "PORTED" "staticChecks" (get static "checks")
+                          "remainingStaticChecks" "PORTED" "staticChecks" (get static "checks") "advisories" "PORTED"
+                          "advisoryChecks" ["css-class" "empty-catch" "short-uppercase" "name-collision"]
+                          "functionSuggestions" "PORTED"
                           "islandTests" "NOT_RUN" "fix" "NOT_RUN"}}))

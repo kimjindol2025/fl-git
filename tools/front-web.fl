@@ -138,6 +138,7 @@
   (let [metadata (fl-front-metadata (fl-web-json (str run "/plan.json")))
         state (assoc metadata "schema" "fl-web-native/1" "status" "checked")]
     (fl-web-write (str run "/build-state.json") (json_stringify state))
+    (fl_stderr_write (fl-dx-report metadata))
     (println (json_stringify state))
     (if (> (get (get metadata "summary") "errors") 0) (process-exit 1) nil)))
 (defn fl-web-ast [file]

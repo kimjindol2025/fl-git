@@ -54,7 +54,12 @@ while true; do
   done <"$RUN/dependencies.nul"
 done
 step=DIAGNOSTICS
-"$WEB_TOOL" --preflight "$RUN" >"$RUN/diagnostics.log" 2>"$RUN/diagnostics.stderr"
+if "$WEB_TOOL" --preflight "$RUN" >"$RUN/diagnostics.log" 2>"$RUN/diagnostics.stderr"; then
+  cat -- "$RUN/diagnostics.stderr" >&2
+else
+  cat -- "$RUN/diagnostics.stderr" >&2
+  exit 1
+fi
 step=EMIT
 "$WEB_TOOL" --emit "$RUN" "$ROOT/web/runtime/island-language.fl" "$ROOT/web/runtime/server-language.fl" >"$RUN/emit.log" 2>&1
 "$WEB_TOOL" --browser-inputs "$RUN" >"$RUN/browser-inputs.nul" 2>"$RUN/browser-inputs.stderr"

@@ -1,5 +1,6 @@
 ; Static checks over the compiler's read-only AST; no application execution.
 (load "./front-static-context.fl")
+(load "./front-advisories.fl")
 (defn fl-static-issue [level check file node message]
   {"level" level "check" check "file" file "line" (or (get node "line") 0) "message" message})
 (defn fl-static-warning [code context node message]
@@ -238,8 +239,11 @@
             (assoc context "file" (get unit "file") "island" (or (get unit "client") false))))) [] units)
         issues (fl-static-dedupe (fl-static-join [ast-issues (fl-static-source-issues units)
           (fl-static-helper-order-issues (get plan "records")) (fl-static-route-issues (get plan "records"))]))
-        public-count (length (fl-static-unique (concat (get library "names") front-names)))]
-    {"issues" issues "summary" {"stdlibLoadOk" (get library "ok") "stdlibLsFnsCount" (get library "count")
+        public-count (length (fl-static-unique (concat (get library "names") front-names)))
+        guidance (fl-dx-guidance units context (fl-static-unique styles)
+          (fl-static-unique (fl-static-join [(get library "names") (keys (get library "abi")) front-names])) issues)]
+    {"issues" issues "advisories" (get guidance "advisories") "suggestions" (get guidance "suggestions")
+     "summary" {"stdlibLoadOk" (get library "ok") "stdlibLsFnsCount" (get library "count")
       "stdlibFnCount" public-count "stdlibNativeAbiCount" (get library "abiCount")
       "stdlibSource" "matching-native-sdk" "stdlibHeaderSha256" (get library "headerSha256")
       "stdlibBootstrap" (or (env-get "FREELANG_NATIVE_COMPILER") "")

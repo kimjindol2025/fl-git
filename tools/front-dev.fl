@@ -45,6 +45,7 @@
   (let [state (fl-dev-state)]
     {"build" {"ok" (get state "ok") "time" (get state "time") "elapsed" (get state "elapsed")}
      "issues" (or (get state "issues") [])
+     "advisories" (or (get state "advisories") []) "suggestions" (or (get state "suggestions") [])
      "routes" (map (fn [route] (get route "route")) (or (get state "routes") []))
      "helpers" (or (get state "helpers") []) "store_keys" (or (get state "store_keys") [])
      "contracts" (or (get state "contracts") []) "contract_summary" (or (get state "contractSummary") {})
