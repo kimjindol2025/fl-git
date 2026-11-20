@@ -54,6 +54,7 @@ cp -L -- "$CURL_LIBRARY" "$RUN/lib/$curl_soname"
 ln -s -- "$curl_soname" "$RUN/lib/libcurl.so"
 for header in "$INCLUDE"/*.h; do cp -- "$header" "$RUN/include/"; done
 cp -R -- "$INCLUDE/ryu" "$RUN/include/ryu"
+cp -- "$ROOT/native/process-argv.h" "$RUN/include/front-process-argv.h"
 export LD_LIBRARY_PATH="$RUN/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LIBRARY_PATH="$RUN/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
 sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h "$INCLUDE"/ryu/* >"$RUN/build/inputs.before.sha256"
@@ -62,7 +63,7 @@ sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
     src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
     src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
-    tools/*.fl native/dev-watch.c native/source-transaction.c native/js-engine.c web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native scripts/fl-island-run-native
+    tools/*.fl native/dev-watch.c native/source-transaction.c native/js-engine.c native/process-argv.c native/process-argv.h web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native scripts/fl-island-run-native
 ) >"$RUN/provenance/frontend.before.sha256"
 "$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
 ar --version >"$RUN/provenance/ar.txt"
@@ -73,6 +74,9 @@ env -u LD_RUN_PATH "$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-decla
   -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
   -Wl,--whole-archive "$RUN/lib/runtime.a" -Wl,--no-whole-archive \
   -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build/flc.build.log" 2>&1
+step=PROCESS_HOST
+"$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -isystem "$RUN/include" \
+  -c "$ROOT/native/process-argv.c" -o "$RUN/build/process-argv.o" >"$RUN/build/process-host.build.log" 2>&1
 specs=(
   'fl-git|src/main.fl' 'fl-tui|src/tui.fl' 'fl-check|tools/fl-check.fl'
   'flp-compile|tools/flp-compile.fl' 'fl-front-build|tools/fl-front-build.fl'
@@ -85,11 +89,19 @@ specs=(
 for spec in "${specs[@]}"; do
   IFS='|' read -r name source <<< "$spec"
   step="$name"
-  "$RUN/bin/flc" "$ROOT/$source" "$RUN/build/$name.c" >"$RUN/build/$name.generate.log" 2>&1
+  frontend_extern_flags=()
+  frontend_host_link=()
+  case "$name" in
+    fl-dev-server|fl-front-build|fl-island-headless)
+      frontend_extern_flags=(--extern fl_front_run_argv)
+      frontend_host_link=(-D_GNU_SOURCE -include "$RUN/include/front-process-argv.h" "$RUN/build/process-argv.o")
+      ;;
+  esac
+  "$RUN/bin/flc" "${frontend_extern_flags[@]}" "$ROOT/$source" "$RUN/build/$name.c" >"$RUN/build/$name.generate.log" 2>&1
   [[ -s "$RUN/build/$name.c" ]]
   if grep -q '\[CGC-ERR\]\|\[IR-ERR\]' "$RUN/build/$name.generate.log"; then exit 1; fi
   env -u LD_RUN_PATH "$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-declaration \
-    -I "$RUN/include" -o "$RUN/bin/$name" "$RUN/build/$name.c" \
+    -I "$RUN/include" -o "$RUN/bin/$name" "$RUN/build/$name.c" "${frontend_host_link[@]}" \
     -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
     -Wl,--whole-archive "$RUN/lib/runtime.a" -Wl,--no-whole-archive \
     -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build/$name.build.log" 2>&1
@@ -179,8 +191,15 @@ dependencies of the recorded platform's GJS build must remain available.
 
 The explicit fl-island-run-native entry compiles the selected Island source and
 its FreeLang headless adapter, then emits JSON through this engine. The compiler
-and generated runtime use the same package's current runtime archive. This
-entry is separate from the still-unfinished default dev/API/build-test wiring.
+and generated runtime use the same package's current runtime archive. The
+repository's explicit Native build prepares immutable modules for its Native
+development /~ai/test API and executes tests/*.test.flx declarations. Requests
+run prepared modules without compiling, with a 2000ms engine deadline inside
+the 3-second request budget. Missing engine configuration records preparation
+NOT_RUN; builds without headless tests can still produce a browser/server bundle.
+Test receipts distinguish PASS, FAIL, NOT_REQUIRED, NO_CASES and NOT_RUN.
+The default development entry, full DSL compatibility and release acceptance
+remain unfinished. See the repository's NATIVE-HEADLESS-API.md for scope.
 TXT
 (
   cd -- "$RUN"

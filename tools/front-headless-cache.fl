@@ -1,0 +1,145 @@
+;; Preparation policy and immutable source/module receipts are FreeLang.
+(load "./front-headless.fl")
+(load "./front-process.fl")
+
+(defn fl-headless-cache-hash [file]
+  (let [result (fl_file_sha256_result file)]
+    (if (and (= (get result "ok") true) (regex_match (get result "data") "^[a-f0-9]{64}$"))
+      (get result "data") (throw "E_HEADLESS_HASH: file digest unavailable"))))
+(defn fl-headless-cache-write [file data]
+  (let [result (fl_file_write_result file data)]
+    (if (= (get result "ok") true) true (throw "E_HEADLESS_WRITE: artifact write failed"))))
+(defn fl-headless-cache-config []
+  (let [compiler (env-get "FREELANG_NATIVE_COMPILER")
+        tool (env-get "FREELANG_NATIVE_HEADLESS_TOOL")
+        support (env-get "FREELANG_NATIVE_HEADLESS_SUPPORT")
+        engine (env-get "FREELANG_NATIVE_JS_ENGINE")
+        mozjs (env-get "FREELANG_NATIVE_MOZJS_LIBRARY")
+        gjs (env-get "FREELANG_NATIVE_GJS_LIBRARY")]
+    (if (not (every? (fn [file] (and (string? file) (str-starts-with file "/") (file_is_file file)))
+                    [compiler tool support engine mozjs gjs]))
+      (throw "E_HEADLESS_CONFIG: select the matching Native compiler, tool, runtime and engine pair") nil)
+    {"compiler" compiler "tool" tool "support" support "engine" engine "mozjs" mozjs "gjs" gjs
+     "compilerSha256" (fl-headless-cache-hash compiler) "toolSha256" (fl-headless-cache-hash tool)
+     "supportSha256" (fl-headless-cache-hash support) "engineSha256" (fl-headless-cache-hash engine)
+     "mozjsSha256" (fl-headless-cache-hash mozjs) "gjsSha256" (fl-headless-cache-hash gjs)}))
+
+(defn fl-headless-js-space? [unit]
+  (if (= unit nil) false
+    (let [code (char-code-at unit 0)]
+      (or (fl-headless-has? [9 10 11 12 13 32 160 5760 8232 8233 8239 8287 12288 65279] code)
+          (and (>= code 8192) (<= code 8202))))))
+(defn fl-headless-row-name [block ordinal]
+  ;; Preserve the runner's ASCII [\w-]+ name match separately from mount IDs.
+  (let [units (str-split block "")
+        start (loop [index 8]
+                (if (fl-headless-js-space? (get units index)) (recur (+ index 1)) index))
+        end (loop [index start]
+              (let [unit (get units index)]
+                (if (and (not (= unit nil)) (str-includes "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" unit))
+                  (recur (+ index 1)) index)))]
+    (if (= start end) (str "island" ordinal) (str-lower (str-join (slice units start end) "")))))
+(defn fl-headless-cache-groups [blocks]
+  (loop [index 0 names [] groups []]
+    (if (>= index (length blocks)) {"labels" names "groups" groups}
+      (let [name (fl-headless-row-name (get blocks index) index)]
+        (recur (+ index 1) (push names name) (if (fl-headless-has? groups name) groups (push groups name)))))))
+(defn fl-headless-cache-error [phase process]
+  {"compiled" false "phase" phase "exit" (get process "exit")
+   "timedOut" (get process "timedOut") "overflow" (get process "overflow")
+   "error" (if (not (= (get process "stderr") "")) (get process "stderr") (get process "stdout"))})
+(defn fl-headless-cache-compile [blocks labels logical directory stem config]
+  (let [input (str directory "/" stem ".islands.fl") ast (str directory "/" stem ".ast.json")
+        runtime (str directory "/" stem ".runtime.fl") program (str directory "/" stem ".program.fl")
+        module (str directory "/" stem ".js")
+        written (fl-headless-cache-write input (str (str-join blocks "\n") "\n"))
+        parsed (front-native-run-process [(get config "compiler") "--parse-json" input] 15000 67108864)]
+    (fl-headless-cache-write (str directory "/" stem ".parse.stderr") (get parsed "stderr"))
+    (fl-headless-cache-write ast (get parsed "stdout"))
+    (if (not (= (get parsed "ok") true)) (fl-headless-cache-error "parse" parsed)
+      (try
+        (let [tree (json-parse (get parsed "stdout"))
+              emitted (fl-headless-program-named tree (get config "support") logical labels)
+              saved (fl-headless-cache-write runtime emitted)
+              main (fl-headless-cache-write program "(front-native-island-headless-main)\n")
+              generated (front-native-run-process [(get config "compiler") "--browser-runtime-js" runtime program module] 15000 67108864)]
+          (fl-headless-cache-write (str directory "/" stem ".generate.stdout") (get generated "stdout"))
+          (fl-headless-cache-write (str directory "/" stem ".generate.stderr") (get generated "stderr"))
+          (if (not (= (get generated "ok") true)) (fl-headless-cache-error "generate" generated)
+            {"compiled" true "module" module "moduleSha256" (fl-headless-cache-hash module)
+             "labels" labels}))
+        (catch error {"compiled" false "phase" "lower" "error" (error-message error)})))))
+
+(defn fl-headless-cache-prepare [physical logical output]
+  (let [source (fl_compiler_realpath physical) directory (fl_compiler_realpath output)]
+    (if (or (= source nil) (= directory nil) (not (file_is_file source))
+            (file_is_file directory) (not (= (length (dir_list directory)) 0)))
+      (throw "E_HEADLESS_PREPARE: regular source and empty existing artifact directory required") nil)
+    (let [before (fl-headless-cache-hash source) snapshot (str directory "/source.flx")
+          copy (fl_file_copy_result source snapshot)]
+      (if (not (= (get copy "ok") true)) (throw "E_HEADLESS_SNAPSHOT: source copy failed") nil)
+      (if (not (and (= before (fl-headless-cache-hash snapshot)) (= before (fl-headless-cache-hash source))))
+        (throw "E_HEADLESS_SNAPSHOT: source changed while copying") nil)
+      (let [config (fl-headless-cache-config) blocks (fl-headless-extract (file_read snapshot))
+            grouping (fl-headless-cache-groups blocks) labels (get grouping "labels") groups (get grouping "groups")
+            all (if (= (length blocks) 0)
+                  {"compiled" false "static" true "result" {"ok" false "error" "island 블록 없음" "file" logical}}
+                  (fl-headless-cache-compile blocks labels logical directory "all" config))
+            named (map (fn [name]
+                (let [indices (filter (fn [index] (= (get labels index) name)) (range 0 (length blocks)))
+                      entry (if (and (= (length groups) 1) (= (get all "compiled") true)) all
+                        (fl-headless-cache-compile (map (fn [index] (get blocks index)) indices)
+                          (map (fn [index] (get labels index)) indices) logical directory
+                          (str "group-" (first indices)) config))]
+                  {"name" name "entry" entry})) groups)
+            record {"schema" "fl-headless/cache/1" "file" logical "physicalSource" source
+                    "sourceSha256" before "snapshotSha256" (fl-headless-cache-hash snapshot)
+                    "blockCount" (length blocks) "labels" labels "config" config
+                    "all" all "named" named}]
+        (if (not (= before (fl-headless-cache-hash source))) (throw "E_HEADLESS_SNAPSHOT: source changed during preparation") nil)
+        (fl-headless-cache-write (str directory "/cache.json") (json-str record))
+        record))))
+
+(defn fl-headless-cache-config-current? [saved current]
+  (every? (fn [key] (= (get saved key) (get current key)))
+    ["compilerSha256" "toolSha256" "supportSha256" "engineSha256" "mozjsSha256" "gjsSha256"]))
+(defn fl-headless-cache-run [manifest options]
+  (try
+    (let [resolved (fl_compiler_realpath manifest)
+          checked (if (not (string? resolved)) (throw "E_HEADLESS_MANIFEST: prepared record is missing") nil)
+          record (json-parse (file_read resolved))
+          parent (str-join (slice (str-split resolved "/") 0 (- (length (str-split resolved "/")) 1)) "/")
+          root (fl_compiler_realpath parent)
+          config (fl-headless-cache-config)]
+      (if (not (and (= (get record "schema") "fl-headless/cache/1")
+                    (= (get record "sourceSha256") (fl-headless-cache-hash (get record "physicalSource")))
+                    (fl-headless-cache-config-current? (get record "config") config)))
+        (throw "E_HEADLESS_STALE: source or tool inputs changed; prepare the selected source again") nil)
+      (let [target (get options "island")
+            selected (if (and (string? target) (not (= target "")))
+                       (first (filter (fn [entry] (= (get entry "name") (str-lower target))) (get record "named"))) nil)
+            entry (cond
+                    [(= (get record "blockCount") 0) (get record "all")]
+                    [(and (string? target) (not (= target ""))) (if (= selected nil)
+                      {"static" true "result" {"ok" true "results" [] "file" (last (str-split (get record "file") "/"))}}
+                      (get selected "entry"))]
+                    [true (get record "all")])]
+        (if (get entry "static") (get entry "result")
+          (if (not (= (get entry "compiled") true)) {"ok" false "error" (get entry "error")}
+            (let [module (fl_compiler_realpath (get entry "module"))]
+              (if (not (and (string? root) (string? module) (str-starts-with module (str root "/"))
+                            (= (get entry "moduleSha256") (fl-headless-cache-hash module))))
+                (throw "E_HEADLESS_MODULE: prepared module is missing, changed or outside its artifact directory") nil)
+              (let [process (front-native-run-process
+                      [(get config "engine") (get config "mozjs") (get config "gjs") module "--" (json-str options)]
+                      2000 67108864)]
+                (if (not (= (get process "ok") true))
+                  {"ok" false "error" (cond
+                    [(get process "timedOut") "E_HEADLESS_TIMEOUT: execution exceeded its request budget"]
+                    [(get process "overflow") "E_HEADLESS_OUTPUT: result exceeded Native file IO bounds"]
+                    [(not (= (get process "stderr") "")) (get process "stderr")]
+                    [true "E_HEADLESS_PROCESS: engine execution failed"])}
+                  (let [result (json-parse (get process "stdout"))]
+                    (if (not (and (map? result) (= (type-of (get result "ok")) "boolean")))
+                      (throw "E_HEADLESS_RESULT: engine did not return its result object") result)))))))))
+    (catch error {"ok" false "error" (error-message error)})))

@@ -61,6 +61,8 @@
      "diagnostics" (or (get raw "diagnostics") []) "diagnosticCodes" (or (get raw "diagnosticCodes") [])
      "advisories" (or (get raw "advisories") []) "suggestions" (or (get raw "suggestions") [])
      "diagnosticStatus" (or (get raw "diagnosticStatus") {"catalog" "NOT_RUN" "contractReadiness" "NOT_RUN"})
+     "islandTests" (or (get raw "islandTests") {"status" "NOT_RUN"})
+     "headlessPreparation" (or (get raw "headlessPreparation") {"status" "NOT_RUN"})
      "summary" (or (get raw "summary") {})
      "errorLoop" (fl-dev-control-loop previous issues)}))
 
@@ -102,14 +104,19 @@
 (defn fl-dev-control-failure [stage bundle log elapsed previous]
   (let [fallback (str-trim (file_read log))
         checked (if (= bundle "") {} (fl-dev-control-read (str bundle "/build-state.json") {}))
+        tests (if (= bundle "") {"status" "NOT_RUN"}
+                (fl-dev-control-read (str bundle "/headless/island-tests.json") {"status" "NOT_RUN"}))
         preflight (first (filter (fn [issue] (= (get issue "level") "error")) (or (get checked "issues") [])))
         issue (or (if (= bundle "") nil (fl-dev-control-ast-issue bundle))
                   (if (= preflight nil) nil (assoc preflight "code" (get preflight "check")))
+                  (first (or (get tests "issues") []))
                   {"level" "error" "code" (str "NATIVE_DEV_" stage)
                    "message" (if (= bundle "") fallback (fl-dev-control-build-message bundle fallback))})
         issues [(assoc issue "stage" stage)]]
     (assoc previous "schema" "fl-dev/state/1" "status" "failed" "ok" false "time" (now-iso)
       "elapsed" elapsed "issues" issues "failedStage" stage "failedBundle" bundle
+      "islandTests" (or (get checked "islandTests") tests)
+      "headlessPreparation" (or (get checked "headlessPreparation") {"status" "NOT_RUN"})
       "advisories" (or (get checked "advisories") []) "suggestions" (or (get checked "suggestions") [])
       "summary" (assoc (or (get previous "summary") {}) "advisories" (length (or (get checked "advisories") [])))
       "errorLoop" (fl-dev-control-loop previous issues))))

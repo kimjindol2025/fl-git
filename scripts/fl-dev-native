@@ -49,7 +49,7 @@ monotonic_probe="$("$FREELANG_NATIVE_DEV_WATCH_HOST" --clock-ms)" || blocked 'Co
 [[ "$monotonic_probe" =~ ^[0-9]+$ ]] || blocked 'Native monotonic clock returned an invalid value.'
 RUN="$(mktemp -d -- "$ARTIFACT_PARENT/fl-dev-native.XXXXXX")"
 STATE="$RUN/state.json"
-export FL_NATIVE_DEV_WEB="$WEB" FL_NATIVE_DEV_STATE="$STATE"
+export FL_NATIVE_DEV_WEB="$WEB" FL_NATIVE_DEV_STATE="$STATE" FL_NATIVE_DEV_HEADLESS_INDEX="$RUN/headless-index.json"
 export FL_NATIVE_DEV_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 [[ "$FL_NATIVE_DEV_TOKEN" =~ ^[0-9a-f]{64}$ ]] || blocked 'Unable to create the development supervisor token.'
 printf 'FL_NATIVE_DEV_ARTIFACTS=%s\n' "$RUN"

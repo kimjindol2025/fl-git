@@ -2,9 +2,11 @@
 
 The explicit `scripts/fl-island-run-native` entry lowers extracted Island source
 in FreeLang and executes the generated adapter through the SDK's real JavaScript
-engine. It is an experimental standalone path. Default development, `/~ai/test`
-and the build's `tests/*.test.flx` gate still need integration and qualification;
-their existing `NOT_RUN` metadata remains accurate.
+engine. It is an experimental standalone path. The explicit Native development
+and build entries also prepare modules for `/~ai/test` and the
+`tests/*.test.flx` gate; see [the prepared execution contract](NATIVE-HEADLESS-API.md).
+Default development and complete compatibility remain unfinished. Metadata
+records the actual test receipt, or `NOT_RUN` when no gate ran.
 
 After activating a matching SDK with its engine pair:
 
@@ -67,11 +69,10 @@ their scan rules. Parse failures now forward the compiler JSON diagnostic rather
 than losing its stdout file. With the browser helpers, the actual working-tree
 app completes its headless initial render; this is not browser/Git flow
 acceptance. Its measured cold pipeline took about 15.9 seconds in the final SDK cohort while preserving
-all per-phase bounds. The 3-second API response requirement needs compilation
-ahead of requests; the standalone cold path is not wired into the service.
+all per-phase bounds. The 3-second API response requirement uses compilation
+ahead of requests; the standalone cold pipeline remains separate.
 
-Broader DSL behavior (including an invalid unselected Island), function
-introspection, engine-specific error messages, Native API and test-file
-gate wiring, actual application and Git UI flows, default development/deployment
+Broader DSL behavior, function introspection, engine-specific error messages,
+complete compatibility qualification, actual application and Git UI flows, default development/deployment
 migration, and the latest whole DB safety/operations gate remain in the active
 objective. Commercial status is HOLD; no production deployment has run.

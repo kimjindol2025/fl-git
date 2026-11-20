@@ -65,6 +65,17 @@
       [] records)))
 (defn fl-front-metadata [plan]
   (let [records (get plan "records") head (or (get plan "repoCommit") "")
+        tests-file (str (or (get plan "run") "") "/headless/island-tests.json")
+        tests (if (and (string? (get plan "run")) (file_exists tests-file))
+                (let [record (json_parse (file_read tests-file))]
+                  (if (not (= (get record "schema") "fl-island-tests/1"))
+                    (throw "E_WEB_ISLAND_TESTS: invalid test receipt") record))
+                {"status" "NOT_RUN" "results" [] "issues" []})
+        headless-file (str (or (get plan "run") "") "/headless/index.json")
+        headless (if (and (string? (get plan "run")) (file_exists headless-file))
+                   (let [record (json_parse (file_read headless-file))]
+                     {"status" (or (get record "status") "NOT_RUN") "error" (get record "error")})
+                   {"status" "NOT_RUN"})
         contracts (reduce (fn [rows record]
           (let [source (str (file_read (get record "file"))
                         (if (= (get record "client") nil) "" (str "\n" (file_read (get record "client")))))
@@ -85,9 +96,12 @@
                (if (not (get row "verified_matches_head"))
                  (str "verified " (get row "last_verified_commit") " != head " (if (= head "") "-" head)) "contract incomplete")))})
           (filter (fn [row] (not (= (get row "readiness") "complete"))) (get readiness "rows")))
-          (map (fn [issue] (dissoc issue "storeKey")) (fl-metadata-store-issues records declarations))])]
+          (map (fn [issue] (dissoc issue "storeKey")) (fl-metadata-store-issues records declarations))
+          (or (get tests "issues") [])])]
     {"contracts" (get readiness "rows") "contractSummary" (get readiness "summary")
      "advisories" (get static "advisories") "suggestions" (get static "suggestions")
+     "islandTests" tests
+     "headlessPreparation" headless
      "store_keys" store-keys "storeDeclarations" declarations "issues" issues
      "diagnostics" (fl-diagnostic-items issues) "diagnosticCodes" FL-FRONT-DIAGNOSTIC-CODES
      "summary" (merge (get static "summary") {"errors" (length (filter (fn [issue] (= (get issue "level") "error")) issues))
@@ -103,4 +117,4 @@
                           "remainingStaticChecks" "PORTED" "staticChecks" (get static "checks") "advisories" "PORTED"
                           "advisoryChecks" ["css-class" "empty-catch" "short-uppercase" "name-collision"]
                           "functionSuggestions" "PORTED"
-                          "islandTests" "NOT_RUN" "fix" "NOT_RUN"}}))
+                          "islandTests" (get tests "status") "fix" "NOT_RUN"}}))

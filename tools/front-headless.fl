@@ -185,9 +185,10 @@
       [(or (= kind "and") (= kind "or")) (fl-headless-emit-call kind (get node "args") env ctx update)]
       [(= kind "sexpr") (fl-headless-emit-call (get node "op") (get node "args") env ctx update)]
       [true (throw (str "E_HEADLESS_IR: unsupported " kind))])))
-(defn fl-headless-one [node index]
-  (let [args (get node "args") source (fl-island-binding-name (get args 0)) name (str-lower source)
-        id (str "island-" name "-0") ctx (fl-island-fresh) update (fl-island-fresh)
+(defn fl-headless-one [node index label]
+  (let [args (get node "args") source (fl-island-binding-name (get args 0))
+        name (if (string? label) label (str-lower source))
+        id (str "island-" (str-lower source) "-0") ctx (fl-island-fresh) update (fl-island-fresh)
         options (if (= (get (get args 1) "type") "Array") (fl-island-items (get args 1) "Array") [])
         keys (fl-island-watch-keys options) body (slice args 2 (length args))
         simple (and (= (length body) 1) (= (get (first body) "op") "let"))
@@ -209,7 +210,7 @@
     (str "{\"name\" " (fl-island-quote name) " \"execute\" (j-host-raw-fn (fn [" ctx "] "
       (fl-headless-fl ctx (if (> (length keys) 0) "mount_reactive" "mount")
         (concat [(fl-island-quote id) render] (if (> (length keys) 0) [(fl-headless-array (map fl-island-quote keys))] []))) "))}")))
-(defn fl-headless-program [parsed support file]
+(defn fl-headless-program-named [parsed support file labels]
   (if (not (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok"))) (throw "E_HEADLESS_AST: successful AST required")
     (let [nodes (get parsed "nodes")]
       (if (not (every? (fn [node] (and (= (get node "kind") "sexpr") (= (get node "op") "island"))) nodes)) (throw "E_HEADLESS_SOURCE: islands required")
@@ -217,5 +218,8 @@
           (reset! fl-island-serial 0)
           (str "(load " (fl-island-quote support) ")\n"
             "(define front-native-island-headless-main (j-host-raw-fn (fn [] (__fl_hl_output ["
-            (str-join (map (fn [index] (fl-headless-one (get nodes index) index)) (range 0 (length nodes))) "\n")
+            (str-join (map (fn [index] (fl-headless-one (get nodes index) index (get labels index))) (range 0 (length nodes))) "\n")
             "] " (fl-island-quote (last (str-split file "/"))) " " (fl-island-quote file) "))))\n"))))))
+
+(defn fl-headless-program [parsed support file]
+  (fl-headless-program-named parsed support file []))

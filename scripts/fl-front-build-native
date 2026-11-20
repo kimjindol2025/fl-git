@@ -49,6 +49,25 @@ printf 'FL_WEB_ARTIFACTS=%s\n' "$RUN"
 step=STAGE
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then printf "FL_WEB_NATIVE_BUILD=FAIL STEP=%s EXIT=%s\n" "$step" "$rc"; fi' EXIT
 "$WEB_TOOL" --stage "$WEB" "$RUN" >"$RUN/stage.log" 2>&1
+step=HEADLESS_PREPARE
+HEADLESS_TOOL="${FREELANG_NATIVE_HEADLESS_TOOL:-}"
+[[ -n "$HEADLESS_TOOL" && -x "$HEADLESS_TOOL" ]] || blocked 'Select the matching Native headless tool.'
+mkdir -- "$RUN/headless"
+"$HEADLESS_TOOL" prepare-project "$WEB" "$RUN/headless" >"$RUN/headless-prepare.log" 2>"$RUN/headless-prepare.stderr"
+# The immutable artifacts are complete before publication, including parse-error
+# receipts. HTTP requests execute prepared modules without a compiler process.
+if [[ -n "${FL_NATIVE_DEV_HEADLESS_INDEX:-}" ]]; then
+  cp -- "$RUN/headless/index.json" "$FL_NATIVE_DEV_HEADLESS_INDEX.next"
+  mv -f -- "$FL_NATIVE_DEV_HEADLESS_INDEX.next" "$FL_NATIVE_DEV_HEADLESS_INDEX"
+fi
+step=ISLAND_TESTS
+if "$HEADLESS_TOOL" test-project "$WEB" "$RUN/headless/index.json" "$RUN/headless" >"$RUN/island-tests.log" 2>"$RUN/island-tests.stderr"; then
+  :
+else
+  # A complete failed test receipt is incorporated into preflight diagnostics.
+  # Host/parser failures without a receipt stop immediately.
+  [[ -f "$RUN/headless/island-tests.json" ]] || exit 1
+fi
 step=FLP
 mode="$("$WEB_TOOL" --flp-mode "$RUN/web")"
 case "$mode" in

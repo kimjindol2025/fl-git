@@ -40,7 +40,7 @@
         nested (reduce (fn [files name]
           (if (> (length (filter (fn [entry] (= entry name)) entries)) 0)
             (concat files (fl-dev-watch-tree (str web "/" name) (str name "/") (= name "public"))) files))
-          [] ["pages" "islands" "public"])
+          [] ["pages" "islands" "public" "tests"])
         top (reduce (fn [files name]
           (let [path (str web "/" name)]
             (if (and (file_is_file path) (fl-dev-watch-source? name)

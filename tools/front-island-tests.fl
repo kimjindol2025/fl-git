@@ -1,0 +1,94 @@
+;; Read test declarations as data; never evaluate a test file as application code.
+(load "./front-headless-service.fl")
+(defn fl-island-test-data [node]
+  (let [kind (get node "kind") type (get node "type") value (get node "value")]
+    (cond
+      [(= kind "keyword") (get node "name")]
+      [(and (= kind "literal") (= type "number")) (str-to-num value)]
+      [(and (= kind "literal") (fl-headless-has? ["string" "boolean" "bool" "nil" "null"] type)) value]
+      [(and (= kind "block") (= type "Array")) (map fl-island-test-data (get (get node "fields") "items"))]
+      [(and (= kind "block") (= type "Map"))
+       (let [items (get (get node "fields") "items")]
+         (if (not (= (mod (length items) 2) 0)) (throw "E_ISLAND_TEST_DATA: incomplete map") nil)
+         (loop [index 0 result {}]
+           (if (>= index (length items)) result
+             (let [key (fl-island-test-data (get items index))]
+               (if (not (string? key)) (throw "E_ISLAND_TEST_DATA: map keys must be strings or keywords") nil)
+               (recur (+ index 2) (assoc result key (fl-island-test-data (get items (+ index 1)))))))))]
+      [true (throw "E_ISLAND_TEST_DATA: test options must contain literal data")])))
+(defn fl-island-test-truthy? [value]
+  (not (or (= value nil) (= value false) (= value "")
+           (and (or (integer? value) (float? value)) (= value 0)))))
+(defn fl-island-test-equal? [actual expected]
+  (and (not (or (array? expected) (map? expected)))
+       (or (= (type-of actual) (type-of expected))
+           (and (or (integer? actual) (float? actual)) (or (integer? expected) (float? expected))))
+       (= actual expected)))
+(defn fl-island-test-case [web index declaration file]
+  (let [args (get declaration "args") name (get (get args 0) "value") line (or (get declaration "line") 0)]
+    (try
+      (do (if (not (and (= (length args) 2) (= (get (get args 0) "type") "string")))
+        (throw "E_ISLAND_TEST_DECLARATION: deftest requires a name and option map") nil)
+      (let [data (fl-island-test-data (get args 1)) target (get data "file")
+            checked (if (not (and (map? data) (string? target) (not (= target "")))) (throw "file 없음") nil)
+            options (reduce (fn [options key] (if (has-key? data key) (assoc options key (get data key)) options))
+                        {} ["island" "click" "dispatch" "store"])
+            result (fl-headless-project-run web index target options)
+            rows (or (get result "results") [])
+            island (get data "island")
+            row (or (first (filter (fn [row] (or (not (fl-island-test-truthy? island)) (= (get row "island") island))) rows))
+                    (first rows))]
+        (if (not (= (get result "ok") true)) (throw (or (get result "error") "실행 오류")) nil)
+        (if (= row nil) (throw "island 없음") nil)
+        (if (not (= (get row "ok") true))
+          (throw (or (get (first (filter (fn [event] (= (get event "type") "error")) (get row "events"))) "message") "실행 오류")) nil)
+        (let [expect (get data "expect")
+              html (if (fl-island-test-truthy? (get data "click")) (or (get row "html_after") (get row "html")) (get row "html"))
+              contains (get expect "html-contains") absent (get expect "html-not-contains") key (get expect "store-key")
+              reason (reduce (fn [reason check]
+                        (if (= (get check "ok") true) reason (get check "reason"))) "" [
+                {"ok" (or (not (fl-island-test-truthy? contains)) (and (string? html) (str-includes html contains)))
+                 "reason" (str "html에 \"" contains "\" 없음")}
+                {"ok" (or (not (and (fl-island-test-truthy? key) (has-key? (or expect {}) "store-val")))
+                          (and (has-key? (or (get row "store") {}) key)
+                               (fl-island-test-equal? (get (get row "store") key) (get expect "store-val"))))
+                 "reason" (str "store." key " = " (json-str (get (get row "store") key)) " (기대: " (json-str (get expect "store-val")) ")")}
+                {"ok" (or (not (fl-island-test-truthy? absent)) (not (and (string? html) (str-includes html absent))))
+                 "reason" (str "html에 \"" absent "\" 있으면 안 됨")}])]
+          {"name" name "ok" (= reason "") "reason" reason "file" file "line" line})))
+      (catch error {"name" (or name file) "ok" false "reason" (error-message error) "file" file "line" line}))))
+(defn fl-island-test-file [web index file output ordinal]
+  (try
+    (let [before (fl-headless-cache-hash file)
+          parsed (front-native-run-process [(env-get "FREELANG_NATIVE_COMPILER") "--parse-json" file] 15000 67108864)
+          saved (fl-headless-cache-write (str output "/test-" ordinal ".ast.json") (get parsed "stdout"))
+          errors (fl-headless-cache-write (str output "/test-" ordinal ".stderr") (get parsed "stderr"))]
+      (if (not (= (get parsed "ok") true))
+        (throw (if (= (get parsed "stdout") "") (get parsed "stderr") (get parsed "stdout"))) nil)
+      (let [tree (json-parse (get parsed "stdout"))
+            cases (filter (fn [node] (= (get node "op") "deftest")) (get tree "nodes"))
+            results (map (fn [declaration] (fl-island-test-case web index declaration file)) cases)]
+        (if (not (= before (fl-headless-cache-hash file))) (throw "E_ISLAND_TEST_STALE: test file changed during execution") results)))
+    (catch error [{"name" file "ok" false "reason" (error-message error) "file" file "line" 0}])))
+(defn fl-island-tests [web index output]
+  (let [root (fl-headless-project-root web) directory (str root "/tests")
+        present (fl-headless-has? (dir_list root) "tests")
+        checked (if (and present
+                         (not (and (file_exists directory) (not (file_is_file directory))
+                                   (fl-headless-under? root (fl_compiler_realpath directory)))))
+                  (throw "E_HEADLESS_PATH: test directory must remain inside the project") nil)
+        names (if present (filter (fn [name] (str-ends-with name ".test.flx")) (dir_list directory)) [])
+        results (reduce (fn [results ordinal]
+          (let [relative (str "tests/" (get names ordinal))]
+            (concat results (try
+              (fl-island-test-file root index (fl-headless-project-source root relative) output ordinal)
+              (catch error [{"name" relative "ok" false "reason" (error-message error) "file" relative "line" 0}])))))
+          [] (range 0 (length names)))
+        failed (filter (fn [row] (not (= (get row "ok") true))) results)
+        record {"schema" "fl-island-tests/1" "status" (cond [(> (length failed) 0) "FAIL"]
+                         [(= (length names) 0) "NOT_REQUIRED"] [(= (length results) 0) "NO_CASES"] [true "PASS"])
+                "ok" (= (length failed) 0) "files" (length names) "results" results
+                "summary" {"total" (length results) "pass" (- (length results) (length failed)) "fail" (length failed)}
+                "issues" (map (fn [row] {"level" "error" "check" "island-test" "file" (get row "file") "line" (get row "line")
+                              "message" (str "[테스트 실패] " (get row "name") " — " (get row "reason"))}) failed)}]
+    (fl-headless-cache-write (str output "/island-tests.json") (json-str record)) record))

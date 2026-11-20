@@ -1,4 +1,4 @@
-(load "./front-headless.fl")
+(load "./front-island-tests.fl")
 (defn fl-headless-cli-options [args]
   (reduce (fn [options argument]
     (let [fields [["--island=" "island"] ["--click=" "click"] ["--dispatch=" "dispatch"] ["--store=" "store"]]
@@ -9,6 +9,18 @@
             (assoc options key (if (= key "store") (try (json-parse text) (catch error {})) text))))))) {} args))
 (defn fl-headless-command [args]
   (cond
+    [(and (= (length args) 4) (= (get args 0) "test-project"))
+     (let [result (fl-island-tests (get args 1) (get args 2) (get args 3))]
+       (println (json-str result))
+       (if (= (get result "ok") true) nil (process-exit 1)))]
+    [(and (= (length args) 3) (= (get args 0) "prepare-project"))
+     (println (json-str (fl-headless-project-prepare (get args 1) (get args 2))))]
+    [(and (= (length args) 4) (= (get args 0) "prepare"))
+     (println (json-str (fl-headless-cache-prepare (get args 1) (get args 2) (get args 3))))]
+    [(and (= (length args) 3) (= (get args 0) "run-prepared"))
+     (let [result (fl-headless-cache-run (get args 1) (json-parse (get args 2)))]
+       (println (json-str result))
+       (if (= (get result "ok") true) nil (process-exit 1)))]
     [(and (>= (length args) 2) (= (get args 0) "options"))
      (file_write (get args 1) (json-str (fl-headless-cli-options (slice args 2 (length args)))))]
     [(and (= (length args) 2) (= (get args 0) "status"))
@@ -17,6 +29,6 @@
      (file_write (get args 2) (str (str-join (fl-headless-extract (file_read (get args 1))) "\n") "\n"))]
     [(and (= (length args) 5) (= (get args 0) "emit"))
      (file_write (get args 4) (fl-headless-program (json-parse (file_read (get args 1))) (get args 2) (get args 3)))]
-    [true (throw "Usage: fl-island-headless extract source.flx islands.fl | emit ast.json runtime.fl source.flx output.fl")]))
+    [true (throw "Usage: fl-island-headless prepare-project web-root empty-artifact-directory | test-project web-root index.json artifact-directory | prepare physical.flx logical.flx empty-artifact-directory | run-prepared cache.json optionsJSON | extract source.flx islands.fl | emit ast.json runtime.fl source.flx output.fl")]))
 (try (fl-headless-command (cli-args))
   (catch error (println (json-str {"ok" false "error" (error-message error)})) (process-exit 1)))

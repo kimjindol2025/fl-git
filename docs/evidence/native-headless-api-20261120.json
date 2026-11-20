@@ -1,0 +1,162 @@
+{
+  "schema": "native-headless-api-evidence/1",
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "scope": "Explicit Native build/development entries; full DSL, default entry and whole DB acceptance remain open",
+  "implementation": [
+    "FreeLang prepared source/group/module policy and project-relative request selection",
+    "Native literal argv/process/file boundary; no shell argument reconstruction",
+    "Immutable artifacts and atomic index publication ahead of requests",
+    "AST data-only test declarations, typed expectations and build diagnostics",
+    "Test-only watch changes, last ready application retention and repair",
+    "Optional engine inputs preserve core browser/server build without headless tests"
+  ],
+  "verification": {
+    "literalProcess": {
+      "controls": 36,
+      "passed": 36,
+      "sdkHostObject": "byte-identical to qualified process host object"
+    },
+    "cacheSmoke": {
+      "controls": 5,
+      "passed": 5,
+      "scope": "earlier candidate; covered again by final API controls"
+    },
+    "finalHTTP": {
+      "controls": 53,
+      "passed": 53,
+      "workers": 2,
+      "retainedSSE": 8,
+      "isolatedConcurrentRequests": 12,
+      "actualAppBytes": 95749,
+      "actualAppWarmSeconds": 0.2367932590059354,
+      "selectedWarmSeconds": 0.2093290220000199,
+      "stopSeconds": 0.032012669995310716,
+      "browserGitFlows": "NOT_RUN",
+      "actualAppSha256": "78bb9c77ed0b7973c39339eb0306b95cb9bd5a7b579e582c2eac1c5c8733c9f3"
+    },
+    "testGate": {
+      "controls": 21,
+      "passed": 21,
+      "successfulTestCases": 7,
+      "intentionalExpectationFailures": 9,
+      "malformedFileFailure": 1,
+      "buildGate": "executed",
+      "commercial": "HOLD"
+    },
+    "developmentLifecycle": {
+      "controls": 13,
+      "passed": 13,
+      "actualBuilds": 4,
+      "readinessAndStopSeconds": 3,
+      "testOnlyChanges": "verified",
+      "lastGoodApp": "retained on failing gate",
+      "commercial": "HOLD"
+    },
+    "trackedCommon": {
+      "suites": 7,
+      "passed": 71,
+      "total": 71,
+      "separateProvider": 9
+    },
+    "traceAudit": {
+      "productNodeFamilyExecs": 0,
+      "compilerExecsInHTTPRequests": 0,
+      "quotedPathsDecodedAsFilesystemBytes": true
+    },
+    "bounds": {
+      "addressSpaceBytes": 2147483648,
+      "requestSeconds": 3,
+      "readinessSeconds": 3,
+      "stopSeconds": 3,
+      "preparedEngineMilliseconds": 2000,
+      "parseAndGenerateSeconds": 15,
+      "nativeOutputBytes": 67108864,
+      "sharedHeavyLock": true
+    },
+    "legacyComparison": {
+      "exactTypedMatches": 27,
+      "total": 28,
+      "status": "PARTIAL",
+      "scope": "R18 unchanged lowering/runtime core except row labels; direct nil? reference-emitter difference retained; no fresh all-parity claim"
+    }
+  },
+  "sdk": {
+    "elfCount": 16,
+    "manifestSha256": "2588317041759c9cae377bf148805926068f1186216b0128b61f3769eedb3645",
+    "runtimeSha256": "22ce727daa24d56a7e357f92ecc5865e1e8856cc2209cf0ae9120e2c22f98caa",
+    "byteIdenticalToR18": [
+      "fl-check",
+      "fl-dev-watch-host",
+      "fl-front-fix",
+      "fl-git",
+      "fl-island-compile",
+      "fl-js-engine",
+      "fl-source-transaction",
+      "fl-style-compile",
+      "fl-tui",
+      "flc",
+      "flp-compile"
+    ],
+    "changedFrontTools": [
+      "fl-dev-control",
+      "fl-dev-server",
+      "fl-dev-watch",
+      "fl-front-build",
+      "fl-island-headless"
+    ],
+    "relocationCharacters": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "embedded LF"
+    ],
+    "manifestBeforeAndAfter": "PASS"
+  },
+  "sourceSha256": {
+    "native/process-argv.c": "0a4e3f112503567c7d630042dc6e73ff0967e64f4b02afc6dbe407088f8f9bd3",
+    "native/process-argv.h": "90b05b4b30ea7d72d1ee8dc600af7a56ac88675a410b464472db25b898c0b139",
+    "tools/front-process.fl": "702353077ff1408d5ed6a9aa947547497decb7103b3b947308775e4f4ad60b5f",
+    "tools/front-headless-cache.fl": "3e1e0365d52a8f67bbfca42b5131b9f41c5be41526fe0dc7e4c23052a6683c1e",
+    "tools/front-headless-service.fl": "c229f3faff21f62fdbc548da8f62cd5df2fdbf6193694328f4a8101dde4bd070",
+    "tools/front-island-tests.fl": "f3deacdd716c7df2a751ff041ee062ac0e26f143f05396f629c1730f7042019b",
+    "tools/front-headless.fl": "49f81509c8b9b35b981d97277c639835f295f6783caf2b44fa20da8398602b99",
+    "tools/fl-island-headless.fl": "fecf8ab8c86c8b2ebf39584e9077f96e46f89c295dc32e815c06007f52145bcd",
+    "tools/front-dev.fl": "77308c0b6dd7f0b354a26a46b91d9bbca8da776391894e5c89d318a8bfc53559",
+    "tools/front-dev-control.fl": "27908ec5d76c6b804d664bf7a937383c3533b31cb1703f8e1128b53ddacc89d1",
+    "tools/front-metadata.fl": "6aadc22016edfa156c1491ae43d761b2f7bc0aad5be0571cc19318aa108b4400",
+    "scripts/fl-sdk-package-native": "62a889984d3e526220233ea4363af70f2b9c4deb94495ec1b9cd7faf2f873082",
+    "scripts/fl-dev-native": "fdbc6af5630962fdb8b2ae13a1fd538b9c4a2174571ea7844dfca1fed02589b0",
+    "scripts/fl-front-build-native": "1bcc397a3379c442716bc7ec83583cfed7c542eeca77b32e06cfd584c9cf8965",
+    "tools/front-dev-watch.fl": "0ebe85c2bbf7059a1330b0a916cc8a1dc3f9b726d45093c4bcfe66ce56f6ca06"
+  },
+  "preservation": {
+    "foreignFiles": 4,
+    "foreignHashesUnchanged": true,
+    "protectedFixturesAssertionsRunnersBoundsChanged": false,
+    "fxUnchanged": true,
+    "dbUnchanged": true,
+    "seedRegenerated": false,
+    "productHandwrittenJavaScriptOrPythonAdded": false
+  },
+  "retainedFailures": [
+    "Strict own C compile initially included preexisting SDK-header warnings; headers classified system, own source retains Wall/Wextra/Werror",
+    "Early normal process probe collided after FL/C name normalization and recursed; unintended SIGSEGV retained, old binary never retried; differently named wrapper and actual C call verified",
+    "Initial generated-call preflight regex expected different temporary syntax; corrected literal actual-call guard, functional controls unchanged",
+    "Initial service source closing delimiter rejected before compilation; corrected",
+    "First private HTTP driver lacked required SSE Accept header and used incorrect pool variable;404 retained, correct headers and FL_WORKERS=2 qualified",
+    "First gate body used multiple expressions in Native try; corrected explicit do, all new catch ASTs audited",
+    "Outside test-directory symlink was incorrectly treated as absent because guarded file_exists returnedfalse; parent entry presence now distinguishes inaccessible directory, C10 unchanged",
+    "Private SDK driver locator substitution stopped before product packaging; corrected exact accepted locator"
+  ],
+  "notQualified": [
+    "Abrupt process-owner death/cancellation",
+    "Full original DSL and error-text/function-introspection compatibility",
+    "Standalone cold CLI selection before compilation",
+    "Default development/deployment migration",
+    "Actual browser and repository Stage/Commit/Pull/Push flows",
+    "Latest whole DB95 safety/recovery/concurrency/load/operations"
+  ]
+}

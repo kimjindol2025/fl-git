@@ -1,0 +1,5 @@
+;; Compile with --extern fl_front_run_argv and the matching process host.
+;; Keep a real FreeLang function at callback/value boundaries; a C extern is
+;; not a FreeLang closure. Command selection and timeout policy belong here.
+(defn front-native-run-process [arguments timeout output-limit]
+  (fl_front_run_argv arguments timeout output-limit))

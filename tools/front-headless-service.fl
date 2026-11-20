@@ -1,0 +1,77 @@
+;; Prepared project selection and request policy. Compilation runs during builds,
+;; before the host atomically publishes index.json to the inspection service.
+(load "./front-headless-cache.fl")
+
+(defn fl-headless-under? [root file]
+  (and (string? root) (string? file) (str-starts-with file (str root "/"))))
+(defn fl-headless-project-root [directory]
+  (let [root (fl_compiler_realpath directory)]
+    (if (not (and (string? root) (file_exists root) (not (file_is_file root))))
+      (throw "E_HEADLESS_ROOT: select an existing project web directory") root)))
+(defn fl-headless-project-source [root relative]
+  (if (not (and (string? relative) (not (= relative ""))
+                (not (str-starts-with relative "/"))
+                (not (str-includes relative (char-from-code 0)))
+                (every? (fn [part] (not (or (= part "") (= part ".") (= part ".."))))
+                        (str-split relative "/"))))
+    (throw "E_HEADLESS_PATH: a project-relative file without traversal is required") nil)
+  (let [source (fl_compiler_realpath (str root "/" relative))]
+    ;; Resolve and check containment before reading or hashing the selected file.
+    (if (not (fl-headless-under? root source))
+      (throw "E_HEADLESS_PATH: selected file is missing or outside the project") nil)
+    (if (not (file_is_file source)) (throw "E_HEADLESS_PATH: selected file must be regular") source)))
+(defn fl-headless-project-files [root]
+  (loop [pending [root] visited [] found []]
+    (if (= (length pending) 0) found
+      (let [directory (first pending) remaining (slice pending 1 (length pending))]
+        (if (fl-headless-has? visited directory) (recur remaining visited found)
+          (let [entries (map (fn [name] (fl_compiler_realpath (str directory "/" name))) (dir_list directory))
+                inside (filter (fn [entry] (fl-headless-under? root entry)) entries)
+                sources (filter (fn [entry] (and (file_is_file entry)
+                                   (or (str-ends-with entry ".flx") (str-ends-with entry ".fl")))) inside)
+                directories (filter (fn [entry] (not (file_is_file entry))) inside)]
+            (recur (concat remaining directories) (push visited directory)
+              (reduce (fn [files file] (if (fl-headless-has? files file) files (push files file))) found sources))))))))
+(defn fl-headless-project-prepare [web output]
+  (let [root (fl-headless-project-root web) directory (fl-headless-project-root output)]
+    (if (or (= root directory) (fl-headless-under? root directory) (not (= (length (dir_list directory)) 0)))
+      (throw "E_HEADLESS_PREPARE: select an empty artifact directory outside the source tree") nil)
+    (let [configuration (try {"ok" true "config" (fl-headless-cache-config)}
+                            (catch error {"ok" false "error" (error-message error)}))
+          files (if (= (get configuration "ok") true) (fl-headless-project-files root) [])
+          entries (map (fn [index]
+            (let [source (get files index) artifact (str directory "/source-" index)
+                  created (dir_create artifact)
+                  record (fl-headless-cache-prepare source source artifact)]
+              {"source" source "sourceSha256" (get record "sourceSha256")
+               "manifest" (str artifact "/cache.json")
+               "manifestSha256" (fl-headless-cache-hash (str artifact "/cache.json"))})) (range 0 (length files)))
+          record {"schema" "fl-headless/project/1" "root" root "artifactRoot" directory "entries" entries
+                  "status" (if (= (get configuration "ok") true) "PREPARED" "NOT_RUN")
+                  "error" (get configuration "error")}]
+      (fl-headless-cache-write (str directory "/index.json") (json-str record)) record)))
+
+(defn fl-headless-project-run [web index relative options]
+  (try
+    (let [root (fl-headless-project-root web) source (fl-headless-project-source root relative)]
+      (if (not (and (string? index) (file_is_file index)))
+        (throw "E_HEADLESS_NOT_READY: selected source has no published preparation") nil)
+      (let [record (json-parse (file_read index))
+            artifacts (fl_compiler_realpath (get record "artifactRoot"))]
+        (if (not (and (= (get record "schema") "fl-headless/project/1") (= (get record "root") root)
+                      (string? artifacts) (not (= artifacts root)) (not (fl-headless-under? root artifacts))))
+          (throw "E_HEADLESS_INDEX: prepared index does not belong to the selected project") nil)
+        (if (not (= (get record "status") "PREPARED"))
+          (throw (str "E_HEADLESS_NOT_READY: " (or (get record "error") "preparation did not run"))) nil)
+        (let [selected (first (filter (fn [entry] (= (get entry "source") source)) (get record "entries")))
+              manifest (if (= selected nil) nil (fl_compiler_realpath (get selected "manifest")))]
+          (if (= selected nil) (throw "E_HEADLESS_NOT_READY: rebuild to prepare the selected source") nil)
+          (if (not (and (fl-headless-under? artifacts manifest)
+                        (= (get selected "manifestSha256") (fl-headless-cache-hash manifest))))
+            (throw "E_HEADLESS_INDEX: selected preparation is missing or changed") nil)
+          (let [prepared (json-parse (file_read manifest))]
+            (if (not (and (= (get prepared "physicalSource") source)
+                          (= (get selected "sourceSha256") (get prepared "sourceSha256"))))
+              (throw "E_HEADLESS_INDEX: selected preparation refers to another source") nil)
+            (fl-headless-cache-run manifest options)))))
+    (catch error {"ok" false "error" (error-message error)})))

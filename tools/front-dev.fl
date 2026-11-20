@@ -1,4 +1,5 @@
 ; Native HMR inspection service. The default fl-dev is not migrated yet.
+(load "./front-headless-service.fl")
 (define fl-dev-errors (atom []))
 (define fl-dev-clients (atom []))
 
@@ -54,10 +55,25 @@
      "endpoints" {"/~ai" "GET — summary" "/~ai/routes" "GET — routes"
                     "/~ai/fns" "GET — functions" "/~ai/store" "GET — store keys"
                     "/~ai/issues" "GET — build issues" "/~ai/errors" "GET — browser errors"
-                    "/~ai/contracts" "GET — contract readiness" "/~ai/browser" "GET — browser state"}}))
+                    "/~ai/contracts" "GET — contract readiness" "/~ai/browser" "GET — browser state"
+                    "/~ai/test" "GET — prepared Island headless execution"}}))
+(defn fl-dev-test [req]
+  (let [file (server_req_query req "file")]
+    (if (or (= file nil) (= file ""))
+      (fl-dev-json {"error" "file 파라미터 필요. 예: /~ai/test?file=pages/examples/06-counter.flx"} 200)
+      (try
+        (let [options (reduce (fn [options key]
+                          (let [value (server_req_query req key)]
+                            (if (or (= value nil) (= value "")) options
+                              (assoc options key (if (= key "store") (json-parse value) value)))))
+                        {} ["island" "click" "dispatch" "store"])]
+          (fl-dev-json (fl-headless-project-run (env-get "FL_NATIVE_DEV_WEB")
+            (env-get "FL_NATIVE_DEV_HEADLESS_INDEX") file options) 200))
+        (catch error (fl-dev-json {"ok" false "error" (error-message error)} 200))))))
 (defn fl-dev-inspect [req]
   (let [path (get req "path") state (fl-dev-state) issues (or (get state "issues") [])]
     (cond
+      [(= path "/~ai/test") (fl-dev-test req)]
       [(= path "/~ai") (fl-dev-json (fl-dev-summary) 200)]
       [(= path "/~ai/routes") (fl-dev-json {"routes" (or (get state "routes") [])} 200)]
       [(= path "/~ai/fns") (fl-dev-json (fl-dev-functions) 200)]
