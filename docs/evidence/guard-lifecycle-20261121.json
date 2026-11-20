@@ -1,0 +1,225 @@
+{
+  "date": "2026-11-21",
+  "scope": "Guard parent exit lifecycle only",
+  "units": {
+    "existing": {
+      "passed": 15,
+      "total": 15
+    },
+    "lifecycle": {
+      "passed": 25,
+      "total": 25
+    }
+  },
+  "scenarios": [
+    {
+      "scenario": "normal",
+      "expected_guard_exit": 0,
+      "actual_guard_exit": 0,
+      "seconds": 0.7553735960027552,
+      "result": {
+        "status": "PASS",
+        "cause": "NONE",
+        "cleanup_reason": "NONE",
+        "driver_exit": 0,
+        "peak_rss_bytes": 5390336,
+        "remaining_children": 0,
+        "events_sha256": "94469c4c191af01c0db2d1f60510c9355d29bfad610ab061ad5b7eb06a1a1575",
+        "short_unpinned_count": 0,
+        "parent_exit_rescans": 0,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    },
+    {
+      "scenario": "budget",
+      "expected_guard_exit": 2,
+      "actual_guard_exit": 2,
+      "seconds": 0.08608320799976354,
+      "result": {
+        "status": "BLOCKED",
+        "cause": "RSS_LIMIT_EXCEEDED",
+        "cleanup_reason": "NONE",
+        "driver_exit": 143,
+        "peak_rss_bytes": 71483392,
+        "remaining_children": 0,
+        "events_sha256": "598011c5b6e694dde19b1c6fd11a304243d5aa822020e86b2dc74d139728dd5e",
+        "short_unpinned_count": 0,
+        "parent_exit_rescans": 0,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    },
+    {
+      "scenario": "inherited-sigchld-ignore",
+      "expected_guard_exit": 0,
+      "actual_guard_exit": 0,
+      "seconds": 0.7380838460012455,
+      "result": {
+        "status": "PASS",
+        "cause": "NONE",
+        "cleanup_reason": "NONE",
+        "driver_exit": 0,
+        "peak_rss_bytes": 5079040,
+        "remaining_children": 0,
+        "events_sha256": "16946f1661a97fbf961373eaea72c8115e28c602e62c32b41e89fb882033f7cc",
+        "short_unpinned_count": 0,
+        "parent_exit_rescans": 0,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    },
+    {
+      "scenario": "nonfresh",
+      "expected_guard_exit": 2,
+      "actual_guard_exit": 2,
+      "seconds": 0.002487775003828574,
+      "target_started": false
+    },
+    {
+      "scenario": "adopted",
+      "expected_guard_exit": 0,
+      "actual_guard_exit": 0,
+      "seconds": 0.3878048740007216,
+      "result": {
+        "status": "PASS",
+        "cause": "NONE",
+        "cleanup_reason": "NONE",
+        "driver_exit": 0,
+        "peak_rss_bytes": 4595712,
+        "remaining_children": 0,
+        "events_sha256": "e52b0719b30da5090c28f0a34e32dbc90bb6d788ee70e2c26df37b5eafca29cd",
+        "short_unpinned_count": 0,
+        "parent_exit_rescans": 0,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    },
+    {
+      "scenario": "nonzero",
+      "expected_guard_exit": 2,
+      "actual_guard_exit": 2,
+      "seconds": 0.0318879270053003,
+      "result": {
+        "status": "BLOCKED",
+        "cause": "DRIVER_EXIT_NONZERO",
+        "cleanup_reason": "NONE",
+        "driver_exit": 7,
+        "peak_rss_bytes": 2850816,
+        "remaining_children": 0,
+        "events_sha256": "10728e9f172d54caed68f889a8b5f833710524260294f81d50578703e708998b",
+        "short_unpinned_count": 0,
+        "parent_exit_rescans": 0,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    },
+    {
+      "scenario": "fast",
+      "expected_guard_exit": 0,
+      "actual_guard_exit": 0,
+      "seconds": 0.24973915000009583,
+      "result": {
+        "status": "PASS",
+        "cause": "NONE",
+        "cleanup_reason": "NONE",
+        "driver_exit": 0,
+        "peak_rss_bytes": 4218880,
+        "remaining_children": 0,
+        "events_sha256": "0898968c2854d848c56806e31f14f174a92bf11d67b795ad08b80510d0fa345e",
+        "short_unpinned_count": 21,
+        "parent_exit_rescans": 0,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    },
+    {
+      "scenario": "exit-window",
+      "expected_guard_exit": 0,
+      "actual_guard_exit": 0,
+      "seconds": 0.09718869100470329,
+      "result": {
+        "status": "PASS",
+        "cause": "NONE",
+        "cleanup_reason": "NONE",
+        "driver_exit": 0,
+        "peak_rss_bytes": 4235264,
+        "remaining_children": 0,
+        "events_sha256": "94d9919814c8e60b323ff0b7cd33bbb69ef96f5dcaa1bee4028046fbe6f66be6",
+        "short_unpinned_count": 2,
+        "parent_exit_rescans": 1,
+        "final_drain_complete": true,
+        "unmeasured_short_child_peak": "UNVERIFIED",
+        "physical_hard_limit": false,
+        "independent_authority": false
+      }
+    }
+  ],
+  "expected_outcomes": {
+    "passed": 8,
+    "total": 8
+  },
+  "interrupted_runs_not_counted_as_pass": 1,
+  "old_failure_counter": 3,
+  "old_failure_counter_reset": false,
+  "non_task_source_preserved": {
+    "passed": 13,
+    "total": 13
+  },
+  "node_runs": 0,
+  "db_runs": 0,
+  "wal_runs": 0,
+  "ui_runs": 0,
+  "sigkill": 0,
+  "crash_test": "HOLD",
+  "release": "BLOCKED",
+  "guard_elf_sha256": "61d9a4d63cab417a74cf37c62f27d9f0726db23a94a63b54cbde1c170e8c3b9f",
+  "tested_guard_source_sha256": "0e440eb208120a74e7a407847a00940f650d3b964d3633f7b01338daed939208",
+  "final_guard_source_sha256": "d7d3e8ac4cce69461b1a4cf18cf7749856a0a5b43e4d0b0cc4a4a88e2174f81c",
+  "final_elf_equivalence": [
+    {
+      "artifact": "guard",
+      "source_sha256": "d7d3e8ac4cce69461b1a4cf18cf7749856a0a5b43e4d0b0cc4a4a88e2174f81c",
+      "final_sha256": "61d9a4d63cab417a74cf37c62f27d9f0726db23a94a63b54cbde1c170e8c3b9f",
+      "tested_sha256": "61d9a4d63cab417a74cf37c62f27d9f0726db23a94a63b54cbde1c170e8c3b9f",
+      "exit": 0
+    },
+    {
+      "artifact": "lifecycle",
+      "source_sha256": "5df03cdac342fc76d6a26e72e50f385c9d56c7c3c928044c34d3091bb8807cbb",
+      "final_sha256": "5cebf58a1a4376a9b7ea4fb0a9fa292d691b5dec7e0b7715314d646c357af061",
+      "tested_sha256": "5cebf58a1a4376a9b7ea4fb0a9fa292d691b5dec7e0b7715314d646c357af061",
+      "exit": 0
+    }
+  ],
+  "independent_static_qa": "PASS",
+  "independent_execution_qa": "PASS",
+  "independent_execution_qa_sha256": "7a236cd5afe44872b1c961e5962e90deaa5ed8baa6440d71be65b614d2f282c3",
+  "independently_verified": {
+    "unit_assertions": 40,
+    "scenarios": 8,
+    "complete_event_streams": 7,
+    "events": 489,
+    "original_receipts": 15,
+    "stdout_stderr_hashes": 30,
+    "protected_originals": 5,
+    "parent_exit_event_sequence": 25,
+    "rescan_event_sequences": [
+      27,
+      43
+    ],
+    "final_drain_sequence": 46
+  }
+}
