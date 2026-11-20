@@ -1,0 +1,497 @@
+{
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "sdk": {
+    "manifestSha256": "9c0050409f93e1d69411e73cb909a67d3fde875e91c737940b7d9c36155662cd",
+    "runtimeSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "elf": {
+      "flc": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+      "fl-git": "a32b729d1d5d40823a80dc071ff8c887541133b0051d8e323118f75b0e6da588",
+      "fl-tui": "841f22d2e4e18981215277fb0f1881bca797afd62f17fb4708750d4802a058d0",
+      "fl-check": "27127cab9264606cb1826a45f4092573e72f9d650afdc2dfc8dd7e7f7ceea80c",
+      "flp-compile": "64d41a584682ab3cc183e9d79ed7240ddb3b498eb21fad4a5751781ba939f958",
+      "fl-front-build": "abd6cd3bb2bce2e13061683df59481f63f96c41056ed0c42ab8f30e65818b8bc",
+      "fl-style-compile": "cbb0d688b6f110817aa91c9f3e8def4f641609a4d9bab469726b85609472c344",
+      "fl-island-compile": "e0dd8b829ac00ce7b0bec13f6be89e7baa730c7df6bc7938011debd783b3e3b7",
+      "fl-dev-server": "eac6ddd6cfeea7ffb7c85bc54336667ff6087fe3f7ce9daa20839232ac7e56a5",
+      "fl-dev-watch": "746a747c11ddc2f5093d5f7fe9c4f55afcc8754ca3a2a33ad7e318624608b95b",
+      "fl-dev-control": "f8a8754e807764590d98ecaeba7b62227d1c5ef7e8625b239eac6503a8c678ef",
+      "fl-front-fix": "e47a0ba96be5960736e9a7c725c1eac14d3d2040d1b06d5cd281845cf172b461",
+      "fl-island-headless": "4476c8c706a9271e77f468ffa48a64c3ad274b1b9806c0853b563cca81de068b",
+      "fl-dev-watch-host": "f86888c5715d6093331a610cfe525994954cf72a8e7700d5e0f591ba17d4b5e8",
+      "fl-source-transaction": "20a8f6660c66a4d714524119e29f88080d4a3c8105302b947f7bdb6f9228fb54",
+      "fl-js-engine": "b31919e02fcaec778d61b63aaba1ecfc042784dfa36a1b0c5159ac49074a26b5"
+    }
+  },
+  "canonical": {
+    "unchangedSeedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767",
+    "canonicalCSha256": "a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5",
+    "stage2Equals3Equals4": true,
+    "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "measurements": [
+      {
+        "step": "stage0_TO_stage1",
+        "seconds": 2.02,
+        "rssKiB": 391892
+      },
+      {
+        "step": "stage1_TO_stage2",
+        "seconds": 1.54,
+        "rssKiB": 939580
+      },
+      {
+        "step": "stage2_TO_stage3",
+        "seconds": 30.71,
+        "rssKiB": 1557760
+      },
+      {
+        "step": "stage3_TO_stage4",
+        "seconds": 29.54,
+        "rssKiB": 1557208
+      }
+    ],
+    "limits": {
+      "seconds": 40,
+      "rssGiB": 1.6,
+      "addressSpaceBytes": 2147483648
+    }
+  },
+  "relocatedCompiler": {
+    "seconds": 31.97,
+    "rssKiB": 1556608,
+    "exit": 0,
+    "canonicalCIdentical": true,
+    "limits": {
+      "seconds": 40,
+      "rssGiB": 1.6,
+      "addressSpaceBytes": 2147483648
+    }
+  },
+  "runtimeAndHostIdentity": {
+    "sameRuntimeObjects": [
+      "aliases.o",
+      "cgc-bridge.o",
+      "collection.o",
+      "debug.o",
+      "error.o",
+      "gc.o",
+      "http_client.o",
+      "io.o",
+      "json.o",
+      "mariadb.o",
+      "math.o",
+      "raw_tcp.o",
+      "regex.o",
+      "smtp.o",
+      "sqlite.o",
+      "sse.o",
+      "user-fns.o",
+      "websocket.o"
+    ],
+    "changedRuntimeObjects": [
+      "core.o",
+      "http.o",
+      "process.o"
+    ],
+    "coreTextByteIdentical": true,
+    "coreSourceRootStringsDiffer": true,
+    "processHostObjectByteIdentical": true,
+    "elfSameToR22": [
+      "fl-dev-watch-host",
+      "fl-js-engine",
+      "fl-source-transaction"
+    ],
+    "elfChangedToR22": [
+      "fl-check",
+      "fl-dev-control",
+      "fl-dev-server",
+      "fl-dev-watch",
+      "fl-front-build",
+      "fl-front-fix",
+      "fl-git",
+      "fl-island-compile",
+      "fl-island-headless",
+      "fl-style-compile",
+      "fl-tui",
+      "flc",
+      "flp-compile"
+    ]
+  },
+  "traceAudit": {
+    "traceFiles": 86,
+    "decodedExecs": 13362,
+    "nodeFamilyExecs": 0,
+    "accountCLIExecsInFinalActualCohorts": 0,
+    "allExecveFilenamesFullyParsed": true
+  },
+  "preservation": {
+    "foreignFiles": 4,
+    "foreignHashesUnchanged": true,
+    "protectedFixturesAssertionsExpectedOutputsRunnersBoundsChanged": false,
+    "dbChanged": false,
+    "seedRegenerated": false,
+    "productHandwrittenJavaScriptOrPythonAdded": false
+  },
+  "bounds": {
+    "addressSpaceBytes": 2147483648,
+    "sharedHeavyLock": true,
+    "requestReadinessStopSeconds": 3,
+    "smallDevelopmentBuildSeconds": 90,
+    "fullActualInputWholeBuildSeconds": 300,
+    "shellCaptureMilliseconds": 30000,
+    "shellCapturePerStreamBytes": 1048576,
+    "headlessEngineMilliseconds": 2000,
+    "headlessParseGenerateSeconds": 15,
+    "compilerSelfGenerationSeconds": 40,
+    "compilerSelfRSSGiB": 1.6,
+    "changed": false
+  },
+  "schema": "native-default-dev-evidence/1",
+  "sourceBase": "0467bada0e53cb20d443b64723e56a1f27142374 plus exactly the three shell-host source hashes below",
+  "sourceSha256": {
+    "scripts/fl-dev": "2dd82aae08353a45984f2caa381422eae9b5473b44f1028117ebbfc05bbf9b5d",
+    "scripts/fl-dev-native": "5a7772d7f9b291cb052658f9f1c940dd1f9a2866515062c440ce4172084ccdfc",
+    "scripts/fl-front-build-native": "5bf18b3892d617454522aaf0bc34d8c4c097142e49c67bebdd77766fe68ea816"
+  },
+  "foreignSourceSha256": {
+    "web/islands/index.flx": "78bb9c77ed0b7973c39339eb0306b95cb9bd5a7b579e582c2eac1c5c8733c9f3",
+    "web/pages/api.flx": "773cffc28da3db6d5dc666f06ac363f627eee56ee3b2e566f03048c9ec5de2aa",
+    "src/git-status.fl": "99bd9afe46e040fd8fffbf1c7cdc73b3c8c5f4c50f61cb42abbbd8ac5220dfa7",
+    "tests/git-status.test.fl": "b239f41d72e9b6761aff3cc86997c67a9cce8dbe3baec5bbb322a126216e4620"
+  },
+  "defaultEntry": "scripts/fl-dev",
+  "nodeFallback": false,
+  "verification": {
+    "lifecycle": {
+      "controls": 13,
+      "passed": 13,
+      "actualBuilds": 4,
+      "readinessAndStopSeconds": 3,
+      "testOnlyChanges": "verified",
+      "lastGoodApp": "retained on failing gate",
+      "commercial": "HOLD"
+    },
+    "literalPaths": {
+      "passed": 16,
+      "total": 16,
+      "builds": 2,
+      "sourceRootEndsWithLF": true,
+      "sourceDirectoryEndsWithLF": true,
+      "artifactDirectoryEndsWithLF": true,
+      "symbolicLinksCanonicalizedPhysically": true,
+      "defaultRepositoryEndsWithLF": true,
+      "buildDeadlineSeconds": 90,
+      "readinessAndStopSeconds": 3,
+      "commercial": "HOLD"
+    },
+    "entryGuards": {
+      "passed": 17,
+      "total": 17,
+      "childServicesStarted": 0
+    },
+    "pendingCommandShutdown": {
+      "passed": 8,
+      "total": 8,
+      "stopSeconds": 1.3170842129984521,
+      "stopDeadlineSeconds": 3,
+      "blockingHelperSeconds": 30,
+      "unrelatedSentinelPreserved": true,
+      "cancelledCommandTruthfulNonzero": true,
+      "commercial": "HOLD"
+    },
+    "actualDefault": {
+      "passed": 9,
+      "total": 9,
+      "initialBuildSeconds": 129.927912637002,
+      "stop": {
+        "exit": 0,
+        "seconds": 1.1166823559979093
+      },
+      "chromeRendersLiveApplication": true,
+      "chromeEventSourceOpen": true,
+      "ownedTabsFinalized": true
+    },
+    "finalActualBrowser": {
+      "passed": 25,
+      "total": 25,
+      "scope": [
+        "repository discovery/selection",
+        "literal special filenames",
+        "real Stage/Commit",
+        "unselected file preservation",
+        "ordinary reload",
+        "computed CSS HMR without navigation",
+        "SSE reload preserves Git result",
+        "no application console/CSP errors"
+      ],
+      "ownedTabsFinalized": true,
+      "generatedCssRestored": true,
+      "childShutdown": [
+        {
+          "name": "app stop within3s",
+          "ok": true,
+          "detail": {
+            "exit": 0,
+            "seconds": 0.06390390000160551
+          }
+        },
+        {
+          "name": "hmr stop within3s",
+          "ok": true,
+          "detail": {
+            "exit": 0,
+            "seconds": 0.0033093879974330775
+          }
+        }
+      ]
+    }
+  },
+  "coreRuntimeVerification": {
+    "originalShellCapture": {
+      "passed": 17,
+      "total": 17,
+      "fixtureRunnerBytes": "unchanged",
+      "rows": [
+        {
+          "case": "success",
+          "exit": 0,
+          "elapsed_s": 0.026
+        },
+        {
+          "case": "failure",
+          "exit": 0,
+          "elapsed_s": 0.024
+        },
+        {
+          "case": "utf8",
+          "exit": 0,
+          "elapsed_s": 0.021
+        },
+        {
+          "case": "nul-output",
+          "exit": 0,
+          "elapsed_s": 0.022
+        },
+        {
+          "case": "invalid-utf8",
+          "exit": 0,
+          "elapsed_s": 0.022
+        },
+        {
+          "case": "stdin-eof",
+          "exit": 0,
+          "elapsed_s": 0.036
+        },
+        {
+          "case": "signal",
+          "exit": 0,
+          "elapsed_s": 0.022
+        },
+        {
+          "case": "first-class",
+          "exit": 0,
+          "elapsed_s": 0.022
+        },
+        {
+          "case": "type-__NIL",
+          "exit": 1,
+          "elapsed_s": 0.012
+        },
+        {
+          "case": "type-__NUMBER",
+          "exit": 1,
+          "elapsed_s": 0.012
+        },
+        {
+          "case": "type-__NUL",
+          "exit": 1,
+          "elapsed_s": 0.011
+        },
+        {
+          "case": "parallel-streams",
+          "exit": 0,
+          "elapsed_s": 0.063
+        },
+        {
+          "case": "output-limit",
+          "exit": 0,
+          "elapsed_s": 0.114
+        },
+        {
+          "case": "legacy-failure",
+          "exit": 0,
+          "elapsed_s": 0.02
+        },
+        {
+          "case": "legacy-signal",
+          "exit": 0,
+          "elapsed_s": 0.022
+        },
+        {
+          "case": "deadline-pipes",
+          "exit": 0,
+          "elapsed_s": 30.014
+        },
+        {
+          "case": "deadline-after-eof",
+          "exit": 0,
+          "elapsed_s": 30.02
+        }
+      ],
+      "legacyProfileUnchanged": true,
+      "networkRequestsInThisCohort": 0
+    },
+    "httpProcessCancellation": {
+      "passed": 30,
+      "total": 30,
+      "requestAndStopSeconds": 3,
+      "normalCommandBudgetMilliseconds": 30000,
+      "outputLimitPerStreamBytes": 1048576,
+      "cancellationGraceMilliseconds": 200,
+      "commercial": "HOLD"
+    },
+    "concurrentHTTPProcessCancellation": {
+      "passed": 12,
+      "total": 12,
+      "concurrentRequests": 4,
+      "workers": 4,
+      "stopSeconds": 0.31429860700154677,
+      "requestAndStopDeadlineSeconds": 3,
+      "commandDeadlineMilliseconds": 30000,
+      "unrelatedSentinelPreserved": true,
+      "commercial": "HOLD"
+    },
+    "rawSocketPressure": {
+      "controls": 129,
+      "passed": 129,
+      "workers": 2,
+      "requestSeconds": 3,
+      "keepaliveMaximumRequests": 100,
+      "headerAndBodyBoundsChanged": false
+    },
+    "httpShutdown": {
+      "passed": 56,
+      "total": 56,
+      "samples": [
+        {
+          "mode": "one-idle",
+          "elapsed_seconds": 0.11386674000095809,
+          "exit": 0
+        },
+        {
+          "mode": "eight-idle",
+          "elapsed_seconds": 0.1145829329980188,
+          "exit": 0
+        },
+        {
+          "mode": "inflight",
+          "elapsed_seconds": 0.5901016219941084,
+          "exit": 0
+        },
+        {
+          "mode": "queued",
+          "elapsed_seconds": 0.6796983140011434,
+          "exit": 0
+        },
+        {
+          "mode": "partial",
+          "elapsed_seconds": 0.10217451700009406,
+          "exit": 0
+        }
+      ]
+    },
+    "sseCapacity": {
+      "passed": 34,
+      "total": 34,
+      "workers": 2,
+      "retainedSSE": 8
+    },
+    "trackedCommon": {
+      "passed": 71,
+      "total": 71,
+      "separateProvider": 9
+    },
+    "actualCommon": {
+      "passed": 80,
+      "total": 80,
+      "separateProvider": 9
+    },
+    "gitCLI": {
+      "passed": 22,
+      "total": 22
+    },
+    "fxRegressions": {
+      "passed": 11,
+      "total": 11
+    },
+    "headlessHTTP": {
+      "controls": 53,
+      "passed": 53,
+      "actualAppSha256": "78bb9c77ed0b7973c39339eb0306b95cb9bd5a7b579e582c2eac1c5c8733c9f3",
+      "actualAppBytes": 95749,
+      "retainedSSE": 8,
+      "workers": 2,
+      "requestDeadlineSeconds": 3,
+      "engineDeadlineMilliseconds": 2000,
+      "commercial": "HOLD"
+    },
+    "headlessBuildGate": {
+      "controls": 21,
+      "passed": 21,
+      "successfulTestCases": 7,
+      "intentionalExpectationFailures": 9,
+      "malformedFileFailure": 1,
+      "buildGate": "executed",
+      "commercial": "HOLD"
+    },
+    "headlessOriginalCLI": {
+      "passed": 10,
+      "total": 10
+    },
+    "headlessSelection": {
+      "controls": 16,
+      "passed": 16,
+      "actualAppColdSeconds": 14.858555701001023,
+      "perPhaseBoundsChanged": false,
+      "commercial": "HOLD"
+    },
+    "headlessPreparedCache": {
+      "prepareSeconds": 2.8307625059969723,
+      "warmSeconds": 0.19179562300269026,
+      "selectedInvalidIsolation": true,
+      "fullTypedData": true,
+      "allFailure": true,
+      "unknownSelection": true,
+      "staleSourceRejected": true
+    },
+    "cspPolicies": {
+      "passed": 25,
+      "total": 25,
+      "additionalInvalidPortControls": 8
+    },
+    "cspWire": {
+      "passed": 28,
+      "total": 28
+    }
+  },
+  "retainedFailures": [
+    "Original R23 trailing-LF paths failed before service launch; original failure retained",
+    "First default-source trial exposed web-build ROOT trimming; both hosts now preserve physical canonical paths through NUL records",
+    "Private locator reader rstrip removed a real trailing LF; corrected to remove exactly one record delimiter, original assertions retained",
+    "Inherited account-tool PATH produced API3s and shutdown3s failures; source inspection confirmed separate shell_capture groups; original failure retained, original account child PID audit later found none alive",
+    "Application-group TERM experiment could not reach separate shell_capture groups; reverted before final source/SDK qualification",
+    "Private clean build-tool whitelist omitted tee; SERVER_LINK failure retained; whitelist corrected with existing host binary",
+    "Final actual cohorts use SDK-only environment and existing host tools without account CLIs/Node; no account credential access or authenticated remote Git qualification is claimed"
+  ],
+  "notQualified": [
+    ".freelang/deploy.sh Node/PM2 migration",
+    "web/.projectrc.json deployment/start command migration",
+    "Full DSL parity (retained27/28 comparison scope)",
+    "Authenticated Provider/account discovery and remote Git UI Push/Pull",
+    "Abrupt process-owner death",
+    "Screenshot and physical pointer acceptance",
+    "Latest whole DB95 safety/recovery/concurrency/load/operations"
+  ]
+}

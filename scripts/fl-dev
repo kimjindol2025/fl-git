@@ -2,13 +2,4 @@
 set -Eeuo pipefail
 
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT_DIR="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
-WEB_DIR="$ROOT_DIR/web"
-
-cd "$WEB_DIR"
-"$ROOT_DIR/scripts/flp-compile" "$WEB_DIR/pages"
-exec env \
-  FL_GIT_REPO="${FL_GIT_REPO:-$ROOT_DIR}" \
-  PORT="${PORT:-40850}" \
-  FL_HTTP_ALLOW="${FL_HTTP_ALLOW:-127.0.0.1,localhost}" \
-  node "$WEB_DIR/dev-server.js" "$@"
+exec "${SCRIPT_PATH%/*}/fl-dev-native" "$@"

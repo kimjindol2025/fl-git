@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 umask 077
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
 WEB="$ROOT/web"
 ARTIFACT_PARENT="${FREELANG_NATIVE_DEV_ARTIFACTS:-${TMPDIR:-/tmp}}"
 usage() { printf 'Usage: fl-dev-native [web-root] [--artifacts existing-directory]\n'; }
@@ -19,8 +19,8 @@ while (($#)); do
   esac
 done
 [[ -d "$WEB/pages" && -d "$ARTIFACT_PARENT" ]] || blocked 'Select existing web/pages and artifact directories.'
-WEB="$(cd -- "$WEB" && pwd -P)"
-ARTIFACT_PARENT="$(cd -- "$ARTIFACT_PARENT" && pwd -P)"
+IFS= read -r -d '' WEB < <(cd -P -- "$WEB" && printf '%s\0' "$PWD")
+IFS= read -r -d '' ARTIFACT_PARENT < <(cd -P -- "$ARTIFACT_PARENT" && printf '%s\0' "$PWD")
 case "$ARTIFACT_PARENT/" in "$WEB/"*) blocked 'Development artifacts must be outside the source web tree.';; esac
 for configured in FREELANG_NATIVE_DEV_CONTROL FREELANG_NATIVE_DEV_SERVER FREELANG_NATIVE_DEV_WATCH FREELANG_NATIVE_DEV_WATCH_HOST FREELANG_NATIVE_COMPILER FREELANG_NATIVE_WEB_TOOL; do
   [[ -n "${!configured:-}" && -x "${!configured}" ]] || blocked "Configure $configured with the matching Native SDK."
@@ -41,7 +41,8 @@ if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)
 ulimit -c 0
 export FL_HTTP_HOST=127.0.0.1 FL_FRONT_NATIVE_DEV=1 PORT FL_HMR_PORT
 export FL_HTTP_ALLOW="${FL_HTTP_ALLOW:-127.0.0.1,localhost}"
-export FL_GIT_REPO="${FL_GIT_REPO:-$(dirname -- "$WEB")}"
+if [[ -z "${FL_GIT_REPO:-}" ]]; then FL_GIT_REPO="${WEB%/*}"; fi
+export FL_GIT_REPO="${FL_GIT_REPO:-/}"
 cd -- "$WEB"
 CONTROL="$FREELANG_NATIVE_DEV_CONTROL"
 WATCH="$FREELANG_NATIVE_DEV_WATCH"

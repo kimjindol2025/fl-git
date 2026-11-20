@@ -191,3 +191,22 @@ foreign app changes were copied verbatim into the private actual input and are
 excluded from the SDK source and implementation commit. Authenticated remote
 Git UI, screenshot/pointer acceptance, full DSL, default development/deployment
 and latest whole DB95 acceptance remain open. Goal ACTIVE; commercial HOLD.
+
+## Default development and bounded process shutdown
+
+The `native-http-process-cancel-20261120` checkpoint now qualifies
+`scripts/fl-dev` as the Native default entry, including actual application,
+Chrome, Git, HMR, special paths and orderly shutdown of a pending bounded
+command. See [the default entry](NATIVE-DEFAULT-DEV.md) and its
+[evidence](evidence/native-default-dev-20261120.json).
+
+The current 16-ELF SDK manifest SHA-256 is
+`9c0050409f93e1d69411e73cb909a67d3fde875e91c737940b7d9c36155662cd`;
+runtime archive SHA-256 is
+`053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4`.
+Seed-to-Stage4 retains the canonical generated C. Relocated self-generation
+takes 31.97 seconds and 1,556,608 KiB RSS within the unchanged 40-second,
+1.6-GiB RSS and 2-GiB address-space gates. Existing reference files, protected
+tests and four foreign source edits are preserved. Deployment/start commands
+in `.freelang/deploy.sh` and `web/.projectrc.json` still await migration.
+Full goal ACTIVE; commercial HOLD; production NOT_RUN.

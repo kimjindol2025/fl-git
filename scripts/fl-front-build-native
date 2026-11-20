@@ -4,7 +4,7 @@ native_memory_limit="$(ulimit -v)"
 if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
 ulimit -c 0
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
 export FL_NATIVE_FRONT_SERVER_SUPPORT="$ROOT/web/runtime/server-language.fl"
 COMPILER="${FREELANG_NATIVE_COMPILER:-}"
 WEB_TOOL="${FREELANG_NATIVE_WEB_TOOL:-}"
