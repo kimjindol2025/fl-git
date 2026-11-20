@@ -1,0 +1,140 @@
+{
+  "schema": "native-headless-engine-evidence/1",
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "paths": "<가림>",
+  "owners": "<가림>",
+  "baseFXCommit": "a50d74bf28c2fd98d59a735251302fbf37547b17",
+  "baseFrontendCommit": "0cb385a0e754c2ebc6fdf6763ba3bf57db7dd672",
+  "scope": "Native generated-JavaScript engine and explicit FreeLang runtime module foundation. Not the Island headless runner or endpoint.",
+  "compiler": {
+    "sourceSha256": "c862c4890fe45dc2095514678277e83d7c7b5c17e1ec16112a0637197c305e4d",
+    "canonicalCSha256": "a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5",
+    "stage2Equals3Equals4": true,
+    "freshSeedBootstrap": true,
+    "seedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767",
+    "generationMeasurements": [
+      {
+        "step": "stage2_TO_stage3",
+        "seconds": 29.7,
+        "rssKiB": 1558100
+      },
+      {
+        "step": "stage3_TO_stage4",
+        "seconds": 30.44,
+        "rssKiB": 1558176
+      }
+    ],
+    "relocatedSelfGeneration": {
+      "seconds": 29.05,
+      "rssKiB": 1560472,
+      "exactCanonicalC": true
+    },
+    "generationLimits": {
+      "seconds": 40,
+      "rssGiB": 1.6,
+      "vmKiB": 2097152
+    },
+    "defaultBrowserComparisonCases": 6,
+    "defaultBrowserOutputsByteIdentical": true,
+    "userHostAndPrivateCoreRestrictions": "UNCHANGED",
+    "runtimeMode": "--browser-runtime-js runtime.fl input.fl output.js"
+  },
+  "sdk": {
+    "manifestSha256": "d8c117cedd1790f9d0122ad44016bf0edddeb7a828b0ae47beb8e6390c36c980",
+    "compilerSha256": "6b785423601aab00104da025fb20a461a59a1055c8b46e456cb6195f2353af63",
+    "engineHostSha256": "b31919e02fcaec778d61b63aaba1ecfc042784dfa36a1b0c5159ac49074a26b5",
+    "executables": 15,
+    "allNativeELF": true,
+    "engineLibraries": {
+      "libmozjs-115.so": "49f59b1380f2d40795c352fd1d4673aec12ba1509d7ce13e912a6795add26898",
+      "libgjs.so.0": "63dd12a09e4dfa158bffa3ba5c99410c134b9755b8d6a542508c4d96594da2f1"
+    },
+    "runtimeArchiveSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "runtimeArchiveFoundation": "unchanged accepted R10 archive",
+    "all15ExecutablesEqualPriorSDK1": true,
+    "relocationAndManifestControls": {
+      "passed": 8,
+      "total": 8
+    },
+    "engineLibraryResolution": "both actual libraries opened from relocated SDK; no system engine fallback observed",
+    "optionalUnconfiguredPackagingMode": "core bundle interface retained; not separately packaged in this cohort"
+  },
+  "qualification": {
+    "engineAndCompiler": {
+      "passed": 27,
+      "total": 27
+    },
+    "trackedFrontend": {
+      "suites": 7,
+      "assertionsPassed": 71,
+      "assertionsTotal": 71,
+      "providerGateRecheck": 9
+    },
+    "actualForeignInclusiveFrontend": {
+      "suites": 8,
+      "assertionsPassed": 80,
+      "assertionsTotal": 80,
+      "providerGateRecheck": 9
+    },
+    "cli": {
+      "passed": 22,
+      "total": 22
+    },
+    "fxRegressions": {
+      "passed": 11,
+      "total": 11
+    }
+  },
+  "productSourceSha256": {
+    "fx/self/cgc-main.fl": "c862c4890fe45dc2095514678277e83d7c7b5c17e1ec16112a0637197c305e4d",
+    "frontend/native/js-engine.c": "b480aec3175ce3cba9842255b4414c3b10299fb1ed97fdb9e9ca4c14c844abcb",
+    "frontend/scripts/fl-sdk-package-native": "e4c863fdb9b7b290d58fdd5f5dc160dbe77ff55ab6a1aa6b1095d2ff371a722c"
+  },
+  "nodeFamilyExecutionsInCollectedProductTraces": 0,
+  "productTraceFiles": 38,
+  "privateNodeOracle": "same generated program, separate fixed IO adapter, exact typed JSON equality; not product execution",
+  "nativeVirtualMemoryCapBytes": 2147483648,
+  "engineCaseSeconds": 3,
+  "browserGenerationCaseSeconds": 15,
+  "heavyBuildLock": "fl-heavy.lock",
+  "protectedTestsRunnersExpectationsBounds": "UNCHANGED",
+  "foreignChangesPreserved": 4,
+  "retainedFailures": [
+    {
+      "kind": "engine feasibility",
+      "failure": "ordinary installed GJS console fails InitializeJit under 2GiB, exit133",
+      "resolution": "documented DisableJitBackend before GJS library initialization; same cap and 3-second bound; no library/system patch or failed-console retry"
+    },
+    {
+      "kind": "host output defect",
+      "failure": "initial C embedder left its character locale at ASCII; generated Unicode output became ???, including a bounded smoke run",
+      "resolution": "process-local UTF-8 character locale before library loading; full expected Unicode JSON required in both ordinary and C-locale environments"
+    },
+    {
+      "kind": "qualification scope error",
+      "failure": "first standalone emission smoke omitted the outer VM cap and shared build lock",
+      "resolution": "excluded from qualification; same input regenerated under original 2GiB cap/shared lock/15s; no expanded bound used for accepted evidence"
+    }
+  ],
+  "excludedClaims": [
+    "Island virtual DOM implementation",
+    "Island selection/click/dispatch/result compatibility",
+    "Native /~ai/test endpoint",
+    "Native tests/*.test.flx build gate",
+    "full Node environment or WebAssembly parity",
+    "default development/deployment Node removal",
+    "actual Git Provider UI acceptance",
+    "latest whole DB qualification",
+    "commercial lifetime or production readiness"
+  ],
+  "remaining": [
+    "implement the full existing Island runner contract in FreeLang over the real engine",
+    "connect CLI, /~ai/test, build-time Island tests and metadata without losing operations or limits",
+    "full JSON/live diagnostics/expression source maps and advanced modules",
+    "default development/deployment migration and actual application/Git workflows",
+    "latest whole DB Native gate and data safety/recovery/concurrency/load/operations"
+  ]
+}

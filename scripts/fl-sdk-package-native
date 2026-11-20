@@ -11,6 +11,8 @@ COMPILER_C="${FREELANG_NATIVE_COMPILER_C:-}"
 ARCHIVE="${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}"
 INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
 CURL_LIBRARY="${FREELANG_NATIVE_CURL_LIBRARY:-}"
+MOZJS_LIBRARY="${FREELANG_NATIVE_MOZJS_LIBRARY:-}"
+GJS_LIBRARY="${FREELANG_NATIVE_GJS_LIBRARY:-}"
 NATIVE_CC="${CC:-gcc}"
 blocked() { printf 'FL_NATIVE_SDK=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
 [[ -f "$COMPILER" && -x "$COMPILER" ]] || blocked 'Configure the verified Native compiler.'
@@ -18,18 +20,32 @@ blocked() { printf 'FL_NATIVE_SDK=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
 [[ -f "$ARCHIVE" && -f "$INCLUDE/runtime.h" ]] || blocked 'Configure its matching runtime archive and headers.'
 [[ -d "$INCLUDE/ryu" ]] || blocked 'The complete matching runtime headers, including ryu, are required.'
 [[ -f "$CURL_LIBRARY" ]] || blocked 'Configure FREELANG_NATIVE_CURL_LIBRARY with the matching curl shared library.'
+if [[ -n "$MOZJS_LIBRARY" || -n "$GJS_LIBRARY" ]]; then
+  [[ -f "$MOZJS_LIBRARY" && -f "$GJS_LIBRARY" ]] || blocked 'Configure both matching SpiderMonkey ESR115 and GJS libraries.'
+fi
 [[ "$#" -eq 1 && -d "$1" ]] || blocked 'Usage: fl-sdk-package-native <existing-output-directory>'
 for command_name in "$NATIVE_CC" ar readelf sha256sum; do
   command -v "$command_name" >/dev/null 2>&1 || blocked 'A required Native build command is unavailable.'
 done
 curl_soname="$(readelf -d -- "$CURL_LIBRARY" | sed -n 's/.*(SONAME).*\[\([^]]*\)\].*/\1/p')"
 [[ "$curl_soname" =~ ^libcurl\.so\.[0-9]+$ ]] || blocked 'The curl input has an unsupported shared library name.'
+if [[ -n "$MOZJS_LIBRARY" ]]; then
+  mozjs_soname="$(readelf -d -- "$MOZJS_LIBRARY" | sed -n 's/.*(SONAME).*\[\([^]]*\)\].*/\1/p')"
+  gjs_soname="$(readelf -d -- "$GJS_LIBRARY" | sed -n 's/.*(SONAME).*\[\([^]]*\)\].*/\1/p')"
+  [[ "$mozjs_soname" == libmozjs-115.so && "$gjs_soname" == libgjs.so.0 ]] || blocked 'The engine pair must match the supported SpiderMonkey ESR115/GJS ABI.'
+fi
 OUTPUT="$(cd -- "$1" && pwd -P)"
 RUN="$(mktemp -d -- "$OUTPUT/fl-sdk.XXXXXX")"
 printf 'FL_NATIVE_SDK_ARTIFACTS=%s\n' "$RUN"
 step=INPUTS
 trap 'rc=$?; if [[ "$rc" -ne 0 ]]; then printf "FL_NATIVE_SDK=FAIL STEP=%s EXIT=%s\n" "$step" "$rc"; fi' EXIT
 mkdir -- "$RUN/bin" "$RUN/lib" "$RUN/include" "$RUN/build" "$RUN/provenance"
+if [[ -n "$MOZJS_LIBRARY" ]]; then
+  mkdir -- "$RUN/lib/js-engine"
+  cp -L -- "$MOZJS_LIBRARY" "$RUN/lib/js-engine/libmozjs-115.so"
+  cp -L -- "$GJS_LIBRARY" "$RUN/lib/js-engine/libgjs.so.0"
+  sha256sum -- "$MOZJS_LIBRARY" "$GJS_LIBRARY" >"$RUN/build/engine-inputs.before.sha256"
+fi
 cp -- "$COMPILER_C" "$RUN/provenance/compiler.c"
 cp -- "$ARCHIVE" "$RUN/lib/runtime.a"
 cp -L -- "$CURL_LIBRARY" "$RUN/lib/$curl_soname"
@@ -44,7 +60,7 @@ sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
     src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
     src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
-    tools/*.fl native/dev-watch.c native/source-transaction.c web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native
+    tools/*.fl native/dev-watch.c native/source-transaction.c native/js-engine.c web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native
 ) >"$RUN/provenance/frontend.before.sha256"
 "$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
 ar --version >"$RUN/provenance/ar.txt"
@@ -81,8 +97,14 @@ step=WATCH_HOST
 step=FIX_HOST
 "$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -o "$RUN/bin/fl-source-transaction" \
   "$ROOT/native/source-transaction.c" -lcrypto >"$RUN/build/fix-host.build.log" 2>&1
+step=JS_ENGINE_HOST
+"$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -o "$RUN/bin/fl-js-engine" \
+  "$ROOT/native/js-engine.c" -ldl >"$RUN/build/js-engine-host.build.log" 2>&1
 step=SOURCE_UNCHANGED
 sha256sum -c -- "$RUN/build/inputs.before.sha256" >"$RUN/build/inputs.check.log"
+if [[ -n "$MOZJS_LIBRARY" ]]; then
+  sha256sum -c -- "$RUN/build/engine-inputs.before.sha256" >"$RUN/build/engine-inputs.check.log"
+fi
 (
   cd -- "$ROOT"
   sha256sum -c -- "$RUN/provenance/frontend.before.sha256"
@@ -102,6 +124,13 @@ export FREELANG_NATIVE_FLP_TOOL="$fl_sdk_root/bin/flp-compile"
 export FREELANG_NATIVE_WEB_TOOL="$fl_sdk_root/bin/fl-front-build"
 export FREELANG_NATIVE_FIX_TOOL="$fl_sdk_root/bin/fl-front-fix"
 export FREELANG_NATIVE_FIX_HOST="$fl_sdk_root/bin/fl-source-transaction"
+export FREELANG_NATIVE_JS_ENGINE="$fl_sdk_root/bin/fl-js-engine"
+if [[ -f "$fl_sdk_root/lib/js-engine/libmozjs-115.so" && -f "$fl_sdk_root/lib/js-engine/libgjs.so.0" ]]; then
+  export FREELANG_NATIVE_MOZJS_LIBRARY="$fl_sdk_root/lib/js-engine/libmozjs-115.so"
+  export FREELANG_NATIVE_GJS_LIBRARY="$fl_sdk_root/lib/js-engine/libgjs.so.0"
+else
+  unset FREELANG_NATIVE_MOZJS_LIBRARY FREELANG_NATIVE_GJS_LIBRARY
+fi
 export FREELANG_NATIVE_STYLE_TOOL="$fl_sdk_root/bin/fl-style-compile"
 export FREELANG_NATIVE_ISLAND_TOOL="$fl_sdk_root/bin/fl-island-compile"
 export FREELANG_NATIVE_DEV_SERVER="$fl_sdk_root/bin/fl-dev-server"
@@ -131,11 +160,22 @@ relinked from the configured fixed-point generated C with a relative RUNPATH;
 the generated C is preserved in provenance/compiler.c. This is a build
 tool bundle. Packaging does not establish application or DB release acceptance.
 Build logs and generated C are retained in build/ for diagnosis.
+
+fl-js-engine evaluates generated JavaScript through the selected SpiderMonkey
+ESR115/GJS pair. Its process uses the interpreter (JIT and WebAssembly disabled)
+under the Native memory cap. It does not implement Island selection, virtual
+DOM or test results. Those require their separate FreeLang runner. When both
+FREELANG_NATIVE_MOZJS_LIBRARY and FREELANG_NATIVE_GJS_LIBRARY were configured
+during packaging, their exact files are bundled under lib/js-engine and the
+activation exports them. Without them this remains a core-tool SDK; the engine
+has no automatic system/Node fallback. GLib/GObject/GIO, ICU and the other
+dependencies of the recorded platform's GJS build must remain available.
 TXT
 (
   cd -- "$RUN"
   sha256sum -- env.sh verify.sh README.txt bin/* include/*.h include/ryu/* lib/runtime.a lib/libcurl.so "lib/$curl_soname" \
     provenance/*.txt provenance/compiler.c provenance/frontend.before.sha256 >SDK.SHA256
+  if [[ -d lib/js-engine ]]; then sha256sum -- lib/js-engine/* >>SDK.SHA256; fi
 )
 step=MANIFEST
 "$RUN/verify.sh" >"$RUN/build/manifest.check.log"

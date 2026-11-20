@@ -160,3 +160,9 @@ AST checks and SDK inventory metadata without changing the compiler/runtime.
 Package provenance additionally covers the FreeLang server and island runtime
 helpers. Its evidence separates declared operation/ABI counts, private legacy
 reference execution, Native product traces and the remaining acceptance work.
+
+The [Native JavaScript engine foundation](NATIVE-JS-ENGINE.md) adds an explicit
+SpiderMonkey/GJS process host and optional matching library inputs. Its package
+has 15 Native executables and records a fresh compiler fixed point while reusing
+the unchanged accepted runtime archive. This enables generated FreeLang runtime
+modules; it does not yet implement Island headless behavior or `/~ai/test`.
