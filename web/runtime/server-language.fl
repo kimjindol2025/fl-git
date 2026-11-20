@@ -66,3 +66,58 @@
     (if (and (string? type) (str-starts-with type "text/html") (string? body))
       (assoc response "body" (if (str-includes body "</body>")
         (str-replace-in body "</body>" (str script "</body>")) (str body script))) response)))
+
+;; Development connects only to the build plan's explicit loopback HMR origin.
+;; Preserve the two-argument helper and all production response policies.
+(defn fl-front-server-csp-tokens [directive]
+  (filter (fn [token] (not (= token ""))) (regex_split directive "[ \x09\x0a\x0c\x0d]+")))
+(defn fl-front-server-csp-directive [directives name]
+  (first (filter (fn [index]
+    (= (str-lower (or (first (fl-front-server-csp-tokens (get directives index))) "")) name))
+    (range 0 (length directives)))))
+(defn fl-front-server-csp-connect [policy origin]
+  (let [directives (str-split policy ";")
+        explicit (fl-front-server-csp-directive directives "connect-src")
+        fallback (fl-front-server-csp-directive directives "default-src")
+        selected (if (= explicit nil) fallback explicit)]
+    (if (= selected nil) policy
+      (let [tokens (fl-front-server-csp-tokens (get directives selected))
+            sources (slice tokens 1 (length tokens))
+            present (> (length (filter (fn [source] (= (str-lower source) origin)) sources)) 0)
+            values (push (filter (fn [source] (not (= (str-lower source) "'none'"))) sources) origin)
+            replacement (str "connect-src " (str-join values " "))]
+        (if present policy
+          (if (= explicit nil)
+            (str policy (if (str-ends-with policy ";") " " "; ") replacement)
+            (str-join (map (fn [index] (if (= index explicit) replacement (get directives index)))
+                           (range 0 (length directives))) ";")))))))
+(defn fl-front-server-csp-value [value origin]
+  (if (array? value) (map (fn [item] (fl-front-server-csp-value item origin)) value)
+    (let [text (str value)
+          valid (every? (fn [unit]
+                    (let [code (char-code-at unit 0)]
+                      ;; This legacy primitive reads the first UTF-8 byte. A
+                      ;; split character is Latin-1 only for ASCII or C2/C3.
+                      (or (and (< code 127) (or (>= code 32) (= code 9)))
+                          (= code 194) (= code 195))))
+                  (str-split text ""))]
+      ;; Leave invalid header values for the existing wire validator to reject;
+      ;; rewriting whitespace must never turn a rejected header into a valid one.
+      (if (not valid) value
+        (let [updated (str-join (map (fn [policy] (fl-front-server-csp-connect policy origin))
+                                     (str-split text ",")) ",")]
+          (if (= updated text) value updated))))))
+(defn fl-front-server-dev-assets-at [response script-url port]
+  (let [type (get response "contentType") body (get response "body")]
+    (if (not (and (string? type) (str-starts-with type "text/html") (string? body))) response
+      (do
+        (if (not (and (integer? port) (> port 0) (< port 65536)))
+          (throw "E_WEB_HMR_PORT: development CSP requires the build plan port in 1..65535") nil)
+        (let [injected (fl-front-server-dev-assets response script-url)
+              headers (or (get response "headers") {})
+              names (filter (fn [name] (or (= (str-lower name) "content-security-policy")
+                                          (= (str-lower name) "content-security-policy-report-only"))) (keys headers))
+              origin (str "http://127.0.0.1:" port)]
+          (if (= (length names) 0) injected
+            (assoc injected "headers" (reduce (fn [headers name]
+              (assoc headers name (fl-front-server-csp-value (get headers name) origin))) headers names))))))))

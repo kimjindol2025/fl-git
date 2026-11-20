@@ -172,3 +172,22 @@ The subsequent [headless standalone entry](NATIVE-ISLAND-HEADLESS.md) packages
 runtime. It requires the fresh matching runtime archive with the generic raw
 function/receiver/argument/remainder primitives; the preceding archive must not
 be mixed with this compiler. API/test-gate/default-dev migration remains open.
+## Actual application and matching HTTP runtime
+
+The `native-http-pressure-20261120` checkpoint rebuilds all runtime objects,
+the unchanged seed through Stage4, the SDK and the full actual application.
+The SDK manifest SHA-256 is
+`e5e3b82e55cb298f967c09cd703ffe8bb930866266a7da80b73eb1b0e35b2468`;
+runtime archive SHA-256 is
+`0af1c706a52c01f7c6da4fc8855ce8b8fbaf4634978252986a6d4c3cb84bdf2d`.
+All 16 ELF tools pass relocation/manifest checks. The separately relinked SDK
+compiler produces the canonical C in 30.81 seconds with 1,559,604 KiB peak RSS,
+within the existing 40-second/1.6-GiB gates and 2-GiB address-space cap.
+
+The final actual app passes 25 Chrome functional controls with local real Git
+Stage/Commit, computed CSS HMR and SSE reload. See [the app contract](NATIVE-APP-HMR.md)
+and [exact evidence](evidence/native-actual-app-hmr-20261120.json). Existing
+foreign app changes were copied verbatim into the private actual input and are
+excluded from the SDK source and implementation commit. Authenticated remote
+Git UI, screenshot/pointer acceptance, full DSL, default development/deployment
+and latest whole DB95 acceptance remain open. Goal ACTIVE; commercial HOLD.

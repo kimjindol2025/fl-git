@@ -1,0 +1,149 @@
+{
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "sdk": {
+    "manifestSha256": "e5e3b82e55cb298f967c09cd703ffe8bb930866266a7da80b73eb1b0e35b2468",
+    "runtimeSha256": "0af1c706a52c01f7c6da4fc8855ce8b8fbaf4634978252986a6d4c3cb84bdf2d",
+    "elf": {
+      "flc": "c57658961273b995a36958e6bc706caa1d9a2155b7fe4fd40ba2eeadc1352b15",
+      "fl-git": "f085577d6339d94fab04bc790f1f6fabcee14fb57dc187d9a5e734470ed5348a",
+      "fl-tui": "7d0c7fda9edd1c1fd6e50b7df0631fc65aeb1747d8cdf669398b5533073cec9d",
+      "fl-check": "37283930c17d5143b88a31f6599423d4948f77bbad5acc0f62c7db8056a65efc",
+      "flp-compile": "00a6636549c9c8c66517190eb32f25099a3d794c893cec4c5fed86fa147df85b",
+      "fl-front-build": "52c1b5648344ab63a7a3b85c6a963656b78011b398e0fc4dffc4b27ef650e429",
+      "fl-style-compile": "a7bdf2e5373a02977f30b327c5576a544b4929412bbed00bb3c6c076740ebd5d",
+      "fl-island-compile": "102214249f309aa464a078036648b88566c193dd1b51c2be23fdb6f6794f786b",
+      "fl-dev-server": "a6a01dce30004c286f02a699bec096cdc41f1b629f13ab05bd96ee08b3294732",
+      "fl-dev-watch": "38606ae80ac7d8c8191c8769c4d4bda5d924001226bc11227794ee4d9f02a4fe",
+      "fl-dev-control": "8d708371a944649a6cbd3906b62a7f04eba7fe5830524b62e1adf56284586a65",
+      "fl-front-fix": "0f381edfe5aa64f5c22c2352cf26bbc855595c83405f6229a0436445c555ed83",
+      "fl-island-headless": "32f0d790efe7b0d5dfd02976debd263cfdd46a3467403f9f1d65c699156133d9",
+      "fl-dev-watch-host": "f86888c5715d6093331a610cfe525994954cf72a8e7700d5e0f591ba17d4b5e8",
+      "fl-source-transaction": "20a8f6660c66a4d714524119e29f88080d4a3c8105302b947f7bdb6f9228fb54",
+      "fl-js-engine": "b31919e02fcaec778d61b63aaba1ecfc042784dfa36a1b0c5159ac49074a26b5"
+    }
+  },
+  "preservation": {
+    "foreignFiles": 4,
+    "foreignHashesUnchanged": true,
+    "protectedTestsAssertionsExpectedOutputsRunnersBoundsChanged": false,
+    "seedRegenerated": false,
+    "dbChanged": false,
+    "productHandwrittenJavaScriptOrPythonAdded": false,
+    "qualifiedProcessHostObjectByteIdentical": true
+  },
+  "traceAudit": {
+    "traceFiles": 49,
+    "decodedExecs": 8199,
+    "nodeFamilyExecs": 0,
+    "pathsDecodedAsFilesystemBytes": true
+  },
+  "bounds": {
+    "addressSpaceBytes": 2147483648,
+    "sharedHeavyLock": true,
+    "readinessAndStopSeconds": 3,
+    "httpRequestSeconds": 3,
+    "preparedEngineMilliseconds": 2000,
+    "parseGenerateSeconds": 15,
+    "selfGenerationSeconds": 40,
+    "selfRSSGiB": 1.6,
+    "changed": false
+  },
+  "schema": "native-actual-app-hmr-evidence/1",
+  "sourceBase": "820ae3a3d63850e657a53f01c6f2825c72a9f86c plus exactly the two source hashes below; SDK contains tracked source only",
+  "sourceSha256": {
+    "tools/front-web.fl": "4aeb82f00877b3a337584e8e6ab97c4b26e682bd785e55d459e2f92d9a363153",
+    "web/runtime/server-language.fl": "f908da941975bb271febb84f9640a8d331e0ef5c52e4b14026fc8aac3bd8eda8"
+  },
+  "foreignSourceHashes": {
+    "web/islands/index.flx": "78bb9c77ed0b7973c39339eb0306b95cb9bd5a7b579e582c2eac1c5c8733c9f3",
+    "web/pages/api.flx": "773cffc28da3db6d5dc666f06ac363f627eee56ee3b2e566f03048c9ec5de2aa",
+    "src/git-status.fl": "99bd9afe46e040fd8fffbf1c7cdc73b3c8c5f4c50f61cb42abbbd8ac5220dfa7",
+    "tests/git-status.test.fl": "b239f41d72e9b6761aff3cc86997c67a9cce8dbe3baec5bbb322a126216e4620"
+  },
+  "verification": {
+    "cspPolicies": {
+      "passed": 25,
+      "total": 25,
+      "additionalControls": [
+        "eight invalid ports",
+        "production unchanged",
+        "nonHTML unchanged",
+        "missing header unchanged",
+        "plan port used",
+        "ReportOnly/array/case handling"
+      ]
+    },
+    "cspWire": {
+      "passed": 28,
+      "total": 28,
+      "invalidHeaderValuesStill500": true
+    },
+    "actualBuild": "PASS: all app inputs rebuilt with final coherent SDK; headless cache digests regenerated",
+    "actualBrowser": {
+      "passed": 25,
+      "total": 25,
+      "sdkManifestSha256": "e5e3b82e55cb298f967c09cd703ffe8bb930866266a7da80b73eb1b0e35b2468",
+      "runtimeSha256": "0af1c706a52c01f7c6da4fc8855ce8b8fbaf4634978252986a6d4c3cb84bdf2d",
+      "scope": [
+        "repository discovery and selection",
+        "literal special filename",
+        "real Stage and Commit",
+        "unselected file preservation",
+        "ordinary reload",
+        "computed CSS HMR without navigation",
+        "SSE reload with Git result preserved",
+        "no application runtime or CSP errors",
+        "readiness and shutdown within3s"
+      ],
+      "ownedTabsFinalized": true,
+      "generatedCssRestored": true,
+      "childrenStop": [
+        {
+          "name": "app stop within3s",
+          "ok": true,
+          "detail": {
+            "exit": 0,
+            "seconds": 0.11396776599576697
+          }
+        },
+        {
+          "name": "hmr stop within3s",
+          "ok": true,
+          "detail": {
+            "exit": 0,
+            "seconds": 0.0033164419946842827
+          }
+        }
+      ]
+    },
+    "trackedCommon": {
+      "passed": 71,
+      "total": 71,
+      "separateProvider": 9
+    },
+    "actualCommon": {
+      "passed": 80,
+      "total": 80,
+      "separateProvider": 9
+    },
+    "httpPressureEvidence": "native-http-pressure-20261120"
+  },
+  "retainedFailures": [
+    "Original actual browser: CSP self policy blocks separate HMR port; actual Git controls succeeded before failure",
+    "After CSP correction: browser asset requests starve behind completed idle HTTP workers; independent original3s pressure control retained",
+    "Initial CSP proof treated legacy char-code-at as Unicode; actual primitive returns firstUTF8byte; Latin1 guard corrected without accepting invalid wire values",
+    "Final private browser v1: archived candidate fixture inside discovery roots correctly produced two repositories. Archive moved outside root, original one-repository assertion and bounds unchanged; failed run stopped before Stage/Commit",
+    "Private SDK ELF identity assumption rejected: SDK relinks canonical C with relative rpath. Provenance C matches and separate relocated40s/1.6GiB gate passed"
+  ],
+  "notQualified": {
+    "screenshots": "NOT_RUN: earlier surface errors, no retry",
+    "physicalPointer": "NOT_RUN: DOM click after nonzero layout box",
+    "remoteGitUI": "NOT_RUN: fixture has no remote or account credentials",
+    "fullDSL": "PARTIAL: prior27/28 comparison retained, not repeated here",
+    "defaultDevelopmentDeployment": "OPEN",
+    "latestWholeDB95": "OPEN"
+  }
+}

@@ -160,7 +160,8 @@
 (defn fl-web-array [items] {"kind" "block" "type" "Array" "fields" {"items" items}})
 (defn fl-web-dev-response [expression plan]
   (if (get plan "development")
-    (str "(fl-front-server-dev-assets " expression " " (fl-source-quote (get plan "devUrl")) ")")
+    (str "(fl-front-server-dev-assets-at " expression " " (fl-source-quote (get plan "devUrl"))
+         " " (get plan "hmrPort") ")")
     expression))
 (defn fl-web-path-dir [path]
   (str-join (slice (str-split path "/") 0 (- (length (str-split path "/")) 1)) "/"))
