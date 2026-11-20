@@ -210,3 +210,29 @@ takes 31.97 seconds and 1,556,608 KiB RSS within the unchanged 40-second,
 tests and four foreign source edits are preserved. Deployment/start commands
 in `.freelang/deploy.sh` and `web/.projectrc.json` still await migration.
 Full goal ACTIVE; commercial HOLD; production NOT_RUN.
+
+## Native release preparation
+
+The [Native release checkpoint](NATIVE-RELEASE.md) adds the seventeenth ELF,
+`fl-front-release`, and the fixed readiness helper. Activation exports
+`FREELANG_NATIVE_SDK_ROOT` and `FREELANG_NATIVE_RELEASE_TOOL`. Packaging,
+activation and verification now preserve an SDK or source root ending in LF.
+The final SDK manifest SHA-256 is
+`e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181`.
+The runtime archive remains
+`053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4`;
+canonical compiler C remains
+`a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5`.
+Fifteen R24 executables are byte-identical, the web tool gains explicit release
+readiness mode, and the release policy tool is new. All 17 final executables
+and env/verifier/readiness helpers are byte-identical to the tested candidate.
+
+Final public release 45/45, foreground defaults 7/7 and actual relocated
+production Chrome/local Git 20/20 pass. Existing development 13/16/17 and release
+mode 8 controls pass on identical candidate tools/used hosts. The
+[evidence](evidence/native-release-prepare-20261120.json) distinguishes reused
+runtime evidence, real final builds and unexecuted service activation. The
+foreign Git API's trailing/internal-LF repository-basename failures remain
+unresolved; the original R24 browser path domain still passes. Full DSL, remote
+Git UI, service activation and latest whole DB95 qualification remain open.
+Goal ACTIVE; commercial HOLD; production NOT_RUN.

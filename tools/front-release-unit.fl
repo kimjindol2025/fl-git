@@ -1,0 +1,53 @@
+;; Native release service policy. Rendering never contacts a service manager.
+(defn fl-release-unit-text [value]
+  (if (not (and (string? value) (not (str-includes value "\x00"))))
+    (throw "E_RELEASE_UNIT: text without NUL required") value))
+(defn fl-release-unit-word [value]
+  ;; systemd accepts C string escapes. Percent specifiers require doubling;
+  ;; the command's ':' prefix disables dollar environment substitution.
+  (json-str (str-replace-in (fl-release-unit-text value) "%" "%%")))
+(defn fl-release-unit-command [arguments]
+  (str ":" (str-join (map fl-release-unit-word arguments) " ")))
+(defn fl-release-unit-settings [config]
+  (let [repository (fl-release-unit-text (get config "repository"))
+        roots (fl-release-unit-text (get config "roots"))
+        host-path (fl-release-unit-text (get config "hostPath"))
+        name (fl-release-unit-text (get config "name"))
+        role (get config "role") port (get config "port")]
+    (if (not (and (str-starts-with repository "/")
+                  (not (= roots "")) (not (= host-path ""))
+                  (regex_match name "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+                  (integer? port) (> port 0) (< port 65536)
+                  (or (= role "viewer") (= role "developer") (= role "operator"))))
+      (throw "E_RELEASE_UNIT: valid repository, role, port and service name required") config)))
+(defn fl-release-unit-config [config]
+  (fl-release-unit-settings config)
+  (let [root (fl-release-unit-text (get config "release")) hash (get config "manifestSha256")]
+    (if (not (and (str-starts-with root "/") (string? hash)
+                  (regex_match hash "^[a-f0-9]{64}$")))
+      (throw "E_RELEASE_UNIT: release and manifest required") config)))
+(defn fl-release-unit [input]
+  (let [config (fl-release-unit-config input) root (get config "release")
+        port (str (get config "port"))
+        verify ["/usr/bin/env" "-C" root (str root "/bin/fl-front-release")
+                "--verify" root (get config "manifestSha256")]
+        application ["/usr/bin/env" "-C" (str root "/web")
+                     "FL_HTTP_HOST=127.0.0.1" (str "PORT=" port)
+                     (str "FL_GIT_REPO=" (get config "repository"))
+                     (str "FL_GIT_ROOTS=" (get config "roots"))
+                     (str "FL_GIT_ROLE=" (get config "role"))
+                     "FL_HTTP_ALLOW=127.0.0.1,localhost"
+                     (str "FL_WEB_PUBLIC=" root "/web/public")
+                     (str "PATH=" (get config "hostPath")) (str root "/web/app-native")]
+        ready ["/usr/bin/env" "-C" root "PATH=/usr/bin:/bin"
+               (str root "/bin/fl-release-ready") port]]
+    (str "[Unit]\nDescription=FreeLang Native " (get config "name") "\n\n"
+         "[Service]\nType=exec\nWorkingDirectory=/\n"
+         "ExecStartPre=" (fl-release-unit-command verify) "\n"
+         "ExecStart=" (fl-release-unit-command application) "\n"
+         "ExecStartPost=" (fl-release-unit-command ready) "\n"
+         "UnsetEnvironment=LD_LIBRARY_PATH FL_NATIVE_RELEASE_INSTANCE\n"
+         "Restart=always\nRestartSec=1s\nTimeoutStartSec=8s\nTimeoutStopSec=3s\n"
+         "KillMode=mixed\nLimitAS=2147483648\nLimitCORE=0\n"
+         "StandardInput=null\nStandardOutput=journal\nStandardError=journal\n\n"
+         "[Install]\nWantedBy=default.target\n")))

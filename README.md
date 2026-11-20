@@ -110,8 +110,9 @@ fl-git branch-delete <이름> --yes
 재시작한다. 생성되는 `public/app.css`는 감시하지 않아 자기 재빌드 루프를
 만들지 않는다. 포트는 `PORT=40860 ./scripts/fl-dev`처럼 바꿀 수 있다.
 
-운영 또는 PM2에서 사용하는 정적 실행은 검증된 Native SDK를 설정한 뒤
-다음 명령을 사용한다. 이 명령은 Native 빌드 후 Native 서버를 시작한다.
+개발 서버는 검증된 Native SDK의 도구를 사용하는 Native supervisor다.
+기본 진입점과 검증 범위는 [Native 개발 명령](docs/NATIVE-DEFAULT-DEV.md)을 따른다.
+빌드 후 바로 실행하는 명령은 다음과 같다.
 
 ```bash
 ./scripts/fl-git-web
@@ -120,18 +121,19 @@ fl-git branch-delete <이름> --yes
 필수 SDK 변수와 검증 범위는 [Native 기본 웹 명령](docs/NATIVE-DEFAULT-WEB.md)을
 따른다. 도구가 없으면 명확히 실패하며 Node로 전환하지 않는다. 산출물은
 소스 밖의 `FREELANG_NATIVE_WEB_OUTPUT` 또는 `TMPDIR` 아래에 보존한다.
-개발 서버 `fl-dev`와 아래 공통 배포 스크립트의 Node 경로는 아직 남아 있다.
-
-공통 workflow 배포 계약은 `.freelang/`에 있다.
+운영용 코드와 서비스 설정은 별도로 준비한다.
 
 ```bash
-fl-tools review .
-fl-tools deploy .
+./scripts/fl-release-prepare-native ./web --artifacts <기존-산출물-폴더>
+./scripts/fl-release-run-native <검증된-code-폴더>
+./.freelang/rollback.sh <이전-code-폴더> --artifacts <기존-산출물-폴더>
 ```
 
-배포는 `fl-git` PM2 프로세스를 대상으로 Front 빌드 후 재시작하고,
-`http://127.0.0.1:40850/` smoke를 확인한다. Git worktree가 dirty하면
-공통 도구가 기본 차단한다.
+`.freelang/deploy.sh`는 Native 릴리스·서비스 설정 준비 명령에 연결된다.
+성공 상태는 `PREPARED`, 서비스 적용은 `ACTIVATION=NOT_RUN`이다.
+롤백도 명시한 이전 코드의 설정만 준비하며 서비스를 재시작하지 않는다.
+SDK 설정, 실행 옵션과 미검증 범위는 [Native 릴리스 계약](docs/NATIVE-RELEASE.md)을
+확인한다. 실제 운영 적용과 상용 승인은 아직 완료되지 않았다.
 
 브라우저에서 [http://127.0.0.1:40850](http://127.0.0.1:40850)을 열면 저장소
 대시보드가 표시된다. 화면에서 허용된 폴더를 탐색해 선택하거나 경로를 입력할 수

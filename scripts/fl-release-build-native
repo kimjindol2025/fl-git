@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Fixed build/link boundary. The caller holds /tmp/fl-heavy.lock.
+set -Eeuo pipefail
+umask 077
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
+ulimit -c 0
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
+blocked() { printf 'FL_RELEASE_BUILD=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+[[ $# == 4 && -d "$1/pages" && -d "$2" && -d "$3" && -x "$4" ]] || blocked 'Usage: fl-release-build-native web existing-run matching-sdk release-tool'
+WEB="$1" RUN="$2" SDK="$3" TOOL="$4"
+[[ "$TOOL" == "$SDK/bin/fl-front-release" ]] || blocked 'The matching SDK release tool is required.'
+for pair in 'FREELANG_NATIVE_COMPILER|bin/flc' 'FREELANG_NATIVE_WEB_TOOL|bin/fl-front-build' \
+  'FREELANG_NATIVE_HEADLESS_TOOL|bin/fl-island-headless' 'FREELANG_NATIVE_FLP_TOOL|bin/flp-compile' \
+  'FREELANG_NATIVE_STYLE_TOOL|bin/fl-style-compile' 'FREELANG_NATIVE_ISLAND_TOOL|bin/fl-island-compile' \
+  'FREELANG_NATIVE_RUNTIME_ARCHIVE|lib/runtime.a' 'FREELANG_NATIVE_RUNTIME_INCLUDE|include'; do
+  IFS='|' read -r variable relative <<<"$pair"
+  [[ -n "${!variable:-}" && -e "${!variable}" ]] || blocked 'The complete matching SDK activation is required.'
+  IFS= read -r -d '' configured < <(readlink -fz -- "${!variable}")
+  [[ "$configured" == "$SDK/$relative" ]] || blocked 'Every configured build input must belong to the selected SDK.'
+done
+for command_name in gcc readelf timeout find; do command -v "$command_name" >/dev/null || blocked 'A required release build command is unavailable.'; done
+step=SDK_VERIFY
+trap 'rc=$?; if ((rc != 0)); then printf "FL_RELEASE_BUILD=FAIL STEP=%s EXIT=%s\n" "$step" "$rc" >&2; fi' EXIT
+"$SDK/verify.sh" >"$RUN/sdk.build.before.log" 2>&1
+mkdir -- "$RUN/build" "$RUN/code"
+step=WEB_BUILD
+env -u FL_NATIVE_DEV_HEADLESS_INDEX FL_FRONT_NATIVE_DEV=0 FL_FRONT_NATIVE_RELEASE=1 \
+  "$ROOT/scripts/fl-front-build-native" "$WEB" "$RUN/build" >"$RUN/web-build.stdout" 2>"$RUN/web-build.stderr"
+mapfile -d '' -t bundles < <(find "$RUN/build" -mindepth 1 -maxdepth 1 -type d -name 'fl-web.*' -print0)
+[[ ${#bundles[@]} == 1 ]] || blocked 'Exactly one complete Native web build is required.'
+step=STAGE
+"$TOOL" --stage "${bundles[0]}" "$SDK" "$RUN/code" "$TOOL" "$SDK/bin/fl-dev-watch-host" \
+  "$SDK/scripts/fl-release-ready" >"$RUN/stage.json" 2>"$RUN/stage.stderr"
+link=()
+while true; do
+  field=
+  if IFS= read -r -d '' field; then link+=("$field")
+  else [[ -z "$field" ]] || blocked 'Truncated Native link records.'; break; fi
+done <"$RUN/code/provenance/link.nul"
+[[ ${#link[@]} == 6 && "${link[0]}" == FL_RELEASE_LINK/1 && "${link[5]}" == FL_RELEASE_END/1 \
+  && "${link[1]}" == "$RUN/code/provenance/app.c" && "${link[2]}" == "$SDK/include" \
+  && "${link[3]}" == "$SDK/lib/runtime.a" && "${link[4]}" == "$RUN/code/web/app-native" ]] || blocked 'Complete literal Native link records are required.'
+step=LINK
+env -u LD_RUN_PATH timeout 180s gcc -O2 -w -rdynamic -Werror=implicit-function-declaration \
+  -I "${link[2]}" -o "${link[4]}" "${link[1]}" -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
+  -Wl,--whole-archive "${link[3]}" -Wl,--no-whole-archive \
+  -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto "$RUN/code/lib/libcurl.so.4" >"$RUN/relink.stdout" 2>"$RUN/relink.stderr"
+step=ELF_FACTS
+LC_ALL=C readelf -h -- "${link[4]}" >"$RUN/code/provenance/app.elf.txt"
+LC_ALL=C readelf -l -- "${link[4]}" >"$RUN/code/provenance/app.program.txt"
+LC_ALL=C readelf -d -- "${link[4]}" >"$RUN/code/provenance/app.dynamic.txt"
+LC_ALL=C readelf -d -- "$RUN/code/lib/libcurl.so.4" >"$RUN/code/provenance/curl.dynamic.txt"
+chmod 555 -- "$RUN/code/web/app-native" "$RUN/code/bin/fl-front-release" "$RUN/code/bin/fl-native-clock" "$RUN/code/bin/fl-release-ready"
+step=SEAL
+"$TOOL" --seal "$RUN/code" >"$RUN/seal.json" 2>"$RUN/seal.stderr"
+"$TOOL" --verify "$RUN/code" >"$RUN/verified.json" 2>"$RUN/verified.stderr"
+step=SDK_UNCHANGED
+"$SDK/verify.sh" >"$RUN/sdk.build.after.log" 2>&1
+printf 'FL_RELEASE_BUILD=PREPARED\nACTIVATION=NOT_RUN\n'

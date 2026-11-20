@@ -5,7 +5,7 @@ native_memory_limit="$(ulimit -v)"
 if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
 ulimit -c 0
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
 COMPILER="${FREELANG_NATIVE_COMPILER:-}"
 COMPILER_C="${FREELANG_NATIVE_COMPILER_C:-}"
 ARCHIVE="${FREELANG_NATIVE_RUNTIME_ARCHIVE:-}"
@@ -34,13 +34,14 @@ if [[ -n "$MOZJS_LIBRARY" ]]; then
   gjs_soname="$(readelf -d -- "$GJS_LIBRARY" | sed -n 's/.*(SONAME).*\[\([^]]*\)\].*/\1/p')"
   [[ "$mozjs_soname" == libmozjs-115.so && "$gjs_soname" == libgjs.so.0 ]] || blocked 'The engine pair must match the supported SpiderMonkey ESR115/GJS ABI.'
 fi
-OUTPUT="$(cd -- "$1" && pwd -P)"
+IFS= read -r -d '' OUTPUT < <(cd -P -- "$1" && printf '%s\0' "$PWD")
 RUN="$(mktemp -d -- "$OUTPUT/fl-sdk.XXXXXX")"
 printf 'FL_NATIVE_SDK_ARTIFACTS=%s\n' "$RUN"
 step=INPUTS
 trap 'rc=$?; if [[ "$rc" -ne 0 ]]; then printf "FL_NATIVE_SDK=FAIL STEP=%s EXIT=%s\n" "$step" "$rc"; fi' EXIT
 mkdir -- "$RUN/bin" "$RUN/lib" "$RUN/include" "$RUN/build" "$RUN/provenance" "$RUN/scripts"
 cp -- "$ROOT/scripts/fl-island-run-native" "$RUN/scripts/fl-island-run-native"
+cp -- "$ROOT/scripts/fl-release-ready" "$RUN/scripts/fl-release-ready"
 cp -- "$ROOT/web/runtime/headless-language.fl" "$RUN/lib/headless-language.fl"
 if [[ -n "$MOZJS_LIBRARY" ]]; then
   mkdir -- "$RUN/lib/js-engine"
@@ -63,7 +64,7 @@ sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
     src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
     src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
-    tools/*.fl native/dev-watch.c native/source-transaction.c native/js-engine.c native/process-argv.c native/process-argv.h web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native scripts/fl-island-run-native
+    tools/*.fl native/dev-watch.c native/source-transaction.c native/js-engine.c native/process-argv.c native/process-argv.h web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native scripts/fl-island-run-native scripts/fl-release-*
 ) >"$RUN/provenance/frontend.before.sha256"
 "$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
 ar --version >"$RUN/provenance/ar.txt"
@@ -85,6 +86,7 @@ specs=(
   'fl-dev-control|tools/fl-dev-control.fl'
   'fl-front-fix|tools/fl-front-fix.fl'
   'fl-island-headless|tools/fl-island-headless.fl'
+  'fl-front-release|tools/fl-front-release.fl'
 )
 for spec in "${specs[@]}"; do
   IFS='|' read -r name source <<< "$spec"
@@ -127,7 +129,9 @@ fi
 step=ACTIVATION
 cat >"$RUN/env.sh" <<'SH'
 # Source this file from Bash; paths are resolved after relocating the SDK.
-fl_sdk_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+fl_sdk_script="$(readlink -f -- "${BASH_SOURCE[0]}")"
+IFS= read -r -d '' fl_sdk_root < <(cd -P -- "${fl_sdk_script%/*}" && printf '%s\0' "$PWD")
+export FREELANG_NATIVE_SDK_ROOT="$fl_sdk_root"
 export FREELANG_NATIVE_COMPILER="$fl_sdk_root/bin/flc"
 export FREELANG_NATIVE_COMPILER_C="$fl_sdk_root/provenance/compiler.c"
 export FREELANG_NATIVE_RUNTIME_ARCHIVE="$fl_sdk_root/lib/runtime.a"
@@ -139,6 +143,7 @@ export FREELANG_NATIVE_FLP_TOOL="$fl_sdk_root/bin/flp-compile"
 export FREELANG_NATIVE_WEB_TOOL="$fl_sdk_root/bin/fl-front-build"
 export FREELANG_NATIVE_FIX_TOOL="$fl_sdk_root/bin/fl-front-fix"
 export FREELANG_NATIVE_FIX_HOST="$fl_sdk_root/bin/fl-source-transaction"
+export FREELANG_NATIVE_RELEASE_TOOL="$fl_sdk_root/bin/fl-front-release"
 export FREELANG_NATIVE_JS_ENGINE="$fl_sdk_root/bin/fl-js-engine"
 export FREELANG_NATIVE_HEADLESS_TOOL="$fl_sdk_root/bin/fl-island-headless"
 export FREELANG_NATIVE_HEADLESS_SUPPORT="$fl_sdk_root/lib/headless-language.fl"
@@ -158,12 +163,13 @@ export FREELANG_NATIVE_DEV_CONTROL="$fl_sdk_root/bin/fl-dev-control"
 export FREELANG_NATIVE_CURL_LIBRARY="$fl_sdk_root/lib/libcurl.so"
 export LD_LIBRARY_PATH="$fl_sdk_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LIBRARY_PATH="$fl_sdk_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
-unset fl_sdk_root
+unset fl_sdk_root fl_sdk_script
 SH
 cat >"$RUN/verify.sh" <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+fl_sdk_script="$(readlink -f -- "${BASH_SOURCE[0]}")"
+cd -P -- "${fl_sdk_script%/*}"
 sha256sum --strict -c SDK.SHA256
 SH
 chmod +x -- "$RUN/verify.sh"
@@ -198,14 +204,19 @@ run prepared modules without compiling, with a 2000ms engine deadline inside
 the 3-second request budget. Missing engine configuration records preparation
 NOT_RUN; builds without headless tests can still produce a browser/server bundle.
 Test receipts distinguish PASS, FAIL, NOT_REQUIRED, NO_CASES and NOT_RUN.
-The default development entry, full DSL compatibility and release acceptance
-remain unfinished. See the repository's NATIVE-HEADLESS-API.md for scope.
+The default development entry uses the Native supervisor. The repository's
+fl-release-prepare-native creates a sealed relocatable code release and a
+separate user-service plan; activation remains NOT_RUN. fl-front-release checks
+content and emits service/foreground plans. fl-release-ready is the fixed
+HTTP/clock IO helper copied into a code release. These tools do not establish
+full DSL compatibility, service activation, application or DB acceptance.
+See NATIVE-HEADLESS-API.md and NATIVE-RELEASE.md for scope.
 TXT
 (
   cd -- "$RUN"
   sha256sum -- env.sh verify.sh README.txt bin/* include/*.h include/ryu/* lib/runtime.a lib/libcurl.so "lib/$curl_soname" \
     provenance/*.txt provenance/compiler.c provenance/frontend.before.sha256 \
-    scripts/fl-island-run-native lib/headless-language.fl >SDK.SHA256
+    scripts/fl-island-run-native scripts/fl-release-ready lib/headless-language.fl >SDK.SHA256
   if [[ -d lib/js-engine ]]; then sha256sum -- lib/js-engine/* >>SDK.SHA256; fi
 )
 step=MANIFEST

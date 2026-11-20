@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Prepare code and a user-service plan. Activation is a separate operation.
+set -Eeuo pipefail
+umask 077
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
+ulimit -c 0
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
+WEB="$ROOT/web"
+PARENT="${FREELANG_NATIVE_RELEASE_ARTIFACTS:-${TMPDIR:-/tmp}}"
+NAME=fl-git
+PORT="${FL_GIT_PORT:-${PORT:-40850}}"
+REPOSITORY="${FL_GIT_REPO:-$ROOT}"
+ROOTS="${FL_GIT_ROOTS:-}"
+ROLE="${FL_GIT_ROLE:-developer}"
+HOST_PATH="${FL_RELEASE_HOST_PATH:-/usr/bin:/bin}"
+FROM_RELEASE=
+selected_web=0
+blocked() { printf 'FL_NATIVE_RELEASE=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+usage() { printf 'Usage: fl-release-prepare-native [web-root] [--artifacts directory] [--name name] [--port port] [--repo directory] [--roots roots] [--role role] [--host-path PATH] [--from-release directory]\n'; }
+while (($#)); do
+  case "$1" in
+    --help|-h) usage; exit 0;;
+    --artifacts|--name|--port|--repo|--roots|--role|--host-path|--from-release)
+      (($# >= 2)) || blocked 'An option value is required.'
+      case "$1" in
+        --artifacts) PARENT="$2";; --name) NAME="$2";; --port) PORT="$2";;
+        --repo) REPOSITORY="$2";; --roots) ROOTS="$2";; --role) ROLE="$2";;
+        --host-path) HOST_PATH="$2";; --from-release) FROM_RELEASE="$2";;
+      esac
+      shift 2;;
+    --) shift; (($# == 1 && selected_web == 0)) || blocked 'One web directory is required after --.'; WEB="$1"; selected_web=1; shift;;
+    -*) blocked 'Unknown release option.';;
+    *) ((selected_web == 0)) || blocked 'Select one web directory.'; WEB="$1"; selected_web=1; shift;;
+  esac
+done
+[[ -d "$PARENT" && -w "$PARENT" && -d "$REPOSITORY" ]] || blocked 'Existing artifact and repository directories are required.'
+[[ -d "${FREELANG_NATIVE_SDK_ROOT:-}" ]] || blocked 'Configure FREELANG_NATIVE_SDK_ROOT with the selected matching SDK.'
+IFS= read -r -d '' SDK < <(readlink -fz -- "$FREELANG_NATIVE_SDK_ROOT")
+IFS= read -r -d '' PARENT < <(readlink -fz -- "$PARENT")
+IFS= read -r -d '' REPOSITORY < <(readlink -fz -- "$REPOSITORY")
+TOOL="${FREELANG_NATIVE_RELEASE_TOOL:-}"
+[[ -x "$TOOL" && -x "$SDK/verify.sh" ]] || blocked 'Configure the matching Native release tool and SDK verifier.'
+IFS= read -r -d '' TOOL < <(readlink -fz -- "$TOOL")
+[[ "$TOOL" == "$SDK/bin/fl-front-release" ]] || blocked 'The release tool must belong to the selected SDK.'
+[[ -n "$ROOTS" ]] || ROOTS="$REPOSITORY"
+if [[ -z "$FROM_RELEASE" ]]; then
+  [[ -d "$WEB/pages" ]] || blocked 'An existing web/pages directory is required.'
+  IFS= read -r -d '' WEB < <(readlink -fz -- "$WEB")
+  case "$PARENT/" in "$WEB/"*) blocked 'Release artifacts must be outside the source web tree.';; esac
+else
+  ((selected_web == 0)) || blocked 'A selected release and a source web directory are mutually exclusive.'
+  [[ -d "$FROM_RELEASE" ]] || blocked 'Select an existing sealed code release.'
+  IFS= read -r -d '' FROM_RELEASE < <(readlink -fz -- "$FROM_RELEASE")
+  case "$PARENT/" in "$FROM_RELEASE/"*) blocked 'Service plans must be outside the selected code release.';; esac
+fi
+for command_name in flock mktemp; do command -v "$command_name" >/dev/null || blocked 'A required release host command is unavailable.'; done
+RUN="$(mktemp -d -- "$PARENT/fl-release-native.XXXXXX")"
+printf 'FL_NATIVE_RELEASE_ARTIFACTS=%s\n' "$RUN"
+step=SDK_VERIFY
+trap 'rc=$?; if ((rc != 0)); then printf "FL_NATIVE_RELEASE=FAIL STEP=%s EXIT=%s\n" "$step" "$rc" >&2; fi' EXIT
+"$SDK/verify.sh" >"$RUN/sdk.before.log" 2>&1
+step=CONFIG
+"$TOOL" --check-config "$NAME" "$PORT" "$REPOSITORY" "$ROOTS" "$ROLE" "$HOST_PATH" >"$RUN/config.json" 2>"$RUN/config.stderr"
+mkdir -- "$RUN/service"
+if [[ -z "$FROM_RELEASE" ]]; then
+  step=BUILD
+  flock -o /tmp/fl-heavy.lock "$ROOT/scripts/fl-release-build-native" "$WEB" "$RUN" "$SDK" "$TOOL" >"$RUN/build.stdout" 2>"$RUN/build.stderr"
+  CODE="$RUN/code"
+else
+  step=SELECTED_RELEASE
+  CODE="$FROM_RELEASE"
+  "$TOOL" --verify "$CODE" >"$RUN/selected-release.json" 2>"$RUN/selected-release.stderr"
+fi
+step=SERVICE_PLAN
+"$TOOL" --unit "$CODE" "$RUN/service" "$NAME" "$PORT" "$REPOSITORY" "$ROOTS" "$ROLE" "$HOST_PATH" >"$RUN/prepared.json" 2>"$RUN/prepared.stderr"
+step=SDK_UNCHANGED
+"$SDK/verify.sh" >"$RUN/sdk.after.log" 2>&1
+printf '%s\0' "$CODE" >"$RUN/release-location.nul"
+printf 'FL_NATIVE_RELEASE=PREPARED\nACTIVATION=NOT_RUN\n' | tee "$RUN/completion.txt"

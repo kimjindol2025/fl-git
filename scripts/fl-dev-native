@@ -39,7 +39,7 @@ done
 native_memory_limit="$(ulimit -v)"
 if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
 ulimit -c 0
-export FL_HTTP_HOST=127.0.0.1 FL_FRONT_NATIVE_DEV=1 PORT FL_HMR_PORT
+export FL_HTTP_HOST=127.0.0.1 FL_FRONT_NATIVE_DEV=1 FL_FRONT_NATIVE_RELEASE=0 PORT FL_HMR_PORT
 export FL_HTTP_ALLOW="${FL_HTTP_ALLOW:-127.0.0.1,localhost}"
 if [[ -z "${FL_GIT_REPO:-}" ]]; then FL_GIT_REPO="${WEB%/*}"; fi
 export FL_GIT_REPO="${FL_GIT_REPO:-/}"

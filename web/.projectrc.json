@@ -9,8 +9,8 @@
   ],
   "entry": "_app.fl",
   "commands": {
-    "dev": "FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node dev-server.js",
-    "build": "PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node fl-front-build.js",
-    "start": "FL_GIT_REPO=.. PORT=40850 FL_HTTP_ALLOW=127.0.0.1,localhost node runtime/bootstrap.js run _app.fl"
+    "dev": "PORT=40850 ../scripts/fl-dev .",
+    "build": "PORT=40850 ../scripts/fl-release-prepare-native .",
+    "start": "PORT=40850 ../scripts/fl-release-run-native"
   }
 }

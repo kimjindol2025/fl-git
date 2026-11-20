@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Fixed readiness IO boundary. Response policy is implemented in FreeLang.
+set -Eeuo pipefail
+umask 077
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+BIN="${SCRIPT_PATH%/*}"
+TOOL="$BIN/fl-front-release"
+CLOCK="$BIN/fl-native-clock"
+blocked() { printf 'FL_RELEASE_READY=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+[[ $# == 1 && "$1" =~ ^[0-9]{1,5}$ ]] || blocked 'One decimal port is required.'
+PORT="$((10#$1))"
+((PORT > 0 && PORT < 65536)) || blocked 'Port 1..65535 is required.'
+INSTANCE="${FL_NATIVE_RELEASE_INSTANCE:-${INVOCATION_ID:-}}"
+[[ "$INSTANCE" =~ ^[a-f0-9]{32}$ ]] || blocked 'The current invocation identity is required.'
+[[ -x "$TOOL" && -x "$CLOCK" ]] || blocked 'The complete verified release tools are required.'
+command -v curl >/dev/null || blocked 'The host curl command is required.'
+RUN="$(mktemp -d -- "${TMPDIR:-/tmp}/fl-release-ready.XXXXXX")"
+cleanup() {
+  local result=$?
+  trap - EXIT
+  # Keep only a constant failure report, never response headers or cookies.
+  rm -f -- "$RUN/headers" "$RUN/body" "$RUN/curl.stderr" "$RUN/policy.stderr" "$RUN/policy.stdout"
+  if ((result == 0)); then rmdir -- "$RUN"
+  else
+    printf 'Native invocation readiness failed within the three-second budget.\n' >"$RUN/failure.txt"
+    printf 'FL_RELEASE_READY_ARTIFACTS=%s\n' "$RUN" >&2
+  fi
+  exit "$result"
+}
+trap cleanup EXIT
+now_ms() {
+  local value
+  value="$(env -u LD_LIBRARY_PATH "$CLOCK" --clock-ms)" || return 1
+  [[ "$value" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$value"
+}
+deadline=$(($(now_ms) + 3000))
+while true; do
+  if [[ -n "${MAINPID:-}" ]]; then
+    [[ "$MAINPID" =~ ^[1-9][0-9]*$ ]] && kill -0 "$MAINPID" 2>/dev/null || break
+  fi
+  remaining=$((deadline - $(now_ms)))
+  ((remaining > 0)) || break
+  budget=$((remaining < 200 ? remaining : 200))
+  printf -v seconds '%d.%03d' "$((budget / 1000))" "$((budget % 1000))"
+  if env -u LD_LIBRARY_PATH curl --noproxy '*' --fail --silent --show-error \
+      --connect-timeout "$seconds" --max-time "$seconds" --max-filesize 1048576 \
+      --dump-header "$RUN/headers" --output "$RUN/body" \
+      "http://127.0.0.1:$PORT/~native/ready" 2>"$RUN/curl.stderr"; then
+    if env -u LD_LIBRARY_PATH "$TOOL" --ready-response "$RUN/headers" "$RUN/body" "$INSTANCE" \
+        >"$RUN/policy.stdout" 2>"$RUN/policy.stderr" && (($(now_ms) <= deadline)); then
+      if [[ -z "${MAINPID:-}" ]] || kill -0 "$MAINPID" 2>/dev/null; then
+        printf 'FL_RELEASE_READY=PASS\n'
+        exit 0
+      fi
+    fi
+  fi
+  sleep .025
+done
+printf 'FL_RELEASE_READY=FAIL\n' >&2
+exit 1

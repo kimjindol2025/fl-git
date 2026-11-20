@@ -1,0 +1,30 @@
+(load "./front-release.fl")
+(defn fl-release-command [args]
+  (let [mode (get args 0) count (length args)]
+    (cond
+      [(and (= mode "--check-config") (= count 7))
+       (println (json-str (fl-release-check-config (get args 1) (get args 2) (get args 3)
+                           (get args 4) (get args 5) (get args 6))))]
+      [(and (= mode "--stage") (= count 7))
+       (println (json-str (fl-release-stage (get args 1) (get args 2) (get args 3)
+                           (get args 4) (get args 5) (get args 6))))]
+      [(and (= mode "--seal") (= count 2)) (println (json-str (fl-release-seal (get args 1))))]
+      [(and (= mode "--verify") (or (= count 2) (= count 3)))
+       (println (json-str (fl-release-verify (get args 1) (get args 2))))]
+      [(and (= mode "--unit") (= count 9))
+       (println (json-str (fl-release-service-plan (get args 1) (get args 2) (get args 3)
+                           (get args 4) (get args 5) (get args 6) (get args 7) (get args 8))))]
+      [(and (= mode "--run-plan") (= count 8))
+       (fl-release-run-plan (get args 1) (get args 2) (get args 3) (get args 4)
+                            (get args 5) (get args 6) (get args 7))]
+      [(and (= mode "--ready-response") (= count 4))
+       (println (json-str (fl-release-ready-response (get args 1) (get args 2) (get args 3))))]
+      [(and (= mode "--help") (= count 1))
+       (println "Native release policy: --stage, --seal, --verify, --unit, --run-plan, --ready-response. Service plans are PREPARED; this tool never installs or changes services.")]
+      [true (do (fl_stderr_write "Usage: fl-front-release --help\n") (process-exit 2))])))
+(try
+  (do (fl-release-command (cli-args)) nil)
+  (catch error
+    (do (fl_stderr_write (str (json-str {"schema" "fl-native-release-error/1" "ok" false
+                                       "error" (error-message error)}) "\n"))
+        (process-exit 1))))

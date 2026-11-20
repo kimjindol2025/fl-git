@@ -80,12 +80,19 @@
                    "serverSupportAst" (str run "/ast/server-support.json") "dependencies" []}
             raw-port (or (env-get "FL_HMR_PORT") "40851")
             development (= (env-get "FL_FRONT_NATIVE_DEV") "1")
+            release (= (env-get "FL_FRONT_NATIVE_RELEASE") "1")
             port (if development (str-to-num raw-port) 40851)
-            plan (if development
+            base (if development
                    (assoc plain "development" true "hmrPort" port
                      "devProgram" (str run "/dev-hmr.fl")
                      "devScript" (str web "/public/native-dev.js")
-                     "devUrl" "/public/native-dev.js") plain)]
+                     "devUrl" "/public/native-dev.js") plain)
+            plan (if release (assoc base "release" true
+                               "readinessProtocol" "fl-native-release-instance/1") base)]
+        (if (and release development)
+          (throw "E_WEB_RELEASE_MODE: release and development modes cannot be combined") nil)
+        (if (and release (> (length (filter (fn [record] (= (get record "route") "/~native/ready")) records)) 0))
+          (throw "E_WEB_RELEASE_ROUTE: /~native/ready is reserved in release builds") nil)
         (if (and development (not (and (regex_match raw-port "^[0-9]{1,5}$") (> port 0) (< port 65536))))
           (throw "E_WEB_HMR_PORT: port 1..65535 required") nil)
         (fl-web-write (str run "/plan.json") (json_stringify plan)) plan))))
@@ -340,7 +347,9 @@
         prefix (str "; Native web bundle. Build artifacts only.\n"
                     "(if (= (env-get \"FL_HTTP_HOST\") \"127.0.0.1\") nil (throw \"Native web bundle requires FL_HTTP_HOST=127.0.0.1\"))\n(load " (fl-source-quote server-support) ")\n" css-source
                     (if (get plan "development")
-                      "(server_get \"/~native/ready\" (fn [req] (server_header (server_json {\"ok\" true} 200) \"x-fl-native-instance\" (or (env-get \"FL_NATIVE_DEV_INSTANCE\") \"\"))))\n(server_get \"/public/app.css\" (fn [req] (server_header (server_header (server_status 200 (file_read (str (or (env-get \"FL_WEB_PUBLIC\") \"public\") \"/app.css\"))) \"Content-Type\" \"text/css; charset=utf-8\") \"Cache-Control\" \"no-store\")))\n" "")
+                      "(server_get \"/~native/ready\" (fn [req] (server_header (server_json {\"ok\" true} 200) \"x-fl-native-instance\" (or (env-get \"FL_NATIVE_DEV_INSTANCE\") \"\"))))\n(server_get \"/public/app.css\" (fn [req] (server_header (server_header (server_status 200 (file_read (str (or (env-get \"FL_WEB_PUBLIC\") \"public\") \"/app.css\"))) \"Content-Type\" \"text/css; charset=utf-8\") \"Cache-Control\" \"no-store\")))\n"
+                      (if (get plan "release")
+                        "(server_get \"/~native/ready\" (fn [req] (let [explicit (env-get \"FL_NATIVE_RELEASE_INSTANCE\") instance (if (and (string? explicit) (not (= explicit \"\"))) explicit (or (env-get \"INVOCATION_ID\") \"\"))] (server_header (server_json {\"ok\" true} 200) \"x-fl-native-instance\" instance))))\n" ""))
                     "(server_static (or (env-get \"FL_WEB_PUBLIC\") \"public\") \"/public\")\n" static-routing)
         body (str-join (map (fn [entry] (get entry "source")) entries) "\n")
         routing (str-join (map fl-web-register-route

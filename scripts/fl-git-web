@@ -6,7 +6,7 @@ if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 20
 ulimit -c 0
 
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
 WEB="$ROOT/web"
 
 blocked() { echo 'FL_GIT_WEB=BLOCKED'; printf 'CAUSE=%s\n' "$1" >&2; exit 2; }
@@ -26,7 +26,7 @@ esac
 
 OUTPUT="${FREELANG_NATIVE_WEB_OUTPUT:-${TMPDIR:-/tmp}}"
 [[ -d "$OUTPUT" && -w "$OUTPUT" ]] || blocked 'FREELANG_NATIVE_WEB_OUTPUT (or TMPDIR) must be an existing writable output directory.'
-OUTPUT="$(cd -- "$OUTPUT" && pwd -P)"
+IFS= read -r -d '' OUTPUT < <(cd -P -- "$OUTPUT" && printf '%s\0' "$PWD")
 case "$OUTPUT/" in "$WEB/"*) blocked 'Output directory must be outside the source web tree.';; esac
 RUN="$(mktemp -d -- "$OUTPUT/fl-git-web.XXXXXX")"
 printf 'FL_GIT_WEB_ARTIFACTS=%s\n' "$RUN"

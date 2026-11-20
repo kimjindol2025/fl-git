@@ -1,0 +1,207 @@
+;; Release content, integrity and service-plan policy. Hosts perform compilation
+;; and process IO; no service-manager operation is performed by this module.
+(load "./front-release-unit.fl")
+
+(defn fl-release-error [message] (throw (str "E_RELEASE: " message)))
+(defn fl-release-root [directory]
+  (let [root (fl_compiler_realpath directory)]
+    (if (not (and (string? root) (file_exists root) (not (file_is_file root))))
+      (fl-release-error "existing directory required") nil)
+    (dir_list root)
+    root))
+(defn fl-release-relative [relative]
+  (if (not (and (string? relative) (not (= relative ""))
+                (not (str-starts-with relative "/"))
+                (not (str-includes relative "\x00"))
+                (every? (fn [part] (not (or (= part "") (= part ".") (= part ".."))))
+                        (str-split relative "/"))))
+    (fl-release-error "relative path without traversal required") relative))
+(defn fl-release-existing [root relative]
+  (let [path (str root "/" (fl-release-relative relative))
+        resolved (fl_compiler_realpath path)]
+    (if (not (= resolved path)) (fl-release-error "missing or aliased release path") path)))
+(defn fl-release-file [root relative]
+  (let [path (fl-release-existing root relative)]
+    (if (not (file_is_file path)) (fl-release-error "regular file required") path)))
+(defn fl-release-hash [file]
+  (let [result (fl_file_sha256_result file)]
+    (if (not (and (= (get result "ok") true)
+                  (string? (get result "data"))
+                  (regex_match (get result "data") "^[a-f0-9]{64}$")))
+      (fl-release-error "file digest unavailable") (get result "data"))))
+(defn fl-release-write [root relative text]
+  (let [result (fl_file_write_result (str root "/" (fl-release-relative relative)) text)]
+    (if (not (= (get result "ok") true)) (fl-release-error "artifact write failed") true)))
+(defn fl-release-json [root relative]
+  (json-parse (file_read (fl-release-file root relative))))
+(defn fl-release-sort [paths]
+  (map (fn [entry] (get entry "name"))
+       (arr-sort-by (map (fn [path] {"name" path}) paths) "name")))
+(defn fl-release-inventory [root]
+  (loop [pending [""] files [] directories []]
+    (if (= (length pending) 0)
+      {"files" (fl-release-sort files) "directories" (fl-release-sort directories)}
+      (let [relative (first pending) rest (slice pending 1 (length pending))
+            path (if (= relative "") root (fl-release-existing root relative))]
+        (if (file_is_file path) (recur rest (push files relative) directories)
+          (let [names (dir_list path)
+                children (map (fn [name] (fl-release-relative
+                              (if (= relative "") name (str relative "/" name)))) names)]
+            (recur (concat rest children) files
+                   (if (= relative "") directories (push directories relative)))))))))
+(defn fl-release-copy [source target]
+  (let [before (fl-release-hash source) copied (fl_file_copy_result source target)]
+    (if (not (and (= (get copied "ok") true)
+                  (= before (fl-release-hash source)) (= before (fl-release-hash target))))
+      (fl-release-error "input changed or byte copy failed") before)))
+(defn fl-release-copy-tree [source target]
+  (let [inventory (fl-release-inventory source)]
+    (dir_create target)
+    (doseq [relative (get inventory "directories")]
+      (dir_create (str target "/" relative)))
+    (doseq [relative (get inventory "files")]
+      (fl-release-copy (fl-release-file source relative) (str target "/" relative)))
+    (if (not (= inventory (fl-release-inventory source)))
+      (fl-release-error "asset inventory changed during copy") true)))
+(defn fl-release-records [root files]
+  (map (fn [relative]
+    (let [file (fl-release-file root relative)]
+      {"path" relative "sha256" (fl-release-hash file) "bytes" (file_size file)})) files))
+(defn fl-release-check-records [root records]
+  (if (not (array? records)) (fl-release-error "file records required") nil)
+  (let [paths (map (fn [record] (fl-release-relative (get record "path"))) records)]
+    (if (not (= (length paths) (length (keys (reduce (fn [seen path] (assoc seen path true)) {} paths)))))
+      (fl-release-error "duplicate file record") nil)
+    (doseq [record records]
+      (let [file (fl-release-file root (get record "path")) hash (get record "sha256") size (get record "bytes")]
+        (if (not (and (string? hash) (regex_match hash "^[a-f0-9]{64}$")
+                      (integer? size) (>= size 0) (= size (file_size file))
+                      (= hash (fl-release-hash file))))
+          (fl-release-error "release content changed") nil)))
+    paths))
+
+(defn fl-release-stage [bundle-directory sdk-directory output validator clock ready]
+  (let [bundle (fl-release-root bundle-directory) sdk (fl-release-root sdk-directory)
+        root (fl-release-root output) plan (fl-release-json bundle "plan.json")
+        completion (file_read (fl-release-file bundle "completion.txt"))]
+    (if (not (and (= (length (dir_list root)) 0)
+                  (not (= root bundle)) (not (str-starts-with root (str bundle "/")))
+                  (not (= root sdk)) (not (str-starts-with root (str sdk "/")))
+                  (not (= root (get plan "original")))
+                  (not (str-starts-with root (str (get plan "original") "/")))
+                  (= (get plan "schema") "fl-web-native/1")
+                  (= (get plan "status") "generated")
+                  (string? (get plan "original")) (str-starts-with (get plan "original") "/")
+                  (= (get plan "release") true) (not (get plan "development"))
+                  (= (get plan "readinessProtocol") "fl-native-release-instance/1")
+                  (str-includes completion "FL_WEB_NATIVE_BUILD=PASS\n")))
+      (fl-release-error "complete release-mode build and empty separate output required") nil)
+    (doseq [relative ["bin" "lib" "web" "provenance"]] (dir_create (str root "/" relative)))
+    (fl-release-copy-tree (fl-release-root (str bundle "/web/public")) (str root "/web/public"))
+    (doseq [pair [[(fl-release-file bundle "app.c") "provenance/app.c"]
+                 [(fl-release-file bundle "plan.json") "provenance/build-plan.json"]
+                 [(fl-release-file bundle "build-state.json") "provenance/build-state.json"]
+                 [(fl-release-file bundle "completion.txt") "provenance/build-completion.txt"]
+                 [(fl-release-file sdk "lib/libcurl.so.4") "lib/libcurl.so.4"]
+                 [validator "bin/fl-front-release"] [clock "bin/fl-native-clock"]
+                 [ready "bin/fl-release-ready"]]]
+      (fl-release-copy (get pair 0) (str root "/" (get pair 1))))
+    (fl-release-write root "provenance/link.nul"
+      (str "FL_RELEASE_LINK/1\x00" root "/provenance/app.c\x00" sdk "/include\x00"
+           sdk "/lib/runtime.a\x00" root "/web/app-native\x00FL_RELEASE_END/1\x00"))
+    (let [inventory (fl-release-inventory root)
+          record {"schema" "fl-native-release-stage/1"
+                  "readinessProtocol" (get plan "readinessProtocol")
+                  "sdkManifestSha256" (fl-release-hash (fl-release-file sdk "SDK.SHA256"))
+                  "runtimeArchiveSha256" (fl-release-hash (fl-release-file sdk "lib/runtime.a"))
+                  "directories" (get inventory "directories")
+                  "files" (fl-release-records root (get inventory "files"))}]
+      (fl-release-write root "stage.json" (json-str record))
+      {"ok" true "status" "STAGED"})))
+
+(defn fl-release-seal [directory]
+  (let [root (fl-release-root directory) stage (fl-release-json root "stage.json")
+        original (fl-release-check-records root (get stage "files"))
+        inventory (fl-release-inventory root)
+        added ["stage.json" "web/app-native" "provenance/app.elf.txt"
+               "provenance/app.program.txt" "provenance/app.dynamic.txt" "provenance/curl.dynamic.txt"]
+        header (file_read (fl-release-file root "provenance/app.elf.txt"))
+        program (file_read (fl-release-file root "provenance/app.program.txt"))
+        dynamic (file_read (fl-release-file root "provenance/app.dynamic.txt"))
+        curl (file_read (fl-release-file root "provenance/curl.dynamic.txt"))]
+    (if (not (and (= (get stage "schema") "fl-native-release-stage/1")
+                  (= (get inventory "directories") (get stage "directories"))
+                  (= (get inventory "files") (fl-release-sort (concat original added)))
+                  (regex_match header "Class:[ \t]+ELF64")
+                  (regex_match header "Type:[ \t]+(DYN|EXEC)")
+                  (str-includes program "INTERP")
+                  (regex_match dynamic "\\(RUNPATH\\)[^\n]*\\[\\$ORIGIN/\\.\\./lib\\]")
+                  (regex_match dynamic "\\(NEEDED\\)[^\n]*\\[libcurl\\.so\\.4\\]")
+                  (regex_match curl "\\(SONAME\\)[^\n]*\\[libcurl\\.so\\.4\\]")))
+      (fl-release-error "complete native ELF and relative library closure required") nil)
+    (let [manifest {"schema" "fl-native-release/1" "status" "SEALED"
+                    "readinessProtocol" (get stage "readinessProtocol")
+                    "sdkManifestSha256" (get stage "sdkManifestSha256")
+                    "runtimeArchiveSha256" (get stage "runtimeArchiveSha256")
+                    "directories" (get inventory "directories")
+                    "files" (fl-release-records root (get inventory "files"))}]
+      (fl-release-write root "release.json" (json-str manifest))
+      {"ok" true "status" "SEALED" "manifestSha256" (fl-release-hash (str root "/release.json"))})))
+(defn fl-release-verify [directory expected]
+  (let [root (fl-release-root directory) file (fl-release-file root "release.json") hash (fl-release-hash file)]
+    (if (and (not (= expected nil)) (not (= hash expected)))
+      (fl-release-error "manifest differs from selected service plan") nil)
+    (let [manifest (fl-release-json root "release.json")
+          paths (fl-release-check-records root (get manifest "files"))
+          inventory (fl-release-inventory root)]
+      (if (not (and (= (get manifest "schema") "fl-native-release/1")
+                    (= (get manifest "status") "SEALED")
+                    (= (get manifest "readinessProtocol") "fl-native-release-instance/1")
+                    (not (> (length (filter (fn [path] (= path "release.json")) paths)) 0))
+                    (= (get inventory "files") (fl-release-sort (push paths "release.json")))
+                    (= (get inventory "directories") (get manifest "directories"))
+                    (= hash (fl-release-hash file))))
+        (fl-release-error "sealed release inventory required") nil)
+      {"ok" true "status" "VERIFIED" "release" root "manifestSha256" hash})))
+(defn fl-release-config [root name port repository roots role host-path digest]
+  (if (not (regex_match port "^[0-9]{1,5}$")) (fl-release-error "decimal port required") nil)
+  (fl-release-unit-config {"release" root "name" name "port" (str-to-num port)
+    "repository" (fl-release-root repository) "roots" roots "role" role
+    "hostPath" host-path "manifestSha256" digest}))
+(defn fl-release-check-config [name port repository roots role host-path]
+  (if (not (regex_match port "^[0-9]{1,5}$")) (fl-release-error "decimal port required") nil)
+  (fl-release-unit-settings {"name" name "port" (str-to-num port)
+    "repository" (fl-release-root repository) "roots" roots "role" role "hostPath" host-path}))
+(defn fl-release-service-plan [directory output name port repository roots role host-path]
+  (let [verified (fl-release-verify directory nil) root (get verified "release") target (fl-release-root output)
+        config (fl-release-config root name port repository roots role host-path (get verified "manifestSha256"))]
+    (if (or (not (= (length (dir_list target)) 0)) (= target root) (str-starts-with target (str root "/")))
+      (fl-release-error "empty service-plan directory outside code release required") nil)
+    (fl-release-write target (str name ".service") (fl-release-unit config))
+    (fl-release-write target "plan.json" (json-str (assoc config
+      "schema" "fl-native-service-plan/1" "status" "PREPARED" "activation" "NOT_RUN"
+      "unitSha256" (fl-release-hash (str target "/" name ".service")))))
+    {"ok" true "status" "PREPARED" "activation" "NOT_RUN"}))
+(defn fl-release-run-plan [directory port repository roots role host-path instance]
+  (let [verified (fl-release-verify directory nil) root (get verified "release")
+        config (fl-release-config root "fl-git" port repository roots role host-path (get verified "manifestSha256"))]
+    (if (not (regex_match instance "^[a-f0-9]{32}$")) (fl-release-error "fresh instance identifier required") nil)
+    (let [arguments ["/usr/bin/env" "-u" "LD_LIBRARY_PATH" "-C" (str root "/web")
+                     "FL_HTTP_HOST=127.0.0.1" (str "PORT=" (get config "port"))
+                     (str "FL_GIT_REPO=" (get config "repository")) (str "FL_GIT_ROOTS=" roots)
+                     (str "FL_GIT_ROLE=" role) "FL_HTTP_ALLOW=127.0.0.1,localhost"
+                     (str "FL_WEB_PUBLIC=" root "/web/public") (str "PATH=" host-path)
+                     (str "FL_NATIVE_RELEASE_INSTANCE=" instance) (str root "/web/app-native")]]
+      (print "FL_RELEASE_RUN/1\x00")
+      (doseq [argument arguments] (print (str argument "\x00")))
+      (print "FL_RELEASE_END/1\x00"))))
+(defn fl-release-ready-response [headers-file body-file instance]
+  (if (not (regex_match instance "^[a-f0-9]{32}$")) (fl-release-error "instance identifier required") nil)
+  (let [lines (str-split (file_read headers-file) "\n")
+        status (or (first lines) "")
+        identity (first (filter (fn [line] (str-starts-with (str-lower line) "x-fl-native-instance:")) lines))
+        value (if (= identity nil) "" (str-trim (str-slice identity 21 (length identity))))
+        body (json-parse (file_read body-file))]
+    (if (not (and (regex_match status "^HTTP/[0-9.]+ 200[ \r]") (= value instance)
+                  (map? body) (= (type-of (get body "ok")) "boolean") (= (get body "ok") true)))
+      (fl-release-error "owned native readiness response required") {"ok" true})))

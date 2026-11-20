@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Execute only a selected, verified release; policy emits literal NUL argv.
+set -Eeuo pipefail
+umask 077
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
+ulimit -c 0
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
+blocked() { printf 'FL_RELEASE_RUN=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
+[[ $# -le 1 ]] || blocked 'Usage: fl-release-run-native [sealed-code-release]'
+CODE="${1:-${FREELANG_NATIVE_RELEASE:-}}"
+TOOL="${FREELANG_NATIVE_RELEASE_TOOL:-}"
+[[ -d "$CODE" && -x "$TOOL" ]] || blocked 'Select a sealed code release and a trusted matching Native release tool.'
+[[ "${FL_HTTP_HOST:-127.0.0.1}" == 127.0.0.1 ]] || blocked 'Native releases bind only to 127.0.0.1.'
+REPOSITORY="${FL_GIT_REPO:-$ROOT}"
+[[ -d "$REPOSITORY" ]] || blocked 'Select an existing repository directory.'
+IFS= read -r -d '' REPOSITORY < <(readlink -fz -- "$REPOSITORY")
+INSTANCE="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$INSTANCE" =~ ^[a-f0-9]{32}$ ]] || blocked 'A fresh invocation identity is required.'
+RUN="$(mktemp -d -- "${TMPDIR:-/tmp}/fl-release-run.XXXXXX")"
+trap 'rc=$?; if ((rc != 0)); then printf "FL_RELEASE_RUN_ARTIFACTS=%s\n" "$RUN" >&2; fi' EXIT
+"$TOOL" --run-plan "$CODE" "${FL_GIT_PORT:-${PORT:-40850}}" "$REPOSITORY" \
+  "${FL_GIT_ROOTS:-$REPOSITORY}" "${FL_GIT_ROLE:-developer}" "${FL_RELEASE_HOST_PATH:-/usr/bin:/bin}" \
+  "$INSTANCE" >"$RUN/run.nul" 2>"$RUN/policy.stderr"
+invocation=()
+while true; do
+  field=
+  if IFS= read -r -d '' field; then invocation+=("$field")
+  else [[ -z "$field" ]] || blocked 'Truncated Native invocation records.'; break; fi
+done <"$RUN/run.nul"
+[[ ${#invocation[@]} == 17 && "${invocation[0]}" == FL_RELEASE_RUN/1 \
+  && "${invocation[16]}" == FL_RELEASE_END/1 && "${invocation[1]}" == /usr/bin/env ]] || blocked 'A complete Native invocation is required.'
+rm -- "$RUN/run.nul" "$RUN/policy.stderr"
+rmdir -- "$RUN"
+trap - EXIT
+exec "${invocation[@]:1:15}"

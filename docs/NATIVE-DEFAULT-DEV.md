@@ -51,8 +51,9 @@ into the private actual input and excluded from the implementation commit and
 SDK source. Earlier inherited-environment and private harness failures remain
 recorded in the [evidence](evidence/native-default-dev-20261120.json).
 
-The `.freelang/deploy.sh` and `web/.projectrc.json` deployment/start commands
-still contain Node/PM2 paths. Deployment migration, full DSL parity, remote Git
+The subsequent [Native release entry](NATIVE-RELEASE.md) replaces the
+`.freelang/deploy.sh` and `web/.projectrc.json` Node/PM2 command paths with
+Native preparation/foreground execution. Service activation, full DSL parity, remote Git
 UI, abrupt process-owner death, visual/pointer acceptance and latest whole DB95
 safety/operations remain open. Goal ACTIVE; commercial HOLD; production NOT_RUN.
 Private paths and owners: <가림>.

@@ -4,14 +4,14 @@ native_memory_limit="$(ulimit -v)"
 if [[ "$native_memory_limit" == unlimited ]] || [[ "$native_memory_limit" -gt 2097152 ]]; then ulimit -v 2097152; fi
 ulimit -c 0
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+IFS= read -r -d '' ROOT < <(cd -P -- "${SCRIPT_PATH%/*}/.." && printf '%s\0' "$PWD")
 APP="${FREELANG_NATIVE_WEB_APP:-}"
 if [[ -z "$APP" || ! -x "$APP" ]]; then
   echo "FL_WEB_NATIVE_RUN=BLOCKED"; echo 'CAUSE=Set FREELANG_NATIVE_WEB_APP to the verified Native bundle executable.' >&2; exit 2
 fi
 [[ "${FL_HTTP_HOST:-127.0.0.1}" == 127.0.0.1 ]] || { echo 'Native web entry requires FL_HTTP_HOST=127.0.0.1' >&2; exit 2; }
-APP="$(readlink -f -- "$APP")"
-cd -- "$(dirname -- "$APP")"
+IFS= read -r -d '' APP < <(readlink -fz -- "$APP")
+cd -P -- "${APP%/*}"
 exec env FL_HTTP_HOST=127.0.0.1 PORT="${PORT:-40850}" \
   FL_GIT_REPO="${FL_GIT_REPO:-$ROOT}" FL_GIT_ROOTS="${FL_GIT_ROOTS:-$ROOT}" \
-  FL_WEB_PUBLIC="$(dirname -- "$APP")/public" "$APP" "$@"
+  FL_WEB_PUBLIC="${APP%/*}/public" "$APP" "$@"

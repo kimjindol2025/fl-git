@@ -1,0 +1,191 @@
+{
+  "schema": "native-release-prepare-evidence/1",
+  "date": "2026-11-20",
+  "pathsAndOwners": "<가림>",
+  "goal": "ACTIVE",
+  "commercialReadiness": "HOLD",
+  "productionActivation": "NOT_RUN",
+  "source": {
+    "frontendBase": "7bf379e548060c1690ba11c535339ddb0464705c",
+    "fx": "d8dc4c63adcfe2ac3f7d7edf69f890407c2dd4da",
+    "dbUnchanged": "6fbd2f0208baf114349036a0ee5d94903ff41296",
+    "foreignFilesUnchanged": true,
+    "newHandwrittenProductJsTs": false,
+    "protectedTestsAssertionsExpectedValuesRunnersBoundsChanged": false
+  },
+  "sdk": {
+    "manifestSha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "canonicalCompilerC": "a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5",
+    "elfCount": 17,
+    "elfSha256": {
+      "flc": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+      "fl-git": "a32b729d1d5d40823a80dc071ff8c887541133b0051d8e323118f75b0e6da588",
+      "fl-tui": "841f22d2e4e18981215277fb0f1881bca797afd62f17fb4708750d4802a058d0",
+      "fl-check": "27127cab9264606cb1826a45f4092573e72f9d650afdc2dfc8dd7e7f7ceea80c",
+      "flp-compile": "64d41a584682ab3cc183e9d79ed7240ddb3b498eb21fad4a5751781ba939f958",
+      "fl-front-build": "a8849c94185dbbddd748e5463d463fa23b0f49655038c64beab0a15822fd5922",
+      "fl-style-compile": "cbb0d688b6f110817aa91c9f3e8def4f641609a4d9bab469726b85609472c344",
+      "fl-island-compile": "e0dd8b829ac00ce7b0bec13f6be89e7baa730c7df6bc7938011debd783b3e3b7",
+      "fl-dev-server": "eac6ddd6cfeea7ffb7c85bc54336667ff6087fe3f7ce9daa20839232ac7e56a5",
+      "fl-dev-watch": "746a747c11ddc2f5093d5f7fe9c4f55afcc8754ca3a2a33ad7e318624608b95b",
+      "fl-dev-control": "f8a8754e807764590d98ecaeba7b62227d1c5ef7e8625b239eac6503a8c678ef",
+      "fl-front-fix": "e47a0ba96be5960736e9a7c725c1eac14d3d2040d1b06d5cd281845cf172b461",
+      "fl-island-headless": "4476c8c706a9271e77f468ffa48a64c3ad274b1b9806c0853b563cca81de068b",
+      "fl-front-release": "2d0243737eb5d01b13574c2ab2944bf092e79530637b291b8694579013724f77",
+      "fl-dev-watch-host": "f86888c5715d6093331a610cfe525994954cf72a8e7700d5e0f591ba17d4b5e8",
+      "fl-source-transaction": "20a8f6660c66a4d714524119e29f88080d4a3c8105302b947f7bdb6f9228fb54",
+      "fl-js-engine": "b31919e02fcaec778d61b63aaba1ecfc042784dfa36a1b0c5159ac49074a26b5"
+    },
+    "comparisonWithR24": {
+      "flc": "IDENTICAL",
+      "fl-git": "IDENTICAL",
+      "fl-tui": "IDENTICAL",
+      "fl-check": "IDENTICAL",
+      "flp-compile": "IDENTICAL",
+      "fl-front-build": "CHANGED",
+      "fl-style-compile": "IDENTICAL",
+      "fl-island-compile": "IDENTICAL",
+      "fl-dev-server": "IDENTICAL",
+      "fl-dev-watch": "IDENTICAL",
+      "fl-dev-control": "IDENTICAL",
+      "fl-front-fix": "IDENTICAL",
+      "fl-island-headless": "IDENTICAL",
+      "fl-front-release": "NEW",
+      "fl-dev-watch-host": "IDENTICAL",
+      "fl-source-transaction": "IDENTICAL",
+      "fl-js-engine": "IDENTICAL"
+    },
+    "finalVsCandidate": {
+      "all17ElfIdentical": true,
+      "envVerifyReadyIdentical": true
+    },
+    "relocation": "space/apostrophe/Korean/percent/dollar/LF; final SDK root ends LF",
+    "newRuntimeOrSeedBootstrapClaimed": false,
+    "retainedQualification": "R24 exact runtime and15 unchanged ELF evidence remains scoped; new web tool/release paths independently qualified"
+  },
+  "release": {
+    "actualCodeManifestSha256": "8fdc63c03259b450ac81029ea9fea5f38ee965690443455bd735eb8bdb9c015e",
+    "status": "SEALED/VERIFIED",
+    "servicePlan": "PREPARED",
+    "serviceActivation": "NOT_RUN",
+    "managerOperations": "NONE",
+    "library": "copied SONAME libcurl.so.4, application RUNPATH $ORIGIN/../lib, launch unsets LD_LIBRARY_PATH",
+    "instance": "fresh128bit foreground id; per-activation INVOCATION_ID for prepared systemd unit",
+    "roleDefault": "developer",
+    "readinessObservationMilliseconds": 3000,
+    "normalStopSeconds": 3,
+    "serviceStartupUpperSeconds": 8,
+    "addressSpaceBytes": 2147483648,
+    "linkSeconds": 180
+  },
+  "cohorts": {
+    "finalPublicRelease": {
+      "pass": 45,
+      "total": 45,
+      "smallPrepareWholeSeconds": 90,
+      "includes": [
+        "literal paths and relocation",
+        "manifest pin/content/extra/missing/symlink rejection",
+        "real systemd257 parser",
+        "rollback selects explicit previous code without rebuild",
+        "fresh foreground identity and host library environment",
+        "inherited active-dev headless index preserved",
+        "failed source cannot report PREPARED",
+        "owned normal startup/stop3s"
+      ]
+    },
+    "finalForegroundDefaults": {
+      "pass": 7,
+      "total": 7,
+      "scope": "relative repository and default roots physical canonicalization; prebuilt launcher default root trailingLF; config-only fixture, not Git API basename acceptance"
+    },
+    "releaseMode": {
+      "pass": 8,
+      "total": 8,
+      "execution": "candidate SDK; final tool/helpers byte-identical",
+      "scope": "release capability, mixed dev/release rejected, reserved route rejected, current identity, production HTML without HMR, normal shutdown"
+    },
+    "originalDefaultDev": {
+      "lifecycle": {
+        "pass": 13,
+        "total": 13,
+        "realBuilds": 4
+      },
+      "literalPaths": {
+        "pass": 16,
+        "total": 16,
+        "realBuilds": 2
+      },
+      "entryGuards": {
+        "pass": 17,
+        "total": 17
+      },
+      "execution": "candidate SDK and source hosts; final executable/helpers and all used host scripts identical",
+      "perSmallBuildSeconds": 90,
+      "requestReadyStopSeconds": 3
+    },
+    "actualProduction": {
+      "buildWholeSeconds": 300,
+      "relocatedVerifierWithoutSdkEnv": true,
+      "chrome": {
+        "pass": 20,
+        "total": 20,
+        "scope": "original R24 repository path domain: special-character/LF parent, basename sample, special LF unselected filename; actual select/Stage/Commit/index/unselected-file preservation/reload/original CSP/no HMR/no app errors",
+        "ownedTabsFinalized": true,
+        "role": "developer",
+        "authenticatedRemote": "NOT_RUN"
+      },
+      "serviceActivation": "NOT_RUN"
+    }
+  },
+  "traceAudit": {
+    "traceCount": 66,
+    "decodedExecs": 11957,
+    "nodeFamilyExecs": 0,
+    "serviceManagerCliExecs": 0,
+    "finalBrowserAccountCliExecs": 0
+  },
+  "retainedFailures": [
+    {
+      "scope": "Extended actual Git API trailingLF repository basename",
+      "status": "FAIL",
+      "cause": "Foreign api-out and directory resolution trim the root; source left unchanged."
+    },
+    {
+      "scope": "Extended actual Git repository discovery internalLF basename",
+      "status": "FAIL",
+      "cause": "Foreign repository discovery splits relative find output on LF; source left unchanged. Passing original-domain cohort does not supersede this."
+    },
+    {
+      "scope": "Private final45 coordinator first scheduling attempt",
+      "status": "TIMEOUT at unchanged90s",
+      "cause": "Small prepare queued behind independent actual300s build. Later preparation completed outside the observation window and is not a passing test. Fresh sequential run keeps90s/3s bounds and passes45."
+    },
+    {
+      "scope": "Initial prototype link",
+      "status": "FAIL",
+      "cause": "Only copied SONAME library exists; -lcurl requires a development symlink. Fixed host links the exact copied libcurl.so.4 operand, without creating an alias."
+    },
+    {
+      "scope": "Initial clean unit parser",
+      "status": "FAIL",
+      "cause": "Missing owned XDG_RUNTIME_DIR. Clean v2 parser and final generated real unit pass with owned runtime directory."
+    }
+  ],
+  "remaining": [
+    "Foreign Git API LF-basename defects",
+    "Full DSL compatibility",
+    "Authenticated remote Git UI",
+    "Screenshot and physical pointer acceptance",
+    "Real user-service activation and crash/cgroup restart behavior",
+    "Latest whole DB95 Native gate, data safety, recovery, writer ownership, uncertain commit, concurrency, sustained load, TLS/protocol clients, backup and operations"
+  ],
+  "primaryReferences": [
+    "https://www.freedesktop.org/software/systemd/man/257/systemd-analyze.html",
+    "https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html",
+    "https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html",
+    "https://www.freedesktop.org/software/systemd/man/latest/systemd.syntax.html",
+    "https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html"
+  ]
+}
