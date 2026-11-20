@@ -97,6 +97,14 @@ path and has not run. Whole-app/browser acceptance and DB commercial
 qualification remain open. Commercial status is HOLD, overall goal active.
 No production service, foreign worktree changes or customer data were changed.
 
+The subsequent [source-fix checkpoint](NATIVE-FIX-PLANS.md) adds the Native
+`fl-source-transaction` file host and exports `FREELANG_NATIVE_FIX_HOST` alongside
+the FreeLang fix tool. Its SDK has 14 Native executables. Explicit source
+application and interruption recovery retain private backups; they do not
+establish application, DB or production acceptance. The matching
+[receipt](evidence/native-fix-apply-20261120.json) records the compiler/runtime
+inputs, complete package manifest and separate qualification results.
+
 ## Current coherent checkpoint
 
 The subsequent native-dev-coherent-20261120 SDK includes the validated SSE task

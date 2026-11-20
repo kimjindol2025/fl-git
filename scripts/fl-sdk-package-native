@@ -44,7 +44,7 @@ sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
     src/tui-mouse.fl src/tui-display.fl src/provider.fl src/provider-context.fl \
     src/provider-adapter.fl src/provider-write.fl src/provider-gate.fl \
-    tools/*.fl native/dev-watch.c web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native
+    tools/*.fl native/dev-watch.c native/source-transaction.c web/runtime/*.fl scripts/fl-sdk-package-native scripts/fl-dev-native scripts/fl-front-build-native scripts/fl-front-fix-native
 ) >"$RUN/provenance/frontend.before.sha256"
 "$NATIVE_CC" --version >"$RUN/provenance/cc.txt"
 ar --version >"$RUN/provenance/ar.txt"
@@ -78,6 +78,9 @@ done
 step=WATCH_HOST
 "$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -o "$RUN/bin/fl-dev-watch-host" \
   "$ROOT/native/dev-watch.c" >"$RUN/build/watch-host.build.log" 2>&1
+step=FIX_HOST
+"$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -o "$RUN/bin/fl-source-transaction" \
+  "$ROOT/native/source-transaction.c" -lcrypto >"$RUN/build/fix-host.build.log" 2>&1
 step=SOURCE_UNCHANGED
 sha256sum -c -- "$RUN/build/inputs.before.sha256" >"$RUN/build/inputs.check.log"
 (
@@ -98,6 +101,7 @@ export FREELANG_NATIVE_FLCHECK="$fl_sdk_root/bin/fl-check"
 export FREELANG_NATIVE_FLP_TOOL="$fl_sdk_root/bin/flp-compile"
 export FREELANG_NATIVE_WEB_TOOL="$fl_sdk_root/bin/fl-front-build"
 export FREELANG_NATIVE_FIX_TOOL="$fl_sdk_root/bin/fl-front-fix"
+export FREELANG_NATIVE_FIX_HOST="$fl_sdk_root/bin/fl-source-transaction"
 export FREELANG_NATIVE_STYLE_TOOL="$fl_sdk_root/bin/fl-style-compile"
 export FREELANG_NATIVE_ISLAND_TOOL="$fl_sdk_root/bin/fl-island-compile"
 export FREELANG_NATIVE_DEV_SERVER="$fl_sdk_root/bin/fl-dev-server"

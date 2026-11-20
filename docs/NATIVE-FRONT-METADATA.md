@@ -46,8 +46,11 @@ The earlier temporary `diagnostics` status object becomes an item array;
 `diagnosticStatus` separately records implemented and pending coverage.
 
 The subsequent [static diagnostic implementation](NATIVE-STATIC-DIAGNOSTICS.md)
-adds 17 catalog checks and actual SDK declaration metadata. Console-only
-advisories, automatic fixes and island tests remain open. A complete catalog does not establish
+adds 17 catalog checks and actual SDK declaration metadata. Subsequent
+[advisories](NATIVE-DIAGNOSTIC-ADVISORIES.md) and [explicit source fixes](NATIVE-FIX-PLANS.md)
+have separate tools and qualification. `diagnosticStatus.fix: NOT_RUN` in ordinary
+build metadata does not claim source application; consult the separate fix
+report. Island tests remain open. A complete catalog does not establish
 complete detection, and contract annotations do not establish commercial or
 application acceptance. Function-level source maps and live runtime translation
 also need their remaining work.

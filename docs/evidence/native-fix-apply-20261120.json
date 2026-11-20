@@ -1,0 +1,184 @@
+{
+  "schema": "native-fix-apply-evidence/1",
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "paths": "<가림>",
+  "owners": "<가림>",
+  "baseFrontendCommit": "2b83127eff8d20d5f2f53fa350e5da406a89098e",
+  "sdk": {
+    "version": "R16-SDK5",
+    "executables": 14,
+    "allNativeElf": true,
+    "manifestSha256": "a608ce455ce1cb585837d1c462fc0f03e3b8d7ee3e31b41f0385198cfa16eeb5",
+    "compilerSha256": "a552d2d516df9d398845a12d7551b6e3132d73e214161609c78737e05e7951b0",
+    "compilerCSha256": "26f07fec1123c4b7bd396b68fd6272a7d9882e513e70f747d03fe206fe13d2c0",
+    "runtimeSha256": "4d3140faaa9623c9d11a7d263ae956774c4d88828c53cfda68771f3e46d4473b",
+    "fileHostSha256": "20a8f6660c66a4d714524119e29f88080d4a3c8105302b947f7bdb6f9228fb54",
+    "compilerRuntimeFoundation": "accepted R10; reused unchanged, not a fresh bootstrap",
+    "sourceProvenanceVerified": true
+  },
+  "productSourceSha256": {
+    "native/source-transaction.c": "236ff33a2a938acde12884c257b45e068206814e1ad88f50fc5f749300edcd93",
+    "tools/front-fix.fl": "78815d2f83a6190886855701bfa198f75aa0fc7debffabd41c98777afe0d1ee8",
+    "tools/fl-front-fix.fl": "79896e44c6a2eb7f36040b28646cc2ebb4468f2ebd4500bec32fbed228123ac9",
+    "scripts/fl-front-fix-native": "7172247cae0617f29f8731a4261ef453cdd0876e9ebb41d03030d1fde72f7c71",
+    "scripts/fl-front-build-native": "da797b684de762e7b319fa0911ca1ad26d712269e6876db4d54a8ffcd993915d",
+    "scripts/fl-sdk-package-native": "1229b028129a6ad30d6121e7f5c84832fac84d87b0d7dd2151de31f0cd6a7b7d"
+  },
+  "qualification": {
+    "fileHost": {
+      "passed": 105,
+      "total": 105,
+      "status": "PASS"
+    },
+    "pathIdentity": {
+      "passed": 27,
+      "total": 27,
+      "status": "PASS"
+    },
+    "recoveryOwnership": {
+      "passed": 6,
+      "total": 6,
+      "status": "PASS"
+    },
+    "planAndApplication": {
+      "passed": 456,
+      "total": 456,
+      "status": "PASS"
+    },
+    "publicEntry": {
+      "passed": 36,
+      "total": 36,
+      "status": "PASS"
+    },
+    "publicCleanupOwnership": {
+      "passed": 6,
+      "total": 6,
+      "status": "PASS"
+    },
+    "nativeRequestGuards": {
+      "passed": 14,
+      "total": 14,
+      "status": "PASS"
+    },
+    "nativeCoreAndHTTP": {
+      "passed": 69,
+      "total": 69,
+      "status": "PASS"
+    },
+    "builderSignals": {
+      "passed": 10,
+      "total": 10,
+      "status": "PASS"
+    },
+    "builderLiteralPaths": {
+      "passed": 11,
+      "total": 11,
+      "status": "PASS"
+    },
+    "chrome": {
+      "passed": 32,
+      "total": 32,
+      "status": "PASS"
+    },
+    "chromeLiveApplication": {
+      "passed": 14,
+      "total": 14,
+      "status": "PASS"
+    }
+  },
+  "actualCopiedInput": {
+    "sourceUnits": 20,
+    "sourceBytes": 248860,
+    "filesPlanned": 0,
+    "filesApplied": 0,
+    "allOriginalFileMetadataUnchanged": true,
+    "allFlFlxFlpBytesUnchanged": true,
+    "scope": "Copied actual frontend input with original foreign changes. No-op application only; not actual app/Git runtime acceptance."
+  },
+  "nodeFamilyExecutionsInCollectedProductTraces": 0,
+  "traceFilesAudited": 61,
+  "protectedTestsRunnersExpectationsBounds": "UNCHANGED",
+  "foreignChangesPreserved": 4,
+  "seedPreserved": true,
+  "limits": {
+    "nativeVirtualMemoryBytes": 2147483648,
+    "heavyLock": "fl-heavy.lock; retained",
+    "planCaseSeconds": 5,
+    "actualInputSeconds": 15,
+    "nativeBuildGenerationCaseSeconds": 15,
+    "httpReadinessAndStopSeconds": 3,
+    "devBuildReadinessSeconds": 90,
+    "watchPollSeconds": 0.05,
+    "watchDebounceMilliseconds": 250
+  },
+  "behavior": {
+    "default": "read-only preview",
+    "apply": "explicit --fix, Native source policy and literal C filesystem host",
+    "recover": "uncommitted rollback or committed cleanup; never forced overwrite",
+    "atomicity": "individual file operations; no multi-file visibility or arbitrary-writer isolation guarantee",
+    "backup": "private retained original byte backups, manifest and inode identities",
+    "conflicts": "retain data; nonzero result; unknown applied count for incomplete uncommitted rollback",
+    "committedCleanupFailure": "nonzero, committed counts retained, recovery/review required",
+    "builder": "apply then ordinary build; a later build failure preserves committed source and remains failure",
+    "parserValidation": "changed source files only; NATIVE_PARSE_ONLY",
+    "extendedAttributes": "preserved when copy succeeds; failure aborts publication"
+  },
+  "retainedFailuresAndCorrections": [
+    {
+      "kind": "product",
+      "failure": "new CLI helper name shadowed the existing relative-path helper; exact golden expected ./ was lost in SDK1",
+      "correction": "unique helper name; identical source golden retained; final plan/application 456 controls pass"
+    },
+    {
+      "kind": "product",
+      "failure": "an external inode captured between the source guard and exchange was retained but not restored in the earlier host",
+      "correction": "restore captured original only while current visible replacement is still exactly owned; old failing control retained"
+    },
+    {
+      "kind": "product",
+      "failure": "changed/missing transaction marker could report committed recovery complete while retired files remained in SDK4",
+      "correction": "check recorded scratch paths and marker ownership; nonzero committed-cleanup status without mutation; raw and public controls pass"
+    },
+    {
+      "kind": "product",
+      "failure": "builder command substitution stripped trailing LF from selected source/output paths after source commit",
+      "correction": "NUL-delimited canonical paths; exact prior script SHA negative control and real Native build/HTTP positives retained"
+    },
+    {
+      "kind": "private fixture",
+      "failure": "an undefined call was treated as a link-error trigger, but existing Native behavior emits a warning and builds",
+      "correction": "an actually undefined value now triggers the same required later build failure; source-commit/failure assertions retained"
+    },
+    {
+      "kind": "private harness",
+      "failure": "initial entry harness had indentation errors; a resume launcher omitted its EXIT receipt",
+      "correction": "unexecuted syntax failure and observed terminal exit are recorded separately; final launcher and all final result files prove completion"
+    },
+    {
+      "kind": "private browser observer",
+      "failure": "Final browser v2 read the store during contract-repair navigation after accepting the old document; 27/28 controls before abort were not a full pass",
+      "correction": "Final v3 waits for a new document origin/loader and one guarded DOM/store snapshot within the same 3-second bound. Original store/default field assertions remain; all 32 controls pass. Failure and both observer sources are retained."
+    }
+  ],
+  "remaining": [
+    "complete fix-site/dataflow qualification and advanced namespaces/import consumers",
+    "headless island execution and /~ai/test",
+    "complete JSON fields, live diagnostics and expression source maps",
+    "default development/deployment migration and retention",
+    "actual Git Provider workflows and visual/pointer acceptance",
+    "latest whole DB Native gate and data safety/recovery/concurrency/load/operations"
+  ],
+  "claimsExcluded": [
+    "legacy implementation parity: referenced Node fix module is absent",
+    "multi-file atomicity",
+    "isolation from writers ignoring locks",
+    "disk power-loss qualification",
+    "commercial lifetime/throughput readiness",
+    "actual frontend/Git runtime acceptance from the zero-edit input test",
+    "screenshots or physical pointer verification",
+    "latest whole DB pass"
+  ]
+}

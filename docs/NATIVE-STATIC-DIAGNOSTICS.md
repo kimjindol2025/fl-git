@@ -95,8 +95,9 @@ expectations, runners, time/memory bounds, seed and foreign files are unchanged.
 
 CSS/dangerous-pattern/name-collision advisories and function suggestions now
 have a [separate implementation and receipt](NATIVE-DIAGNOSTIC-ADVISORIES.md).
-Read-only [source-edit previews](NATIVE-FIX-PLANS.md) are now available.
-Headless/island tests, automatic fix application, complete JSON-field/source-map parity,
+[Source-edit previews, explicit application and interruption recovery](NATIVE-FIX-PLANS.md)
+are now available within their documented source scope.
+Headless/island tests, complete JSON-field/source-map parity,
 the default development entry and deployment migration remain open. Actual
 application/Git workflows and the latest whole DB safety/qualification gates are
 also required. The goal stays active, commercial readiness is HOLD, and no

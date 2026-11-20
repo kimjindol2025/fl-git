@@ -70,12 +70,13 @@ The previous builder refers to `web/fl-front-fix.js`, but that module is absent
 from this checkout and its available Git history. An isolated invocation of
 the original `--fix-dry` confirms `MODULE_NOT_FOUND` before any file changes.
 The five catalog rules marked machine-applicable therefore remain the stated
-contract for the pending Native fix implementation; parity with an unavailable
+contract for the Native fix implementation; parity with an unavailable
 legacy implementation cannot be asserted. That advisory checkpoint did not
-include a fix implementation. Subsequent [Native preview work](NATIVE-FIX-PLANS.md) adds read-only
-edit plans; source application and recovery remain pending.
+include a fix implementation. Subsequent [Native fix work](NATIVE-FIX-PLANS.md)
+adds read-only edit plans, explicit application and interruption recovery within
+the documented source scope.
 
-Headless/island tests, automatic fixes, complete JSON fields and source maps,
+Headless/island tests, complete fix-site/dataflow qualification, complete JSON fields and source maps,
 advanced modules, default development/deployment migration, actual application
 and Git workflows, and the latest full DB safety/operations gates remain open.
 Commercial readiness is HOLD. Production deployment has not run; the overall

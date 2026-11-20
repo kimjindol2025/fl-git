@@ -15,13 +15,34 @@ blocked() { trap - EXIT; echo "FL_WEB_NATIVE_BUILD=BLOCKED"; printf 'CAUSE=%s\n'
 [[ -n "$COMPILER" && -x "$COMPILER" ]] || blocked "Set FREELANG_NATIVE_COMPILER to the verified Native compiler."
 [[ -n "$WEB_TOOL" && -x "$WEB_TOOL" ]] || blocked "Set FREELANG_NATIVE_WEB_TOOL to its matching Native web compiler."
 [[ -f "$ARCHIVE" && -d "$INCLUDE" ]] || blocked "Set matching FREELANG_NATIVE_RUNTIME_ARCHIVE and FREELANG_NATIVE_RUNTIME_INCLUDE."
-[[ ( "$#" -eq 2 || "$#" -eq 3 ) && -d "$1" && -d "$2" ]] || blocked "Usage: fl-front-build-native <web-root> <existing-output-directory> [--fix-dry]"
+[[ ( "$#" -eq 2 || "$#" -eq 3 ) && -d "$1" && -d "$2" ]] || blocked "Usage: fl-front-build-native <web-root> <existing-output-directory> [--fix-dry | --fix]"
 if [[ "$#" -eq 3 ]]; then
-  [[ "$3" == --fix-dry ]] || blocked 'Only --fix-dry is implemented; source application is still pending.'
-  exec "$ROOT/scripts/fl-front-fix-native" --fix-dry --artifacts "$2" -- "$1"
+  if [[ "$3" == --fix-dry ]]; then
+    exec "$ROOT/scripts/fl-front-fix-native" --fix-dry --artifacts "$2" -- "$1"
+  fi
+  [[ "$3" == --fix ]] || blocked 'Choose --fix-dry or --fix.'
+  FIX_SIGNAL=0
+  FIX_PID=
+  forward_fix_signal() {
+    FIX_SIGNAL="$1"
+    if [[ -n "$FIX_PID" ]]; then kill -TERM "$FIX_PID" 2>/dev/null || true; fi
+  }
+  trap 'forward_fix_signal 143 TERM' TERM
+  trap 'forward_fix_signal 130 INT' INT
+  "$ROOT/scripts/fl-front-fix-native" --fix --artifacts "$2" -- "$1" &
+  FIX_PID=$!
+  if ((FIX_SIGNAL != 0)); then kill -TERM "$FIX_PID" 2>/dev/null || true; fi
+  fix_rc=0
+  while true; do
+    if wait "$FIX_PID"; then break; else fix_rc=$?; fi
+    kill -0 "$FIX_PID" 2>/dev/null || break
+  done
+  trap - TERM INT
+  ((FIX_SIGNAL == 0)) || exit "$FIX_SIGNAL"
+  ((fix_rc == 0)) || exit "$fix_rc"
 fi
-WEB="$(cd -- "$1" && pwd -P)"
-OUTPUT="$(cd -- "$2" && pwd -P)"
+IFS= read -r -d '' WEB < <(readlink -fz -- "$1")
+IFS= read -r -d '' OUTPUT < <(readlink -fz -- "$2")
 case "$OUTPUT/" in "$WEB/"*) blocked "Output directory must be outside the source web tree.";; esac
 RUN="$(mktemp -d -- "$OUTPUT/fl-web.XXXXXX")"
 printf 'FL_WEB_ARTIFACTS=%s\n' "$RUN"

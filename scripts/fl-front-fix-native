@@ -1,34 +1,49 @@
 #!/usr/bin/env bash
-# Read-only fix planning. Native FreeLang owns rules, scopes and source edits.
+# Native FreeLang owns source policy; the C host applies literal file IO.
 set -Eeuo pipefail
 umask 077
-usage() { printf 'Usage: fl-front-fix-native <web-root> [--fix-dry] [--artifacts existing-directory]\n'; }
+native_memory_limit="$(ulimit -v)"
+if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
+ulimit -c 0
+usage() { printf 'Usage: fl-front-fix-native <web-root> [--fix-dry | --fix] [--artifacts existing-directory]\n       fl-front-fix-native --recover private-run-directory\nDefault: read-only preview. --fix retains backups and recovery artifacts.\n'; }
 blocked() { printf 'FL_FIX_NATIVE=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
-WEB= ARTIFACT_PARENT="${TMPDIR:-/tmp}" RETAIN=0
+WEB= ARTIFACT_PARENT="${TMPDIR:-/tmp}" RETAIN=0 MODE=dry RECOVER=
+canonical() { IFS= read -r -d '' "$1" < <(realpath -ze -- "$2"); }
 while (($#)); do
   case "$1" in
     --help|-h) usage; exit 0;;
-    --fix-dry) shift;;
-    --fix) blocked 'Source application is not implemented yet. Use --fix-dry to inspect the plan.';;
+    --fix-dry) [[ "$MODE" == dry ]] || blocked 'Choose one fix mode.'; MODE=preview; shift;;
+    --fix) [[ "$MODE" == dry ]] || blocked 'Choose one fix mode.'; MODE=apply; RETAIN=1; shift;;
+    --recover) (($# >= 2)) && [[ "$MODE" == dry ]] || blocked 'Select one recovery directory.'; MODE=recover; RECOVER="$2"; shift 2;;
     --artifacts) (($# >= 2)) || blocked 'An existing artifact directory is required.'; ARTIFACT_PARENT="$2"; RETAIN=1; shift 2;;
     --) shift; (($# == 1)) && [[ -z "$WEB" ]] || blocked 'Select one web directory.'; WEB="$1"; shift;;
     -*) blocked 'Unknown fix option.';;
     *) [[ -z "$WEB" ]] || blocked 'Select one web directory.'; WEB="$1"; shift;;
   esac
 done
+command -v realpath >/dev/null || blocked 'The literal path host is unavailable.'
+if [[ "$MODE" == recover ]]; then
+  [[ -z "$WEB" && -d "$RECOVER" && "$RETAIN" == 0 ]] || blocked 'Recovery uses only its existing private run directory.'
+  canonical RECOVER "$RECOVER" || blocked 'Recovery directory cannot be resolved.'
+  for configured in FREELANG_NATIVE_FIX_TOOL FREELANG_NATIVE_FIX_HOST; do
+    [[ -n "${!configured:-}" && -x "${!configured}" ]] || blocked "Configure $configured with the matching Native SDK."
+  done
+  printf 'FL_FIX_NATIVE_ARTIFACTS=%s\n' "$RECOVER" >&2
+  exec "$FREELANG_NATIVE_FIX_HOST" recover "$RECOVER" -- "$FREELANG_NATIVE_FIX_TOOL" --finish "$RECOVER"
+fi
 [[ -n "$WEB" && -d "$WEB/pages" && -d "$ARTIFACT_PARENT" ]] || blocked 'Select existing web/pages and artifact directories.'
-WEB="$(cd -- "$WEB" && pwd -P)"
-PROJECT="$(cd -- "$WEB/.." && pwd -P)"
-ARTIFACT_PARENT="$(cd -- "$ARTIFACT_PARENT" && pwd -P)"
+canonical WEB "$WEB" || blocked 'Web directory cannot be resolved.'
+canonical PROJECT "$WEB/.." || blocked 'Project directory cannot be resolved.'
+canonical ARTIFACT_PARENT "$ARTIFACT_PARENT" || blocked 'Artifact directory cannot be resolved.'
 case "$ARTIFACT_PARENT/" in "$WEB/"*) blocked 'Artifacts must be outside the selected source web tree.';; esac
 for configured in FREELANG_NATIVE_FIX_TOOL FREELANG_NATIVE_COMPILER; do
   [[ -n "${!configured:-}" && -x "${!configured}" ]] || blocked "Configure $configured with the matching Native SDK."
 done
+if [[ "$MODE" == apply ]]; then
+  [[ -n "${FREELANG_NATIVE_FIX_HOST:-}" && -x "$FREELANG_NATIVE_FIX_HOST" ]] || blocked 'Configure FREELANG_NATIVE_FIX_HOST with the matching Native SDK.'
+fi
 [[ -f "${FREELANG_NATIVE_RUNTIME_INCLUDE:-}/v11-ops.h" && -f "${FREELANG_NATIVE_RUNTIME_INCLUDE:-}/native-symbols.h" ]] || blocked 'Matching Native SDK declarations required.'
 for name in find sort mktemp cmp; do command -v "$name" >/dev/null || blocked 'A required file host command is unavailable.'; done
-native_memory_limit="$(ulimit -v)"
-if [[ "$native_memory_limit" == unlimited ]] || ((native_memory_limit > 2097152)); then ulimit -v 2097152; fi
-ulimit -c 0
 for name in pages islands; do [[ ! -L "$WEB/$name" ]] || blocked 'Source directory symlinks are not selected automatically.'; done
 RUN="$(mktemp -d -- "$ARTIFACT_PARENT/fl-fix-native.XXXXXX")"
 cleanup() { local rc=$?; if ((RETAIN == 0)); then rm -rf -- "$RUN"; fi; exit "$rc"; }
@@ -55,4 +70,9 @@ while IFS= read -r -d '' source; do
 done <"$RUN/outputs.nul"
 source_inputs >"$RUN/current-inputs.nul"
 cmp -s -- "$RUN/inputs.nul" "$RUN/current-inputs.nul" || blocked 'Source inventory changed during planning.'
+if [[ "$MODE" == apply ]]; then
+  "$FREELANG_NATIVE_FIX_TOOL" --finalize "$RUN" "$RUN/facts.nul" >"$RUN/preview.json"
+  "$FREELANG_NATIVE_FIX_TOOL" --request "$RUN" >"$RUN/request.nul"
+  exec "$FREELANG_NATIVE_FIX_HOST" apply "$PROJECT" "$WEB" "$RUN" -- "$FREELANG_NATIVE_FIX_TOOL" --finish "$RUN" <"$RUN/request.nul"
+fi
 "$FREELANG_NATIVE_FIX_TOOL" --finalize "$RUN" "$RUN/facts.nul"

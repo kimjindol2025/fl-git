@@ -288,3 +288,9 @@ web builder continues to call the generator inside the already-private bundle.
 No full bundle/browser rerun is claimed by the launcher checkpoint. Dev/HMR,
 shared verification/deployment, general FLP support and SDK packaging remain
 open. Diagnostic fix is advice, not an automatic source-rewrite option.
+
+The subsequent [Native fix command](NATIVE-FIX-PLANS.md) provides explicit
+`--fix-dry`, `--fix` and interruption recovery, separately from the diagnostic
+advice field. Builder `--fix` applies verified source edits before its ordinary
+build; a later build failure remains a failure and preserves the committed
+source transaction and its backups.

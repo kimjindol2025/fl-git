@@ -278,7 +278,7 @@
      "filesChanged" (length results) "filesPlanned" (length results) "filesApplied" 0
      "blockers" (get state "blockers") "results" results
      "inputs" (map (fn [unit] {"file" (get unit "file") "sha256" (get unit "sha256")}) units)
-     "validation" "NOT_RUN" "application" "NOT_IMPLEMENTED"}))
+     "validation" "NOT_RUN" "application" "NOT_REQUESTED"}))
 (defn fl-fix-report [plan]
   (assoc (dissoc (dissoc (dissoc plan "inputs") "web") "project") "results"
     (map (fn [row] (dissoc (dissoc (dissoc (dissoc row "sourceFile") "destinationFile") "stage") "ast")) (get plan "results"))))
