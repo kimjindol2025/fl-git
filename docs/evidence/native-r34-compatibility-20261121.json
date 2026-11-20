@@ -1,0 +1,725 @@
+{
+  "schema": "front-native-sdk-r34-compatibility/1",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "source_sha256": {
+    "src/tcp-server.fls": "383392b9a423befd17a7bae72f83ec5b5b833a1cc8826c5602bc4771363aa2af",
+    "src/engine.fls": "cd49560cd3e8a2e71106ffe512743ebe67dd6a77a6ada6e4f39fbddb43ec6800"
+  },
+  "runtime_header_sha256": {
+    "v11-compat.h": "01267f03dfa6ad89417658f359bf327c1587127b827c69b3849ccb72ed6e0b7b",
+    "v11-ops.h": "5a49445d24ce00b653d63505184e5e54ec62f7d1974180abbbe59ef9cda84821"
+  },
+  "sdk": {
+    "manifestSha256": "76c06a511428bcba09df17ad372f9b704e70fa78a3838e9e586e80ee28db4941",
+    "runtimeSha256": "1cf12615cdc4f8fa49cea18e79cdbc82b13a644c8626b2988a83a50b401633f8",
+    "compilerCSha256": "a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5",
+    "elfCount": 17
+  },
+  "limits": {
+    "address_space_bytes": 2147483648,
+    "fresh_cold_native_seconds": 120,
+    "soak_ms": 300000,
+    "soak_clients": 8,
+    "soak_p95_ms": 15000,
+    "soak_max_ms": 20000
+  },
+  "regression": {
+    "status": "PASS",
+    "total": 57,
+    "cohorts": [
+      {
+        "file": "wal/contract-results.json",
+        "pass": 25,
+        "total": 25
+      },
+      {
+        "file": "wal/unicode-results.json",
+        "pass": 4,
+        "total": 4
+      },
+      {
+        "file": "checkpoint/generation-results.json",
+        "pass": 15,
+        "total": 15
+      },
+      {
+        "file": "checkpoint/tail-results.json",
+        "pass": 13,
+        "total": 13
+      }
+    ],
+    "originalFixturesControllersBoundsUnchanged": true,
+    "commercial": "HOLD"
+  },
+  "commit_health": {
+    "status": "PASS",
+    "total": 292,
+    "cohorts": [
+      {
+        "cohort": "natural",
+        "passed": 28,
+        "total": 28
+      },
+      {
+        "cohort": "validation",
+        "passed": 12,
+        "total": 12
+      },
+      {
+        "cohort": "fault",
+        "passed": 220,
+        "total": 220
+      },
+      {
+        "cohort": "socket",
+        "passed": 32,
+        "total": 32
+      }
+    ],
+    "sourceModuleSha256": "383392b9a423befd17a7bae72f83ec5b5b833a1cc8826c5602bc4771363aa2af",
+    "originalBodiesControllersAndBoundsUnchanged": true,
+    "commercial": "HOLD"
+  },
+  "original_diagnostic": {
+    "pass": 52,
+    "fail": 19,
+    "timeout": 0,
+    "skip": 0,
+    "total": 71
+  },
+  "original_3200_record_traversal": {
+    "records": 3200,
+    "originalMarkers": [
+      "PASS silent-tcp-wal-recovery",
+      "PASS silent-tcp-wal-corrupt-commit",
+      "PASS silent-tcp-wal-blank-record",
+      "PASS silent-tcp-wal-unknown-record",
+      "PASS silent-tcp-wal-orphan-commit"
+    ],
+    "pass": 5,
+    "total": 5,
+    "wholeSeconds": 360,
+    "throughputOr5minuteLoadClaim": false
+  },
+  "original_diagnostic_trace": {
+    "decodedExecs": 3387,
+    "successfulNonNativeExecs": 0,
+    "failedOrRejectedNonNativeAttempts": 1
+  },
+  "original_129_tests_and_runners_assertions_bounds_preserved": true,
+  "cold_recoveries": [
+    {
+      "cohort": "actual16224",
+      "turn": 1,
+      "exit": 0,
+      "passed": true,
+      "allActualRows": 16224,
+      "result": {
+        "ok": true,
+        "native_field_predicate": true,
+        "reader_schema": 3,
+        "reader_iteration": "all-index-loop",
+        "stored_id_type": "string",
+        "rows": 16224,
+        "revision": 16225,
+        "raw_pairs_digest": "cc5f849cf2f3de755543b7b1955501b9f81c0f0f9c9b8d99ee215a57d5c67d8c",
+        "ordered_pairs_digest": "23d698a112b588ecf8b9d8c6cc1de028d5c6c6b981b562d32ea7e2ecd538afb5"
+      },
+      "queueInclusiveObserverSeconds": 233.67476263199933,
+      "nativeRuntimeLimitSeconds": 120,
+      "trace": {
+        "traceSha256": "895e4aaf45e73cc401b6791028c9f6edba3c9cf1f8c30c0c83d5aac444716eb2",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      }
+    },
+    {
+      "cohort": "actual16224",
+      "turn": 2,
+      "exit": 0,
+      "passed": true,
+      "allActualRows": 16224,
+      "result": {
+        "ok": true,
+        "native_field_predicate": true,
+        "reader_schema": 3,
+        "reader_iteration": "all-index-loop",
+        "stored_id_type": "string",
+        "rows": 16224,
+        "revision": 16225,
+        "raw_pairs_digest": "cc5f849cf2f3de755543b7b1955501b9f81c0f0f9c9b8d99ee215a57d5c67d8c",
+        "ordered_pairs_digest": "23d698a112b588ecf8b9d8c6cc1de028d5c6c6b981b562d32ea7e2ecd538afb5"
+      },
+      "queueInclusiveObserverSeconds": 816.0815745949985,
+      "nativeRuntimeLimitSeconds": 120,
+      "trace": {
+        "traceSha256": "cb4334693637fff2a627690dab8289bd7c9bffc56b807993377e061ea08ea5d4",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      }
+    },
+    {
+      "cohort": "original14664",
+      "turn": 1,
+      "exit": 0,
+      "passed": true,
+      "allActualRows": 14664,
+      "result": {
+        "ok": true,
+        "native_field_predicate": true,
+        "reader_schema": 3,
+        "reader_iteration": "all-index-loop",
+        "stored_id_type": "string",
+        "rows": 14664,
+        "revision": 14665,
+        "raw_pairs_digest": "9f8f224e66367537d65df513b0f945ec83cffa14a0a62b8703e16168e8e06299",
+        "ordered_pairs_digest": "006ad83f82dab3e913175dd61eb1b30550a39cf1bb92ccc3c31a67af91b2cf8e"
+      },
+      "queueInclusiveObserverSeconds": 96.86498405699967,
+      "nativeRuntimeLimitSeconds": 120,
+      "trace": {
+        "traceSha256": "4763f688e425eb8b76ee9424794d2246a8e5350463264a57fa9457ddfea1f1fd",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      }
+    },
+    {
+      "cohort": "original14664",
+      "turn": 2,
+      "exit": 0,
+      "passed": true,
+      "allActualRows": 14664,
+      "result": {
+        "ok": true,
+        "native_field_predicate": true,
+        "reader_schema": 3,
+        "reader_iteration": "all-index-loop",
+        "stored_id_type": "string",
+        "rows": 14664,
+        "revision": 14665,
+        "raw_pairs_digest": "9f8f224e66367537d65df513b0f945ec83cffa14a0a62b8703e16168e8e06299",
+        "ordered_pairs_digest": "006ad83f82dab3e913175dd61eb1b30550a39cf1bb92ccc3c31a67af91b2cf8e"
+      },
+      "queueInclusiveObserverSeconds": 87.97478862700154,
+      "nativeRuntimeLimitSeconds": 120,
+      "trace": {
+        "traceSha256": "f12834b08e5851777e9e4bbeec3b3ed8a17feb68db5d2a983b70e2fae4e7e875",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      }
+    },
+    {
+      "cohort": "retained13424",
+      "turn": 1,
+      "exit": 0,
+      "passed": true,
+      "allActualRows": 13424,
+      "result": {
+        "ok": true,
+        "native_field_predicate": true,
+        "reader_schema": 3,
+        "reader_iteration": "all-index-loop",
+        "stored_id_type": "string",
+        "rows": 13424,
+        "revision": 13425,
+        "raw_pairs_digest": "c8dca169056b2915e90f77aec6c1a969025002b3b352def48e96d4bac6f10e73",
+        "ordered_pairs_digest": "8717d9c9da2edeff3fbff6031b3dea2d460ea0fc25ee3ee02d1e049610bfa233"
+      },
+      "queueInclusiveObserverSeconds": 75.94478881600298,
+      "nativeRuntimeLimitSeconds": 120,
+      "trace": {
+        "traceSha256": "3b34b81da178928215290c7edd35836f9868415b50f2a87a45182ed1fc9cfeb9",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      }
+    },
+    {
+      "cohort": "retained13424",
+      "turn": 2,
+      "exit": 0,
+      "passed": true,
+      "allActualRows": 13424,
+      "result": {
+        "ok": true,
+        "native_field_predicate": true,
+        "reader_schema": 3,
+        "reader_iteration": "all-index-loop",
+        "stored_id_type": "string",
+        "rows": 13424,
+        "revision": 13425,
+        "raw_pairs_digest": "c8dca169056b2915e90f77aec6c1a969025002b3b352def48e96d4bac6f10e73",
+        "ordered_pairs_digest": "8717d9c9da2edeff3fbff6031b3dea2d460ea0fc25ee3ee02d1e049610bfa233"
+      },
+      "queueInclusiveObserverSeconds": 75.90643055500186,
+      "nativeRuntimeLimitSeconds": 120,
+      "trace": {
+        "traceSha256": "4bf36714e5ccc595e9910b5272c98e39152c14bcd6e67d1f2dbf2b14f2cea07b",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      }
+    }
+  ],
+  "full_data_and_source_wal_bytes_unchanged": true,
+  "reader_schema": 3,
+  "reader_iteration": "all-index-loop",
+  "stored_sql_ids": "original raw strings; numeric sort only in verifier",
+  "failed_schema2_reader_retained": {
+    "exit": 139,
+    "range_materialization_bytes_for_16224": 2105875200,
+    "scope": "verified quadratic range allocation; exact fault stack not measured; candidate runtime range remains unchanged"
+  },
+  "prior_failures_retained": true,
+  "product_range_fix_included": false,
+  "private_python_qualifiers_outside_product_traces": true,
+  "commercial": "HOLD",
+  "production": "NO",
+  "concurrency": {
+    "case": "concurrency",
+    "result": {
+      "ok": true,
+      "clients": 8,
+      "rows": 8,
+      "all_insert_responses_ok": true
+    }
+  },
+  "concurrency_trace": {
+    "traceSha256": "37192c39603fdab477cbb9980991652825acce944b54a5b1863b529eb941c484",
+    "decodedExecs": 69,
+    "resumedExecsJoined": 0,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 0,
+    "allowedPrivateControllerPythonExecs": 0,
+    "successfulBasenameCounts": {
+      "as": 3,
+      "bash": 6,
+      "bwrap": 1,
+      "cat": 2,
+      "cc1": 3,
+      "client-bin": 1,
+      "collect2": 3,
+      "control-bin": 3,
+      "daemon-bin": 1,
+      "flc": 6,
+      "flock": 1,
+      "gcc": 3,
+      "grep": 3,
+      "ld": 3,
+      "ln": 10,
+      "mkdir": 3,
+      "readlink": 2,
+      "run-case.sh": 1,
+      "sha256sum": 2,
+      "timeout": 10,
+      "verify.sh": 2
+    }
+  },
+  "soak": {
+    "case": "soak",
+    "result": {
+      "ok": true,
+      "clients": 8,
+      "duration_ms": 300000,
+      "elapsed_ms": 300195,
+      "writes": 16224,
+      "batches": 2028,
+      "p95_ms": 167,
+      "max_ms": 273,
+      "throughput_per_second": 54.08
+    }
+  },
+  "soak_trace": {
+    "traceSha256": "f4eadcc8130bf17ab43e772fa070d9968d40030cfa3d6d2c4f00a3c86348a9bc",
+    "decodedExecs": 69,
+    "resumedExecsJoined": 2,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 0,
+    "allowedPrivateControllerPythonExecs": 0,
+    "successfulBasenameCounts": {
+      "as": 3,
+      "bash": 6,
+      "bwrap": 1,
+      "cat": 2,
+      "cc1": 3,
+      "client-bin": 1,
+      "collect2": 3,
+      "control-bin": 3,
+      "daemon-bin": 1,
+      "flc": 6,
+      "flock": 1,
+      "gcc": 3,
+      "grep": 3,
+      "ld": 3,
+      "ln": 10,
+      "mkdir": 3,
+      "readlink": 2,
+      "run-case.sh": 1,
+      "sha256sum": 2,
+      "timeout": 10,
+      "verify.sh": 2
+    }
+  },
+  "new_wal_oracle": {
+    "walSha256": "677a938421c8eff7a46e620efbfacbf85077508ddddbbba865dcbb142ff88292",
+    "walBytes": 6273047,
+    "rows": 16224,
+    "revision": 16225,
+    "rawDigest": "cc5f849cf2f3de755543b7b1955501b9f81c0f0f9c9b8d99ee215a57d5c67d8c",
+    "canonicalDigest": "23d698a112b588ecf8b9d8c6cc1de028d5c6c6b981b562d32ea7e2ecd538afb5",
+    "allChecksumsIdsNamesExact": true
+  },
+  "frontend": {
+    "fixed": {
+      "status": "SCOPED_FIXED_FX_FRONT_PASS",
+      "fxOriginalGoldens": 11,
+      "predicateCases": 24,
+      "common": [
+        {
+          "source": "tracked",
+          "passed": 80,
+          "total": 80,
+          "stdoutSha256": "4aa2ced5fede62139c996cc842c5627683deaa975ff4495d551495b176e55eb7",
+          "stderrSha256": "a05a52ebb291225441c722e4ba10ca6068b145598a7280cb4cf928bfc0d5b4bc"
+        },
+        {
+          "source": "actual",
+          "passed": 89,
+          "total": 89,
+          "stdoutSha256": "757f92ac821f1412bad6468707cadca14af6a1a7e819ac02acbc55ef68957e27",
+          "stderrSha256": "a05a52ebb291225441c722e4ba10ca6068b145598a7280cb4cf928bfc0d5b4bc"
+        }
+      ],
+      "fixedTrace": {
+        "traceSha256": "1430da82e9d847abd4c86ae3680604c194477d5461f10a3466c18acd6980688c",
+        "decodedExecs": 498,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 31,
+          "atom-snapshot.bin": 1,
+          "bash": 22,
+          "bwrap": 1,
+          "call-error-context.bin": 1,
+          "cat": 19,
+          "cc1": 31,
+          "check-native": 2,
+          "collect2": 31,
+          "compiler-blockers.bin": 1,
+          "diff": 11,
+          "dirname": 12,
+          "find": 2,
+          "fl-git": 8,
+          "fl-git-native": 4,
+          "fl-run-native": 4,
+          "fl-test": 2,
+          "fl-test-native": 2,
+          "flc": 56,
+          "gcc": 31,
+          "grep": 42,
+          "late-call.bin": 1,
+          "ld": 31,
+          "mkdir": 15,
+          "mktemp": 14,
+          "predicate.bin": 1,
+          "program": 4,
+          "provider-gate-native": 2,
+          "readlink": 12,
+          "rm": 6,
+          "sed": 8,
+          "sh": 12,
+          "sha256sum": 1,
+          "sort": 2,
+          "swap-zero-extra.bin": 1,
+          "tail": 4,
+          "tail-call-context.bin": 1,
+          "tail-call-extra.bin": 1,
+          "tail-let-sequence.bin": 1,
+          "tail-nonlast.bin": 1,
+          "tail-while-mode.bin": 1,
+          "test": 15,
+          "timeout": 48,
+          "try-scope.bin": 1,
+          "verify.sh": 1
+        }
+      },
+      "baselineTrace": {
+        "traceSha256": "233ac736f87cb831a4b578e83402e80ecbad5f01b20ee8de031d9d0e4588a4e7",
+        "decodedExecs": 19,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 3,
+          "bwrap": 1,
+          "cat": 3,
+          "flc": 3,
+          "readlink": 2,
+          "sha256sum": 2,
+          "timeout": 3,
+          "verify.sh": 2
+        }
+      },
+      "warningPolicy": "Exact bytes match independent accepted R25 Native--check on the same three files under original15s limits",
+      "warningBytes": 4381,
+      "warningSha256": "a05a52ebb291225441c722e4ba10ca6068b145598a7280cb4cf928bfc0d5b4bc",
+      "firstCollectorFailureRetained": true,
+      "originalTestsOrExpectedOutputsOrBoundsChanged": false,
+      "noFixedSuiteRerun": true,
+      "commercial": "HOLD"
+    },
+    "original_defaults": {
+      "lifecycle": 13,
+      "literal": 16,
+      "guards": 17,
+      "perBuildSeconds": 90,
+      "readinessStopSeconds": 3
+    },
+    "default_traces": 20,
+    "subject_and_foreign_files_unchanged": true,
+    "default_exec_audits_receipt_sha256": "e688b2d355345b42173ff0d96fb3b20e3b4c64c378e4725924d00849a296b6a7"
+  },
+  "standard_client": {
+    "result": {
+      "ok": true,
+      "client": "mariadb",
+      "requests": 3,
+      "exact_select": true,
+      "connect_seconds": 5,
+      "startup_seconds": 60,
+      "port_attempts_max": 31,
+      "port_retry_ms": 100,
+      "client_defaults": false
+    },
+    "trace": {
+      "traceSha256": "84db67ba3d74042d0ba58fda8f21f1b479d0ca8dd02e824846417dc01be2745f",
+      "decodedExecs": 63,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 2,
+        "bash": 5,
+        "bwrap": 1,
+        "cat": 1,
+        "cc1": 2,
+        "collect2": 2,
+        "control-bin": 6,
+        "daemon-bin": 1,
+        "date": 1,
+        "flc": 4,
+        "flock": 1,
+        "gcc": 2,
+        "grep": 2,
+        "ld": 2,
+        "ln": 12,
+        "mariadb": 3,
+        "mkdir": 2,
+        "readlink": 2,
+        "run-case.sh": 1,
+        "sha256sum": 2,
+        "timeout": 7,
+        "verify.sh": 2
+      }
+    },
+    "freshBuildAndRuntimeSeconds": 120,
+    "startupIncludesAOT": true,
+    "selectExactHex": "31094b696d0a",
+    "sourceAndSdkUnchanged": true,
+    "originalJSCase68": "UNCHANGED_PREVIOUSFAIL_NOTRELABELED",
+    "tlsPreparedAuthRejectionClaims": false
+  },
+  "actual_app": {
+    "build": {
+      "ok": true,
+      "buildDeadlineSeconds": 300,
+      "releaseManifestSha256": "9666372a5c44fac2fdc119a0e08feadda7076809a35406158b47f2b0c163354d",
+      "role": "developer",
+      "remoteGit": "NOT_RUN",
+      "serviceActivation": "NOT_RUN",
+      "foreignSourcesUnchanged": true,
+      "commercial": "HOLD"
+    },
+    "buildTrace": {
+      "traceSha256": "d058b74fdf0d82de5b27dd3f6efacb787915b0d4d37da2a31712895d74548bf3",
+      "decodedExecs": 143,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 2,
+        "bash": 7,
+        "cat": 1,
+        "cc1": 2,
+        "chmod": 1,
+        "collect2": 2,
+        "env": 2,
+        "find": 1,
+        "fl-front-build": 12,
+        "fl-front-build-native": 1,
+        "fl-front-release": 5,
+        "fl-island-headless": 2,
+        "fl-release-build-native": 1,
+        "fl-release-prepare-native": 1,
+        "flc": 51,
+        "flock": 1,
+        "flp-compile": 1,
+        "gcc": 2,
+        "grep": 3,
+        "ld": 2,
+        "mkdir": 3,
+        "mktemp": 2,
+        "readelf": 4,
+        "readlink": 22,
+        "sha256sum": 5,
+        "tee": 2,
+        "timeout": 1,
+        "verify.sh": 4
+      }
+    },
+    "browserPass": 20,
+    "browserTotal": 20,
+    "browserTrace": {
+      "traceSha256": "9c4b8c93210fd3563b2acb02ea5645c95eab37b28ec420f4c66b9eba8762e695",
+      "decodedExecs": 265,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "app-native": 1,
+        "cat": 12,
+        "find": 1,
+        "git": 108,
+        "sh": 142,
+        "sort": 1
+      }
+    },
+    "ownedTabsFinalized": true,
+    "actualSourceAndSdkUnchanged": true,
+    "extendedGitBasenameLF": "Stilloldv1/v2FAIL,separatefromoriginal20controlsdomain; foreignAPIunchanged",
+    "remoteGit": "NOT_RUN no credentials",
+    "productionActivation": "NOT_RUN",
+    "viewport": "1280x900",
+    "browser_route": "Existing approved Chrome RPC; only a fresh owned loopback origin/tab",
+    "screenshots": "NOT_RUN prior restriction",
+    "mobile": "NOT_RUN",
+    "physical_pointer": "NOT_RUN",
+    "prepared_release_activation": "NOT_RUN"
+  },
+  "receipt_sha256": {
+    "cold-reader-stream-v1": "bfc66eca763288cefab52148c14d263b091073e56c092f95c372a5e070b5bc94",
+    "regressions-v2": "1e7c88b7ec5ccdbc1c843fbe414a657ed954fd09006091704a99b17ad91ca8d4",
+    "health-v1": "8a015e1fa72aba37145a8c7cba739666f458d12e5efae44fa4ac1695b528ce24",
+    "whole-v1": "abd5fb88f68f06f3b3113cbf54c22e3b5faf9aa5d34b9f504ff371ed06fe9f0a",
+    "front-default-v2": "3124c32d5b120056bd52ad0333055a333782ca35b0466dccbb98f7d423103dd4",
+    "standard-client-v6": "2c251816be9607d2b0833cc6695e3ef37b8adb7f51ae9c20667d6e03b7efb2e5",
+    "actual-browser-v1": "16af5f7d36fd098afb5eb98d73e08fbfa058550551ecdebc79b8650dd162a201"
+  },
+  "frontend_base_commit": "f2f994768bb52a49debab0c2805bdcdc195bb84b",
+  "foreign_files_not_committed": true,
+  "applied_source_native_check": {
+    "result": "PASS",
+    "targets": [
+      "src/tcp-server.fls",
+      "src/afj-db95.fls"
+    ],
+    "trace": {
+      "traceSha256": "9c491d835a1012c5d0046f1ff5497c2a841fbb48e3c9ec31181f9e616f91aead",
+      "decodedExecs": 14,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "bash": 4,
+        "flc": 2,
+        "flock": 1,
+        "readlink": 3,
+        "sha256sum": 2,
+        "verify.sh": 2
+      }
+    },
+    "public_reader_strict_parse": "PASS"
+  }
+}
