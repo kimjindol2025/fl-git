@@ -1,0 +1,158 @@
+{
+  "schema": "native-island-headless-evidence/1",
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "paths": "<가림>",
+  "owners": "<가림>",
+  "scope": "Experimental standalone Native Island headless CLI, FreeLang model and browser helper completion; full compatibility/API/test gate/default migration remains incomplete",
+  "baseFXCommit": "8788a035dd03861d581fe276b7ce817f4f731189",
+  "baseFrontendCommit": "82b697793304e392650bb535803c4b8d92349d17",
+  "compiler": {
+    "unchangedSeedSha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767",
+    "canonicalCSha256": "a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5",
+    "stage2Equals3Equals4": true,
+    "freshMatchingRuntimeArchiveSha256": "22ce727daa24d56a7e357f92ecc5865e1e8856cc2209cf0ae9120e2c22f98caa",
+    "measurements": [
+      {
+        "step": "stage2_TO_stage3",
+        "seconds": 30.48,
+        "rssKiB": 1556904
+      },
+      {
+        "step": "stage3_TO_stage4",
+        "seconds": 29.68,
+        "rssKiB": 1559664
+      },
+      {
+        "step": "sdkSelfGeneration",
+        "seconds": 29.48,
+        "rssKiB": 1559016
+      }
+    ],
+    "generationLimits": {
+      "seconds": 40,
+      "rssGiB": 1.6,
+      "vmKiB": 2097152
+    },
+    "ordinaryBrowserComparisonCases": 6,
+    "ordinaryOutputsByteIdentical": true,
+    "newGrammar": "trusted raw functions, receiver, arguments, undefined, strict inequality, comparisons, remainder, instance and iterable spread",
+    "userHostPrivateGuards": "UNCHANGED"
+  },
+  "sdk": {
+    "manifestSha256": "d47e4bac1cd14ccd648a6c773b320341825f2f4887986ecdcb5f5ca7cfa88799",
+    "compilerSha256": "065746dddd3d8495fefa45923aefe3cf64fd79fff5fc862c3155548d03eb0fed",
+    "runtimeArchiveSha256": "22ce727daa24d56a7e357f92ecc5865e1e8856cc2209cf0ae9120e2c22f98caa",
+    "nativeExecutables": 16,
+    "all16NativeELF": true,
+    "fixedBashProcessBoundary": true,
+    "headlessModel": "FreeLang",
+    "all15CoreBinariesByteIdenticalToQualifiedSDK1": true,
+    "relocatedLibraryAndManifestControls": {
+      "passed": 8,
+      "total": 8
+    }
+  },
+  "qualification": {
+    "rawHost": {
+      "passed": 17,
+      "total": 17
+    },
+    "engineRegression": {
+      "passed": 27,
+      "total": 27
+    },
+    "trackedFrontend": {
+      "suites": 7,
+      "passed": 71,
+      "total": 71,
+      "providerGateRecheck": 9,
+      "binaryCohort": "SDK1; all15 core executables byte-identical in final SDK2"
+    },
+    "foreignInclusiveFrontend": {
+      "suites": 8,
+      "passed": 80,
+      "total": 80,
+      "providerGateRecheck": 9,
+      "binaryCohort": "SDK1; all15 core executables byte-identical in final SDK2"
+    },
+    "originalCLI": {
+      "passed": 22,
+      "total": 22
+    },
+    "fxRegression": {
+      "passed": 11,
+      "total": 11
+    },
+    "finalSDKHeadlessCLI": {
+      "passed": 10,
+      "total": 10
+    },
+    "browserHelperReference": {
+      "passed": 22,
+      "total": 22
+    },
+    "extractionReference": {
+      "passed": 22,
+      "total": 22
+    },
+    "legacyHeadlessComparison": {
+      "state": "PARTIAL",
+      "exactTypedMatches": 27,
+      "total": 28,
+      "processExit": 1,
+      "difference": "direct nil? call: reference renders function source, Native returns intended boolean",
+      "originalFirstCohort": "22/28, all failures retained",
+      "privateReference": "Node oracle only; never product execution"
+    },
+    "actualApp": {
+      "sourceBytes": 95749,
+      "nativeHeadlessInitialRender": "PASS",
+      "coldSeconds": 15.924,
+      "legacyReference": "FAIL: omitted browser str_trim helper",
+      "browserAndGitWorkflows": "NOT_RUN",
+      "coldPipelineMeetsHTTP3s": "NO: precompilation required",
+      "noIslandSourceResult": "matches original failure, not application acceptance"
+    }
+  },
+  "productSourceSha256": {
+    "fx/runtime/browser-target.h": "468bb9f8de540223952f041bd5acef319ce34a03dfe4b96a0f945b9bad33611c",
+    "frontend/tools/front-headless.fl": "afd776ff4cc54d9f1c2abaa99133a817329db2cff79d33122ffd1b592b330eba",
+    "frontend/tools/fl-island-headless.fl": "c7fa1037976e3c78d0bdb6aa30d7c7746950bbd45a5d796938b977d7ee602dc6",
+    "frontend/web/runtime/headless-language.fl": "eb4fab6ca4cce48b7fcb4b40da68497e5155db3e880e92df0e06731b55824455",
+    "frontend/scripts/fl-island-run-native": "63fafb7e6b717844b494ed292513a90912e09f6d6e49cf5694c455dd9ca88a27",
+    "frontend/scripts/fl-sdk-package-native": "028e84219be7017453261581874d78912bf04ebb7e78baeeb5298f5b3ac3ff7f"
+  },
+  "collectedProductTraceFiles": 130,
+  "nodeFamilyExecutionsInCollectedProductTraces": 0,
+  "bounds": {
+    "nativeVirtualMemoryBytes": 2147483648,
+    "extractionAndLoweringSeconds": 3,
+    "generationSeconds": 15,
+    "engineSeconds": 3,
+    "heavyWork": "shared fl-heavy.lock"
+  },
+  "protectedFixturesAssertionsExpectedValuesRunnersBounds": "UNCHANGED",
+  "foreignChangesPreserved": 4,
+  "retainedFailures": [
+    "initial source parse/try-clause errors and private linker path failure; corrected without bound changes",
+    "nested vector first callable was lowered as data; corrected; original failure structure verified, engine error text differs",
+    "legacy :nil keyword and anonymous function application errors retained; second intended-contract cohort uses valid reference forms, not an all-pass parity claim",
+    "trace decoder interpreted escaped UTF8 bytes as Latin1; byte decoding corrected with exact Unicode path assertions unchanged",
+    "private final helper probe used JSON Unicode escapes in FreeLang load source and generated the wrong path; retained; corrected source literal uses actual UTF8 with identical22 assertions",
+    "actual app extraction exceeded original3s; indexed units remove quadratic scanning under same bound",
+    "actual app failed missing str_trim in both contexts; browser helpers implemented in FreeLang and22case browser-reference equality, Native initial render succeeds"
+  ],
+  "notImplementedOrNotQualified": [
+    "full DSL compatibility including source names/map ordering/extra argument semantics/function introspection and isolation of invalid unselected islands",
+    "full engine error-string compatibility",
+    "Native /~ai/test endpoint and precompiled request cache",
+    "tests/*.test.flx build gate and complete metadata",
+    "default development/deployment Node removal",
+    "actual browser/Git workflows",
+    "latest whole DB safety/recovery/concurrency/load/operations",
+    "commercial lifetime and production readiness"
+  ]
+}

@@ -1,0 +1,22 @@
+(load "./front-headless.fl")
+(defn fl-headless-cli-options [args]
+  (reduce (fn [options argument]
+    (let [fields [["--island=" "island"] ["--click=" "click"] ["--dispatch=" "dispatch"] ["--store=" "store"]]
+          selected (filter (fn [field] (str-starts-with argument (get field 0))) fields)]
+      (if (= (length selected) 0) options
+        (let [field (first selected) key (get field 1) text (str-slice argument (length (get field 0)) (length argument))]
+          (if (fl-headless-has? (keys options) key) options
+            (assoc options key (if (= key "store") (try (json-parse text) (catch error {})) text))))))) {} args))
+(defn fl-headless-command [args]
+  (cond
+    [(and (>= (length args) 2) (= (get args 0) "options"))
+     (file_write (get args 1) (json-str (fl-headless-cli-options (slice args 2 (length args)))))]
+    [(and (= (length args) 2) (= (get args 0) "status"))
+     (let [result (json-parse (file_read (get args 1)))] (process-exit (if (= (get result "ok") true) 0 1)))]
+    [(and (= (length args) 3) (= (get args 0) "extract"))
+     (file_write (get args 2) (str (str-join (fl-headless-extract (file_read (get args 1))) "\n") "\n"))]
+    [(and (= (length args) 5) (= (get args 0) "emit"))
+     (file_write (get args 4) (fl-headless-program (json-parse (file_read (get args 1))) (get args 2) (get args 3)))]
+    [true (throw "Usage: fl-island-headless extract source.flx islands.fl | emit ast.json runtime.fl source.flx output.fl")]))
+(try (fl-headless-command (cli-args))
+  (catch error (println (json-str {"ok" false "error" (error-message error)})) (process-exit 1)))

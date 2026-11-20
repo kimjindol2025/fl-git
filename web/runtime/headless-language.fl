@@ -1,0 +1,312 @@
+;; Native headless adapter. All model, event and result policy is FreeLang.
+;; Compiler-only fixed host operations retain actual ECMAScript semantics.
+(define __fl_hl_undefined (j-host-undefined))
+(define __fl_hl_global (j-host-global))
+(define __fl_hl_call (j-host-raw-fn (fn [f receiver args]
+  (j-host-call (j-host-at (j-host-at __fl_hl_global "Reflect") "apply") [f receiver args]))))
+(define __fl_hl_method (j-host-raw-fn (fn [receiver key args]
+  (__fl_hl_call (j-host-at receiver key) receiver args))))
+(define __fl_hl_construct (j-host-raw-fn (fn [constructor args]
+  (j-host-call (j-host-at (j-host-at __fl_hl_global "Reflect") "construct") [constructor args]))))
+(define __fl_hl_error (j-host-raw-fn (fn [kind text]
+  (__fl_hl_construct (j-host-at __fl_hl_global kind) [text]))))
+(define __fl_hl_nil (j-host-raw-fn (fn [value fallback]
+  (if (j-host-nullish? value) fallback value))))
+(define __fl_hl_message (j-host-raw-fn (fn [error]
+  (j-host-string (j-host-or (if (j-host-nullish? error) nil (j-host-at error "message")) error)))))
+(define __fl_hl_spread (j-host-raw-fn (fn [target source]
+  (if (j-host-nullish? source) target
+    (let [object (j-host-call (j-host-at __fl_hl_global "Object") [source])
+          keys (__fl_hl_method (j-host-at __fl_hl_global "Reflect") "ownKeys" [object])]
+      (loop [index 0]
+        (if (j-host-lt index (j-host-len keys))
+          (let [key (j-host-at keys index)
+                descriptor (__fl_hl_method (j-host-at __fl_hl_global "Object") "getOwnPropertyDescriptor" [object key])]
+            (if (j-host-at descriptor "enumerable") (j-host-own-set! target key (j-host-at object key)) nil)
+            (recur (j-host-add index 1))) target)))))))
+(define __fl_hl_copy (j-host-raw-fn (fn [source] (__fl_hl_spread {} source))))
+(define __fl_hl_read_cell (j-host-raw-fn (fn [cell name]
+  (let [contents @cell]
+    (if (j-host-at contents 0) (j-host-at contents 1)
+      (throw (__fl_hl_error "ReferenceError" (j-host-add (j-host-add "Cannot access '" name) "' before initialization"))))))))
+(define __fl_hl_resolve (j-host-raw-fn (fn [context name]
+  (if (j-host-own? context name) (j-host-at context name)
+    (let [has (__fl_hl_method (j-host-at __fl_hl_global "Reflect") "has" [__fl_hl_global name])]
+      (if has (j-host-at __fl_hl_global name)
+        (throw (__fl_hl_error "ReferenceError" (j-host-add name " is not defined")))))))))
+
+(define __fl_hl_vnode (j-host-raw-fn (fn [tag attrs]
+  (let [self (j-host-this) attributes (if (j-host-eq attrs __fl_hl_undefined) {} attrs)]
+    (j-host-set! self "tag" tag)
+    (j-host-set! self "attrs" attributes)
+    (j-host-set! self "children" [])
+    (j-host-set! self "checked" false)
+    (j-host-set! self "value" (__fl_hl_nil (j-host-at attributes "value") ""))
+    (j-host-set! self "_handlers" {})
+    __fl_hl_undefined))))
+(j-host-property! __fl_hl_vnode "name" {"value" "VNode" "configurable" true})
+(j-host-property! __fl_hl_vnode "length" {"value" 1 "configurable" true})
+(define __fl_hl_proto (j-host-at __fl_hl_vnode "prototype"))
+(define __fl_hl_vmethod (j-host-raw-fn (fn [key function]
+  (j-host-property! __fl_hl_proto key {"value" function "writable" true "configurable" true}))))
+(define __fl_hl_node? (j-host-raw-fn (fn [value] (j-host-instance? value __fl_hl_vnode))))
+(__fl_hl_vmethod "setAttribute" (j-host-raw-fn (fn [key value]
+  (j-host-set! (j-host-at (j-host-this) "attrs") key (j-host-string (__fl_hl_nil value "")))
+  __fl_hl_undefined)))
+(__fl_hl_vmethod "getAttribute" (j-host-raw-fn (fn [key]
+  (__fl_hl_nil (j-host-at (j-host-at (j-host-this) "attrs") key) nil))))
+(__fl_hl_vmethod "addEventListener" (j-host-raw-fn (fn [event function]
+  (let [handlers (j-host-at (j-host-this) "_handlers")]
+    (if (j-host-not (j-host-at handlers event)) (j-host-set! handlers event []) nil)
+    (j-host-push! (j-host-at handlers event) function)
+    __fl_hl_undefined))))
+(__fl_hl_vmethod "appendChild" (j-host-raw-fn (fn [child]
+  (j-host-push! (j-host-at (j-host-this) "children")
+    (if (__fl_hl_node? child) child (j-host-string (__fl_hl_nil child ""))))
+  child)))
+(__fl_hl_vmethod "removeChild" (j-host-raw-fn (fn [child]
+  (let [self (j-host-this)]
+    (j-host-set! self "children" (__fl_hl_method (j-host-at self "children") "filter"
+      [(j-host-raw-fn (fn [other] (j-host-neq child other)))]))
+    __fl_hl_undefined))))
+(j-host-property! __fl_hl_proto "innerHTML"
+  {"configurable" true
+   "get" (j-host-raw-fn (fn [] (__fl_hl_method (j-host-this) "_serialize" [])))
+   "set" (j-host-raw-fn (fn [value] (j-host-set! (j-host-this) "children" [value]) __fl_hl_undefined))})
+(j-host-property! __fl_hl_proto "firstChild"
+  {"configurable" true "get" (j-host-raw-fn (fn []
+    (__fl_hl_nil (j-host-at (j-host-at (j-host-this) "children") 0) nil)))})
+(__fl_hl_vmethod "_serialize" (j-host-raw-fn (fn []
+  (let [self (j-host-this)
+        entries (__fl_hl_method (j-host-at __fl_hl_global "Object") "entries" [(j-host-at self "attrs")])
+        attributes (__fl_hl_method
+          (__fl_hl_method entries "filter" [(j-host-raw-fn (fn [entry]
+            (let [key (j-host-at entry 0) value (j-host-at entry 1)]
+              (j-host-and (j-host-not (j-host-nullish? value))
+                (j-host-and (j-host-neq value "") (j-host-not (__fl_hl_method key "startsWith" ["on"])))))))])
+          "map" [(j-host-raw-fn (fn [entry]
+            (let [text (__fl_hl_method (__fl_hl_method (j-host-string (j-host-at entry 1)) "split" ["\""]) "join" ["&quot;"])]
+              (j-host-add (j-host-add (j-host-add (j-host-add " " (j-host-at entry 0)) "=\"") text) "\""))))])
+        attrs (__fl_hl_method attributes "join" [""])
+        tag (j-host-at self "tag")
+        open (j-host-add (j-host-add (j-host-add "<" tag) attrs) ">")]
+    (if (j-host-includes ["input" "br" "hr" "img" "meta" "link"] tag) open
+      (let [children (__fl_hl_method (j-host-at self "children") "map"
+              [(j-host-raw-fn (fn [child]
+                (if (__fl_hl_node? child) (__fl_hl_method child "_serialize" [])
+                  (j-host-string (__fl_hl_nil child "")))))])]
+        (j-host-add (j-host-add (j-host-add (j-host-add open (__fl_hl_method children "join" [""])) "</") tag) ">")))))))
+(__fl_hl_vmethod "toString" (j-host-raw-fn (fn [] (__fl_hl_method (j-host-this) "_serialize" []))))
+(__fl_hl_vmethod "trigger" (j-host-raw-fn (fn [event event-object]
+  (let [functions (j-host-or (j-host-at (j-host-at (j-host-this) "_handlers") event) [])
+        object (if (j-host-eq event-object __fl_hl_undefined) {} event-object)]
+    (__fl_hl_method functions "forEach" [(j-host-raw-fn (fn [function] (function object)))])
+    (j-host-len functions)))))
+(__fl_hl_vmethod "querySelector" (j-host-raw-fn (fn [selector]
+  (let [self (j-host-this) id? (__fl_hl_method selector "startsWith" ["#"])
+        matches (if id? (j-host-eq (j-host-at (j-host-at self "attrs") "id") (__fl_hl_method selector "slice" [1]))
+                   (j-host-eq (j-host-at self "tag") selector))
+        children (j-host-at self "children")]
+    (if matches self
+      (loop [index 0]
+        (if (j-host-lt index (j-host-len children))
+          (let [child (j-host-at children index)
+                found (if (__fl_hl_node? child) (__fl_hl_method child "querySelector" [selector]) nil)]
+            (if found found (recur (j-host-add index 1)))) nil)))))))
+(__fl_hl_vmethod "querySelectorAll" (j-host-raw-fn (fn [selector]
+  (let [results []]
+    (let [walk (atom nil)]
+      (reset! walk (j-host-raw-fn (fn [node]
+        (if (__fl_hl_node? node)
+          (do
+            (if (if (__fl_hl_method selector "startsWith" ["."])
+                  (__fl_hl_method (__fl_hl_method (j-host-or (j-host-at (j-host-at node "attrs") "class") "") "split" [" "])
+                    "includes" [(__fl_hl_method selector "slice" [1])])
+                  (j-host-eq (j-host-at node "tag") selector))
+              (j-host-push! results node) nil)
+            (__fl_hl_method (j-host-at node "children") "forEach" [@walk])) __fl_hl_undefined))))
+      (@walk (j-host-this)))
+    results))))
+(define __fl_hl_document (j-host-raw-fn (fn []
+  (let [root (__fl_hl_construct __fl_hl_vnode ["div"])]
+    {"createElement" (j-host-raw-fn (fn [tag] (__fl_hl_construct __fl_hl_vnode [tag])))
+     "createTextNode" (j-host-raw-fn (fn [text] (j-host-string text)))
+     "getElementById" (j-host-raw-fn (fn [id] (__fl_hl_method root "querySelector" [(j-host-add "#" id)])))
+     "body" root "_root" root}))))
+
+(define __fl_hl_context (j-host-raw-fn (fn [document]
+  (let [events [] fl {}]
+    (j-host-set! fl "atom" (j-host-raw-fn (fn [value] {"v" value})))
+    (j-host-set! fl "deref" (j-host-raw-fn (fn [a] (j-host-at a "v"))))
+    (j-host-set! fl "swap" (j-host-raw-fn (fn [a function]
+      (j-host-set! a "v" (function (j-host-at a "v"))) (j-host-at a "v"))))
+    (j-host-set! fl "reset" (j-host-raw-fn (fn [a value] (j-host-set! a "v" value) value)))
+    (j-host-set! fl "_store" {"v" {}})
+    (j-host-set! fl "_watchers" [])
+    (j-host-set! fl "_pending_restore" nil)
+    (j-host-set! fl "_hmr_islands" {})
+    (j-host-set! fl "hmr_register" (j-host-raw-fn (fn [id atoms]
+      (if id (j-host-set! (j-host-at fl "_hmr_islands") id atoms) nil) __fl_hl_undefined)))
+    (j-host-set! fl "hmr_snapshot" (j-host-raw-fn (fn []
+      {"store" (__fl_hl_copy (j-host-at (j-host-at fl "_store") "v")) "islands" {}})))
+    (j-host-set! fl "get_store" (j-host-raw-fn (fn [key]
+      (let [store (j-host-at (j-host-at fl "_store") "v")]
+        (if key (__fl_hl_nil (j-host-at store key) nil) store)))))
+    (j-host-set! fl "dispatch" (j-host-raw-fn (fn [key value]
+      (let [previous (j-host-at (j-host-at fl "_store") "v") next (__fl_hl_copy previous)]
+        (if (j-host-eq (j-host-type key) "object") (__fl_hl_spread next key)
+          (j-host-own-set! next key value))
+        (j-host-set! (j-host-at fl "_store") "v" next)
+        (j-host-push! events {"type" "dispatch" "key" key "val" value "store" (__fl_hl_copy next)})
+        (__fl_hl_method (j-host-at fl "_watchers") "forEach" [(j-host-raw-fn (fn [function] (function previous next key)))])
+        __fl_hl_undefined))))
+    (j-host-set! fl "watch_store" (j-host-raw-fn (fn [function]
+      (j-host-push! (j-host-at fl "_watchers") function) __fl_hl_undefined)))
+    (j-host-set! fl "push" (j-host-raw-fn (fn [array item]
+      (let [result (j-host-spread (j-host-or array []))] (j-host-push! result item) result))))
+    (j-host-set! fl "get" (j-host-raw-fn (fn [object key]
+      (if (j-host-nullish? object) nil (__fl_hl_nil (j-host-at object key) nil)))))
+    (j-host-set! fl "assoc" (j-host-raw-fn (fn [object key value]
+      (let [result (__fl_hl_copy (j-host-or object {}))] (j-host-own-set! result key value) result))))
+    (j-host-set! fl "dissoc" (j-host-raw-fn (fn [object key]
+      (let [result (__fl_hl_copy (j-host-or object {}))] (j-host-delete! result key) result))))
+    (j-host-set! fl "map_arr" (j-host-raw-fn (fn [function array] (__fl_hl_method (j-host-or array []) "map" [function]))))
+    (j-host-set! fl "filter_arr" (j-host-raw-fn (fn [function array] (__fl_hl_method (j-host-or array []) "filter" [function]))))
+    (j-host-set! fl "reduce_arr" (j-host-raw-fn (fn [function initial array] (__fl_hl_method (j-host-or array []) "reduce" [function initial]))))
+    (j-host-set! fl "h" (j-host-raw-fn (fn [tag attrs]
+      (let [element (__fl_hl_method document "createElement" [tag])
+            children (__fl_hl_method (j-host-arguments) "slice" [2])
+            entries (__fl_hl_method (j-host-at __fl_hl_global "Object") "entries" [(j-host-or attrs {})])]
+        (__fl_hl_method entries "forEach" [(j-host-raw-fn (fn [entry]
+          (let [key (j-host-at entry 0) value (j-host-at entry 1)]
+            (if (j-host-eq key "checked")
+              (if (j-host-and value (j-host-neq value "")) (j-host-set! element "checked" true) nil)
+              (if (__fl_hl_method key "startsWith" ["on-"])
+                (__fl_hl_method element "addEventListener" [(__fl_hl_method key "slice" [3]) value])
+                (if (j-host-and (j-host-not (j-host-nullish? value)) (j-host-neq value ""))
+                  (__fl_hl_method element "setAttribute" [key (j-host-string value)]) nil))))))])
+        (__fl_hl_method (__fl_hl_method children "flat" []) "forEach" [(j-host-raw-fn (fn [child]
+          (if (j-host-nullish? child) nil
+            (__fl_hl_method element "appendChild" [(if (__fl_hl_node? child) child (j-host-string child))]))))])
+        element))))
+    ;; The legacy runner returns its snapshot before outer mock timers fire.
+    ;; No network is performed and no callback is synchronously invented.
+    (j-host-set! fl "fetch" (j-host-raw-fn (fn [url callback]
+      (j-host-push! events {"type" "fetch" "url" url}) __fl_hl_undefined)))
+    (j-host-set! fl "fetch_post" (j-host-raw-fn (fn [url body callback]
+      (j-host-push! events {"type" "fetch-post" "url" url "body" body}) __fl_hl_undefined)))
+    (j-host-set! fl "fetch_delete" (j-host-raw-fn (fn [url callback]
+      (j-host-push! events {"type" "fetch-delete" "url" url}) __fl_hl_undefined)))
+    (j-host-set! fl "_err" (j-host-raw-fn (fn [id error phase]
+      (j-host-push! events {"type" "error" "island" id "phase" phase "message" (__fl_hl_message error)}) __fl_hl_undefined)))
+    (j-host-set! fl "mount" (j-host-raw-fn (fn [id render]
+      (let [element (__fl_hl_method document "createElement" ["div"]) update (atom nil)]
+        (__fl_hl_method element "setAttribute" ["id" id])
+        (__fl_hl_method (j-host-at document "body") "appendChild" [element])
+        (reset! update (j-host-raw-fn (fn []
+          (loop []
+            (if (j-host-at (j-host-at element "children") 0)
+              (do (__fl_hl_method element "removeChild" [(j-host-at (j-host-at element "children") 0)]) (recur)) nil))
+          (j-host-set! element "children" [])
+          (try
+            (let [result (render @update)]
+              (if result (__fl_hl_method element "appendChild" [result]) nil)
+              (j-host-push! events {"type" "render" "island" id}) __fl_hl_undefined)
+            (catch error
+              (j-host-push! events {"type" "error" "island" id "phase" "render" "message" (__fl_hl_message error)}) __fl_hl_undefined)))))
+        (@update)
+        @update))))
+    (j-host-set! fl "mount_reactive" (j-host-raw-fn (fn [id render keys]
+      (let [update (__fl_hl_method fl "mount" [id render])]
+        (if update (__fl_hl_method fl "watch_store" [(j-host-raw-fn (fn [previous next changed]
+          (if (j-host-or (j-host-not keys) (__fl_hl_method keys "includes" [changed])) (update) nil)))]) nil)
+        __fl_hl_undefined))))
+    (let [noop (j-host-raw-fn (fn [] __fl_hl_undefined))
+          math (j-host-at __fl_hl_global "Math")
+          context {"_fl" fl "events" events "document" document "window" {"_fl" fl}
+            "_fl_str" (j-host-raw-fn (fn []
+              (__fl_hl_method (__fl_hl_method (j-host-arguments) "map" [(j-host-at __fl_hl_global "String")]) "join" [""])))
+            "round" (j-host-at math "round") "floor" (j-host-at math "floor") "ceil" (j-host-at math "ceil")
+            "abs" (j-host-at math "abs") "min_val" (j-host-at math "min") "max_val" (j-host-at math "max")
+            "math_sqrt" (j-host-at math "sqrt") "math_pi" (j-host-at math "PI")
+            "not" (j-host-raw-fn (fn [value] (j-host-not value)))
+            "nil_q" (j-host-raw-fn (fn [value] (j-host-nullish? value)))
+            "or" (j-host-raw-fn (fn [] (__fl_hl_nil
+              (__fl_hl_method (j-host-arguments) "find" [(j-host-raw-fn (fn [value]
+                (j-host-and (j-host-not (j-host-nullish? value)) (j-host-neq value false))))]) false)))
+            "location" {"hostname" "headless"} "fetch" noop "EventSource" noop
+            "setTimeout" (j-host-raw-fn (fn [function milliseconds]
+              (try (function) (catch error nil)) __fl_hl_undefined))
+            "setInterval" noop "performance" {"now" (j-host-raw-fn (fn [] 0))}
+            "console" {"error" noop "log" noop}}]
+      ;; These helpers are part of the browser Island runtime. The older
+      ;; headless context omitted them, so even the real app's initial render
+      ;; failed at str_trim. Keep their language behavior in FreeLang here.
+      (j-host-set! context "arr_join" (j-host-raw-fn (fn [array separator]
+        (let [items (j-host-or array [])]
+          (if (__fl_hl_method items "some" [__fl_hl_node?]) items
+            (__fl_hl_method items "join" [(__fl_hl_nil separator "")]))))))
+      (j-host-set! context "concat" (j-host-raw-fn (fn [a b]
+        (__fl_hl_method (j-host-spread (j-host-or a [])) "concat" [(j-host-spread (j-host-or b []))]))))
+      (j-host-set! context "str_contains" (j-host-raw-fn (fn [text needle]
+        (__fl_hl_method (j-host-string (__fl_hl_nil text "")) "includes" [(j-host-string (__fl_hl_nil needle ""))]))))
+      (j-host-set! context "str_blank_q" (j-host-raw-fn (fn [text]
+        (j-host-or (j-host-not text) (j-host-eq (__fl_hl_method (j-host-string text) "trim" []) "")))))
+      (j-host-set! context "str_slice" (j-host-raw-fn (fn [text start end]
+        (__fl_hl_method (j-host-string (__fl_hl_nil text "")) "slice" [start end]))))
+      (j-host-set! context "str_trim" (j-host-raw-fn (fn [text]
+        (__fl_hl_method (j-host-string (__fl_hl_nil text "")) "trim" []))))
+      (j-host-set! context "str_split" (j-host-raw-fn (fn [text separator]
+        (__fl_hl_method (j-host-string (__fl_hl_nil text "")) "split" [separator]))))
+      (j-host-set! context "regex_split" (j-host-at context "str_split"))
+      (j-host-set! context "str_count" (j-host-raw-fn (fn [value search]
+        (let [text (j-host-string (__fl_hl_nil value "")) needle (j-host-string (__fl_hl_nil search ""))]
+          (if (j-host-not needle) 0
+            (loop [position 0 count 0]
+              (let [found (__fl_hl_method text "indexOf" [needle position])]
+                (if (j-host-eq found -1) count
+                  (recur (j-host-add found (j-host-len needle)) (j-host-add count 1))))))))))
+      context)))))
+
+(define __fl_hl_run_one (j-host-raw-fn (fn [name execute options]
+  (let [document (__fl_hl_document) context (__fl_hl_context document)
+        fl (j-host-at context "_fl") events (j-host-at context "events")
+        store (j-host-at options "store")]
+    (if store
+      (do
+        (__fl_hl_method (__fl_hl_method (j-host-at __fl_hl_global "Object") "entries" [store]) "forEach"
+          [(j-host-raw-fn (fn [entry] (__fl_hl_method fl "dispatch" [(j-host-at entry 0) (j-host-at entry 1)])))])
+        (j-host-set! events "length" 0)) nil)
+    (let [failure (try (do (execute context) nil)
+                    (catch error {"island" name "ok" false "error" (j-host-at error "message")}))]
+      (if failure failure
+        (let [root (j-host-at document "body") html (__fl_hl_method root "_serialize" []) sim []
+              click (j-host-at options "click") dispatch (j-host-at options "dispatch")]
+          (if click
+            (let [element (__fl_hl_method root "querySelector" [click])]
+              (if element
+                (do (__fl_hl_method element "trigger" ["click" {}]) (j-host-push! sim (j-host-add "click:" click)))
+                (j-host-push! sim (j-host-add "click:NOT_FOUND:" click)))) nil)
+          (if dispatch
+            (let [parts (__fl_hl_method dispatch "split" [":"])]
+              (__fl_hl_method fl "dispatch" [(j-host-at parts 0) (__fl_hl_method (__fl_hl_method parts "slice" [1]) "join" [":"])])) nil)
+          {"island" name "ok" (j-host-not (__fl_hl_method events "some" [(j-host-raw-fn (fn [event] (j-host-eq (j-host-at event "type") "error")))]))
+           "html" html "html_after" (if (j-host-len sim) (__fl_hl_method root "_serialize" []) nil)
+           "store" (j-host-at (j-host-at fl "_store") "v") "events" events "sim" sim})))))))
+(define __fl_hl_run (j-host-raw-fn (fn [islands options basename fullpath]
+  (if (j-host-eq (j-host-len islands) 0) {"ok" false "error" "island 블록 없음" "file" fullpath}
+    (let [results [] selection (j-host-at options "island")
+          target (if selection (__fl_hl_method selection "toLowerCase" []) nil)]
+      (__fl_hl_method islands "forEach" [(j-host-raw-fn (fn [island]
+        (let [name (j-host-at island "name")]
+          (if (j-host-or (j-host-not target) (j-host-eq target name))
+            (j-host-push! results (__fl_hl_run_one name (j-host-at island "execute") options)) nil))))])
+      {"ok" (__fl_hl_method results "every" [(j-host-raw-fn (fn [row] (j-host-at row "ok")))])
+       "results" results "file" basename})))))
+(define __fl_hl_output (j-host-raw-fn (fn [islands basename fullpath]
+  (let [arguments (j-host-at __fl_hl_global "ARGV")
+        options (j-host-json-parse (j-host-or (j-host-at arguments 0) "{}"))
+        result (try (__fl_hl_run islands options basename fullpath)
+                 (catch error {"ok" false "error" (__fl_hl_message error)}))]
+    (j-host-call (j-host-at __fl_hl_global "print") [(j-host-json-stringify result)])
+    result))))

@@ -1,0 +1,221 @@
+;; Headless DSL lowering: frontend policy is FreeLang, execution is real JS.
+(load "./front-island.fl")
+
+(defn fl-headless-extract [source]
+  ;; Match the existing runner's literal '(island ' search, including its order.
+  ;; Native substring must locate UTF-16 offsets in UTF-8. Index one split array
+  ;; instead of scanning from the beginning for every character of a large file.
+  (let [units (str-split source "") count (length units)]
+   (loop [offset 0 blocks []]
+    (let [relative (str-index-of (str-slice source offset (length source)) "(island ")]
+      (if (< relative 0) blocks
+        (let [start (+ offset relative)
+              end (loop [index start depth 0 quoted false triple false escaped false comment false]
+                    (if (>= index count) index
+                      (let [unit (get units index)
+                            three-quotes (and (= unit "\"") (= (get units (+ index 1)) "\"") (= (get units (+ index 2)) "\""))]
+                        (cond
+                          [comment (recur (+ index 1) depth false false false (not (= unit "\n")))]
+                          [(and three-quotes (not quoted)) (recur (+ index 3) depth false (not triple) false false)]
+                          [triple (recur (+ index 1) depth quoted triple escaped comment)]
+                          [quoted (recur (+ index 1) depth (if (and (= unit "\"") (not escaped)) false true) false
+                                    (if escaped false (= unit "\\")) false)]
+                          [(= unit "\"") (recur (+ index 1) depth true false false false)]
+                          [(= unit ";") (recur (+ index 1) depth false false false true)]
+                          [(= unit "(") (recur (+ index 1) (+ depth 1) false false false false)]
+                          [(= unit ")") (if (= depth 1) (+ index 1) (recur (+ index 1) (- depth 1) false false false false))]
+                          [true (recur (+ index 1) depth false false false false)]))))]
+          (recur end (push blocks (str-slice source start end)))))))))
+
+(defn fl-headless-js-name [source]
+  (let [safe (fl-island-name source) normalized (str-replace-in safe "-" "_")]
+    (cond [(str-ends-with normalized "?") (str (str-slice normalized 0 (- (length normalized) 1)) "_q")]
+          [(str-ends-with normalized "!") (str (str-slice normalized 0 (- (length normalized) 1)) "_bang")]
+          [true normalized])))
+(defn fl-headless-has? [values value]
+  (> (length (filter (fn [other] (= value other)) values)) 0))
+(defn fl-headless-call [function args]
+  (str "(" function (if (= (length args) 0) "" " ") (str-join args " ") ")"))
+(defn fl-headless-array [items] (str "[" (str-join items " ") "]"))
+(defn fl-headless-method [receiver key args]
+  (fl-headless-call "__fl_hl_method" [receiver (fl-island-quote key) (fl-headless-array args)]))
+(defn fl-headless-fl [ctx method args]
+  (fl-headless-method (str "(j-host-at " ctx " \"_fl\")") method args))
+(defn fl-headless-body [nodes env ctx update mode]
+  (let [forms (map (fn [node] (fl-headless-emit node env ctx update)) nodes)]
+    (cond
+      [(= (length forms) 0) "__fl_hl_undefined"]
+      [(= mode "first") (first forms)]
+      [true (str "(do " (str-join forms " ") (if (= mode "discard") " __fl_hl_undefined" "") ")")])))
+(defn fl-headless-symbol [source env ctx]
+  (let [name (fl-headless-js-name source)]
+    (cond
+      [(= source "inc") "(j-host-raw-fn (fn [value] (j-host-add value 1)))"]
+      [(= source "dec") "(j-host-raw-fn (fn [value] (j-host-sub value 1)))"]
+      [(= source "not") "(j-host-raw-fn (fn [value] (j-host-not value)))"]
+      [(= source "nil?") "(j-host-raw-fn (fn [value] (j-host-nullish? value)))"]
+      [(= source "empty?") "(j-host-raw-fn (fn [value] (j-host-or (j-host-not value) (j-host-eq (j-host-at value \"length\") 0))))"]
+      [(= source "str") (str "(j-host-at " ctx " \"_fl_str\")")]
+      [(not (= (get env name) nil)) (get env name)]
+      [true
+       (let [parts (str-split name ".")]
+         (loop [index 1 expression (str "(__fl_hl_resolve " ctx " " (fl-island-quote (first parts)) ")")]
+           (if (>= index (length parts)) expression
+             (recur (+ index 1) (str "(j-host-at " expression " " (fl-island-quote (get parts index)) ")")))))])))
+(defn fl-headless-bindings [node outer]
+  (let [items (fl-island-items node "Array")]
+    (if (not (= (mod (length items) 2) 0)) (throw "E_HEADLESS_BINDING: even binding vector required")
+      (loop [index 0 env outer records [] seen []]
+        (if (>= index (length items)) {"env" env "records" records}
+          (let [source (fl-island-binding-name (get items index)) key (fl-headless-js-name source) cell (fl-island-fresh)]
+            (if (or (fl-headless-has? ["inc" "dec" "not" "nil?" "empty?" "str"] source) (fl-headless-has? seen key))
+              (throw "E_HEADLESS_BINDING: invalid or duplicate binding")
+              (recur (+ index 2)
+                (assoc env key (str "(__fl_hl_read_cell " cell " " (fl-island-quote key) ")"))
+                (push records {"source" source "key" key "cell" cell "value" (get items (+ index 1))}) (push seen key)))))))))
+(defn fl-headless-cells [records]
+  (str-join (map (fn [record] (str (get record "cell") " (atom [false nil])")) records) " "))
+(defn fl-headless-init [records env ctx update]
+  (str-join (map (fn [record]
+    (str "(reset! " (get record "cell") " [true " (fl-headless-emit (get record "value") env ctx update) "])")) records) " "))
+(defn fl-headless-let [args env ctx update]
+  (let [prepared (fl-headless-bindings (get args 0) env) inner (get prepared "env") records (get prepared "records")]
+    (str "(let [" (fl-headless-cells records) "] " (fl-headless-init records inner ctx update) " "
+         (fl-headless-body (slice args 1 (length args)) inner ctx update "first") ")")))
+(defn fl-headless-fn [args env ctx update]
+  (let [parameters (fl-island-items (get args 0) "Array")
+        prepared (loop [index 0 inner env names [] seen []]
+                   (if (>= index (length parameters)) {"env" inner "names" names}
+                     (let [source (fl-island-binding-name (get parameters index)) key (fl-headless-js-name source) fresh (fl-island-fresh)]
+                       (if (or (fl-headless-has? ["inc" "dec" "not" "nil?" "empty?" "str"] source)
+                               (fl-headless-has? seen key)) (throw "E_HEADLESS_PARAMETER: invalid or duplicate parameter")
+                         (recur (+ index 1) (assoc inner key fresh) (push names fresh) (push seen key))))))]
+    (str "(j-host-raw-fn (fn [" (str-join (get prepared "names") " ") "] "
+         (fl-headless-body (slice args 1 (length args)) (get prepared "env") ctx update "last") "))")))
+(defn fl-headless-chain [host args env ctx update]
+  (let [forms (map (fn [node] (fl-headless-emit node env ctx update)) args)]
+    (if (= (length forms) 0) (throw "E_HEADLESS_ARITY: empty operator")
+      (loop [index 1 result (first forms)]
+        (if (>= index (length forms)) result
+          (recur (+ index 1) (fl-headless-call host [result (get forms index)])))))))
+(defn fl-headless-cond [args env ctx update]
+  (if (< (length args) 2) "nil"
+    (str "(if " (fl-headless-emit (get args 0) env ctx update) " " (fl-headless-emit (get args 1) env ctx update) " "
+      (fl-headless-cond (slice args 2 (length args)) env ctx update) ")")))
+(defn fl-headless-get-in [args env ctx update]
+  (let [object (fl-headless-emit (get args 0) env ctx update) keys (get args 1)
+        items (if (and (= (get keys "kind") "block") (= (get keys "type") "Array")) (fl-island-items keys "Array") [])]
+    (loop [index 0 value object]
+      (if (>= index (length items)) (str "(__fl_hl_nil " value " nil)")
+        (let [temp (fl-island-fresh)]
+          (recur (+ index 1) (str "(let [" temp " " value "] (if (j-host-nullish? " temp ") __fl_hl_undefined (j-host-at " temp " "
+                                    (fl-headless-emit (get items index) env ctx update) ")))")))))))
+(defn fl-headless-emit-call [op args env ctx update]
+  (let [binary {"=" "j-host-eq" "not=" "j-host-neq" ">" "j-host-gt" "<" "j-host-lt" ">=" "j-host-gte" "<=" "j-host-lte" "mod" "j-host-mod"}
+        arithmetic {"+" "j-host-add" "-" "j-host-sub" "*" "j-host-mul" "/" "j-host-div" "or" "j-host-or" "and" "j-host-and"}
+        delegated {"atom" "atom" "deref" "deref" "push" "push" "get" "get" "assoc" "assoc" "dissoc" "dissoc"
+                   "map" "map_arr" "filter" "filter_arr" "reduce" "reduce_arr" "get-store" "get_store" "dispatch" "dispatch"
+                   "watch-store" "watch_store" "fetch!" "fetch" "fetch-post!" "fetch_post" "fetch-delete!" "fetch_delete"
+                   "read-file-dataurl!" "read_file_dataurl"}]
+    (cond
+      [(= op "let") (fl-headless-let args env ctx update)]
+      [(= op "fn") (fl-headless-fn args env ctx update)]
+      [(= op "if") (str "(if " (fl-headless-emit (get args 0) env ctx update) " " (fl-headless-emit (get args 1) env ctx update) " " (fl-headless-emit (get args 2) env ctx update) ")")]
+      [(= op "cond") (fl-headless-cond args env ctx update)]
+      [(= op "do") (fl-headless-body args env ctx update "discard")]
+      [(= op "when") (str "(if " (fl-headless-emit (get args 0) env ctx update) " "
+        (if (> (length args) 2) (fl-headless-body (slice args 1 (length args)) env ctx update "discard") (fl-headless-emit (get args 1) env ctx update)) " nil)")]
+      [(not (= (get binary op) nil)) (fl-headless-call (get binary op)
+        [(fl-headless-emit (get args 0) env ctx update) (fl-headless-emit (get args 1) env ctx update)])]
+      [(not (= (get arithmetic op) nil)) (fl-headless-chain (get arithmetic op) args env ctx update)]
+      [(= op "??") (let [temp (fl-island-fresh)] (str "(let [" temp " " (fl-headless-emit (get args 0) env ctx update) "] (if (j-host-nullish? " temp ") " (fl-headless-emit (get args 1) env ctx update) " " temp "))"))]
+      [(= op "not") (str "(j-host-not " (fl-headless-emit (get args 0) env ctx update) ")")]
+      [(= op "get-in") (fl-headless-get-in args env ctx update)]
+      [(or (= op "h") (= op "h!"))
+       (fl-headless-fl ctx "h" (concat [(fl-headless-emit (get args 0) env ctx update)
+         (if (> (length args) 1) (fl-headless-emit (get args 1) env ctx update) "{}")]
+         (if (= op "h!") [] (map (fn [node] (fl-headless-emit node env ctx update)) (slice args 2 (length args))))))]
+      [(= op "str") (fl-headless-method ctx "_fl_str" (map (fn [node] (fl-headless-emit node env ctx update)) args))]
+      [(or (= op "swap!") (= op "reset!"))
+       (str "(do " (fl-headless-fl ctx (if (= op "swap!") "swap" "reset")
+           [(fl-headless-emit (get args 0) env ctx update) (fl-headless-emit (get args 1) env ctx update)]) " (" update "))")]
+      [(or (= op "length") (= op "first") (= op "rest"))
+       (let [temp (fl-island-fresh)]
+         (str "(let [" temp " " (fl-headless-emit (get args 0) env ctx update) "] "
+           "(if (j-host-nullish? " temp ") " (if (= op "length") "0" (if (= op "first") "nil" "[]")) " "
+           (if (= op "rest") (fl-headless-method temp "slice" ["1"])
+             (str "(__fl_hl_nil (j-host-at " temp " " (if (= op "length") "\"length\"" "0") ") " (if (= op "length") "0" "nil") ")")) "))"))]
+      [(= op "empty?") (str "(j-host-not (j-host-and " (fl-headless-emit (get args 0) env ctx update)
+          " (j-host-gt (j-host-at " (fl-headless-emit (get args 0) env ctx update) " \"length\") 0)))")]
+      [(not (= (get delegated op) nil)) (fl-headless-fl ctx (get delegated op) (map (fn [node] (fl-headless-emit node env ctx update)) args))]
+      [(str-starts-with op ".-") (str "(j-host-at " (fl-headless-emit (get args 0) env ctx update) " " (fl-island-quote (str-slice op 2 (length op))) ")")]
+      [(str-starts-with op ".") (fl-headless-method (fl-headless-emit (get args 0) env ctx update)
+        (str-slice op 1 (length op)) (map (fn [node] (fl-headless-emit node env ctx update)) (slice args 1 (length args))))]
+      [(= op "__apply__") (str "(__fl_hl_call " (fl-headless-emit (get args 0) env ctx update) " __fl_hl_undefined "
+        (fl-headless-array (map (fn [node] (fl-headless-emit node env ctx update)) (slice args 1 (length args)))) ")")]
+      [true (str "(__fl_hl_call " (fl-headless-symbol op env ctx) " __fl_hl_undefined "
+        (fl-headless-array (map (fn [node] (fl-headless-emit node env ctx update)) args)) ")")])))
+(defn fl-headless-emit [node env ctx update]
+  (let [kind (get node "kind")]
+    (cond
+      [(= node nil) "nil"]
+      [(= kind "literal")
+       (let [type (get node "type") value (get node "value")]
+         (cond [(= type "symbol") (fl-headless-symbol value env ctx)]
+               [(= type "string") (fl-island-string-literal value)]
+               [(= type "number") value]
+               [(or (= type "boolean") (= type "bool")) (if value "true" "false")]
+               [true "nil"]))]
+      [(= kind "variable") (fl-headless-symbol (get node "name") env ctx)]
+      [(= kind "keyword") (fl-island-quote (get node "name"))]
+      [(= kind "block")
+       (let [items (fl-island-items node (get node "type"))]
+         (if (= (get node "type") "Map")
+           (loop [index 0 pairs []]
+             (if (>= index (length items)) (str "{" (str-join pairs " ") "}")
+               (let [key (get items index) text (if (= (get key "kind") "keyword") (get key "name") (get key "value"))]
+                 (recur (+ index 2) (push pairs (str (fl-island-quote text) " " (fl-headless-emit (get items (+ index 1)) env ctx update)))))))
+           (cond
+             [(and (> (length items) 0) (= (get (get items 0) "type") "symbol"))
+              (fl-headless-emit-call (get (get items 0) "value") (slice items 1 (length items)) env ctx update)]
+             [(and (> (length items) 0)
+                   (or (= (get (get items 0) "kind") "sexpr") (= (get (get items 0) "type") "Array")))
+              (fl-headless-emit-call "__apply__" items env ctx update)]
+             [true (fl-headless-array (map (fn [item] (fl-headless-emit item env ctx update)) items))])))]
+      [(or (= kind "and") (= kind "or")) (fl-headless-emit-call kind (get node "args") env ctx update)]
+      [(= kind "sexpr") (fl-headless-emit-call (get node "op") (get node "args") env ctx update)]
+      [true (throw (str "E_HEADLESS_IR: unsupported " kind))])))
+(defn fl-headless-one [node index]
+  (let [args (get node "args") source (fl-island-binding-name (get args 0)) name (str-lower source)
+        id (str "island-" name "-0") ctx (fl-island-fresh) update (fl-island-fresh)
+        options (if (= (get (get args 1) "type") "Array") (fl-island-items (get args 1) "Array") [])
+        keys (fl-island-watch-keys options) body (slice args 2 (length args))
+        simple (and (= (length body) 1) (= (get (first body) "op") "let"))
+        letargs (if simple (get (first body) "args") [])
+        prepared (if simple (fl-headless-bindings (get letargs 0) {}) {"records" [] "env" {}})
+        records (get prepared "records") state (filter (fn [r] (fl-island-atom-binding? r)) records)
+        local (filter (fn [r] (not (fl-island-atom-binding? r))) records)
+        stateenv (loop [i 0 env {}]
+                   (if (>= i (length state)) env
+                     (let [r (get state i)] (recur (+ i 1) (assoc env (get r "key") (get (get prepared "env") (get r "key")))))))
+        render (if (> (length state) 0)
+          (str "(let [" (fl-headless-cells state) "] " (fl-headless-init state stateenv ctx update) " "
+            (fl-headless-fl ctx "hmr_register" [(fl-island-quote id) (str "{" (str-join (map (fn [r]
+                (str (fl-island-quote (get r "key")) " " (get stateenv (get r "key")))) state) " ") "}")]) " "
+            "(j-host-raw-fn (fn [" update "] (let [" (fl-headless-cells local) "] "
+              (fl-headless-init local (get prepared "env") ctx update) " "
+              (fl-headless-body (slice letargs 1 (length letargs)) (get prepared "env") ctx update "last") "))))")
+          (str "(j-host-raw-fn (fn [" update "] " (fl-headless-body body {} ctx update "first") "))"))]
+    (str "{\"name\" " (fl-island-quote name) " \"execute\" (j-host-raw-fn (fn [" ctx "] "
+      (fl-headless-fl ctx (if (> (length keys) 0) "mount_reactive" "mount")
+        (concat [(fl-island-quote id) render] (if (> (length keys) 0) [(fl-headless-array (map fl-island-quote keys))] []))) "))}")))
+(defn fl-headless-program [parsed support file]
+  (if (not (and (= (get parsed "schema") "freelang.ast.v1") (= (get parsed "status") "ok"))) (throw "E_HEADLESS_AST: successful AST required")
+    (let [nodes (get parsed "nodes")]
+      (if (not (every? (fn [node] (and (= (get node "kind") "sexpr") (= (get node "op") "island"))) nodes)) (throw "E_HEADLESS_SOURCE: islands required")
+        (do
+          (reset! fl-island-serial 0)
+          (str "(load " (fl-island-quote support) ")\n"
+            "(define front-native-island-headless-main (j-host-raw-fn (fn [] (__fl_hl_output ["
+            (str-join (map (fn [index] (fl-headless-one (get nodes index) index)) (range 0 (length nodes))) "\n")
+            "] " (fl-island-quote (last (str-split file "/"))) " " (fl-island-quote file) "))))\n"))))))

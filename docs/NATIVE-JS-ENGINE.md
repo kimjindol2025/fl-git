@@ -5,10 +5,12 @@ SpiderMonkey ESR115/GJS library pair. `native/js-engine.c` provides the process
 and file boundary. FreeLang remains the implementation language for adapters
 and frontend policy. No new handwritten JavaScript runtime is included.
 
-This supplies the engine needed for the headless migration. The Island virtual
-DOM, selection, click/dispatch orchestration, result protocol, test-file gate
-and `/~ai/test` endpoint still need their Native implementation. Their current
-metadata remains `NOT_RUN`, and the default `scripts/fl-dev` remains unchanged.
+This supplies the engine needed for the headless migration. The initial foundation did not implement the Island runner. The subsequent
+[standalone Native entry](NATIVE-ISLAND-HEADLESS.md) now implements the virtual
+DOM, selection, click/dispatch and result protocol in FreeLang as an experimental
+path. Full compatibility, the test-file gate and `/~ai/test` integration remain
+unqualified. Their metadata remains `NOT_RUN`, and default `scripts/fl-dev` is
+unchanged.
 
 ## Generated runtime modules
 

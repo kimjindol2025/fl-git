@@ -166,3 +166,9 @@ SpiderMonkey/GJS process host and optional matching library inputs. Its package
 has 15 Native executables and records a fresh compiler fixed point while reusing
 the unchanged accepted runtime archive. This enables generated FreeLang runtime
 modules; it does not yet implement Island headless behavior or `/~ai/test`.
+
+The subsequent [headless standalone entry](NATIVE-ISLAND-HEADLESS.md) packages
+16 Native executables, its fixed Bash process boundary and the FreeLang headless
+runtime. It requires the fresh matching runtime archive with the generic raw
+function/receiver/argument/remainder primitives; the preceding archive must not
+be mixed with this compiler. API/test-gate/default-dev migration remains open.
