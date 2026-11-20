@@ -13,11 +13,13 @@ INCLUDE="${FREELANG_NATIVE_RUNTIME_INCLUDE:-}"
 CURL_LIBRARY="${FREELANG_NATIVE_CURL_LIBRARY:-}"
 MOZJS_LIBRARY="${FREELANG_NATIVE_MOZJS_LIBRARY:-}"
 GJS_LIBRARY="${FREELANG_NATIVE_GJS_LIBRARY:-}"
+TCP_REQUEST_SOURCE="${FREELANG_NATIVE_TCP_REQUEST_SOURCE:-$INCLUDE/native-tcp-request.c}"
 NATIVE_CC="${CC:-gcc}"
 blocked() { printf 'FL_NATIVE_SDK=BLOCKED\nCAUSE=%s\n' "$1" >&2; exit 2; }
 [[ -f "$COMPILER" && -x "$COMPILER" ]] || blocked 'Configure the verified Native compiler.'
 [[ -s "$COMPILER_C" ]] || blocked 'Configure FREELANG_NATIVE_COMPILER_C with its verified fixed-point generated C.'
 [[ -f "$ARCHIVE" && -f "$INCLUDE/runtime.h" ]] || blocked 'Configure its matching runtime archive and headers.'
+[[ -s "$TCP_REQUEST_SOURCE" ]] || blocked 'Configure the matching Native TCP request source.'
 [[ -d "$INCLUDE/ryu" ]] || blocked 'The complete matching runtime headers, including ryu, are required.'
 [[ -f "$CURL_LIBRARY" ]] || blocked 'Configure FREELANG_NATIVE_CURL_LIBRARY with the matching curl shared library.'
 if [[ -n "$MOZJS_LIBRARY" || -n "$GJS_LIBRARY" ]]; then
@@ -50,6 +52,7 @@ if [[ -n "$MOZJS_LIBRARY" ]]; then
   sha256sum -- "$MOZJS_LIBRARY" "$GJS_LIBRARY" >"$RUN/build/engine-inputs.before.sha256"
 fi
 cp -- "$COMPILER_C" "$RUN/provenance/compiler.c"
+cp -- "$TCP_REQUEST_SOURCE" "$RUN/provenance/native-tcp-request.c"
 cp -- "$ARCHIVE" "$RUN/lib/runtime.a"
 cp -L -- "$CURL_LIBRARY" "$RUN/lib/$curl_soname"
 ln -s -- "$curl_soname" "$RUN/lib/libcurl.so"
@@ -58,7 +61,7 @@ cp -R -- "$INCLUDE/ryu" "$RUN/include/ryu"
 cp -- "$ROOT/native/process-argv.h" "$RUN/include/front-process-argv.h"
 export LD_LIBRARY_PATH="$RUN/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LIBRARY_PATH="$RUN/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
-sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$INCLUDE"/*.h "$INCLUDE"/ryu/* >"$RUN/build/inputs.before.sha256"
+sha256sum -- "$COMPILER" "$COMPILER_C" "$ARCHIVE" "$CURL_LIBRARY" "$TCP_REQUEST_SOURCE" "$INCLUDE"/*.h "$INCLUDE"/ryu/* >"$RUN/build/inputs.before.sha256"
 (
   cd -- "$ROOT"
   sha256sum -- src/main.fl src/git.fl src/tui.fl src/tui-input.fl \
@@ -75,6 +78,12 @@ env -u LD_RUN_PATH "$NATIVE_CC" -O2 -w -rdynamic -Werror=implicit-function-decla
   -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
   -Wl,--whole-archive "$RUN/lib/runtime.a" -Wl,--no-whole-archive \
   -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build/flc.build.log" 2>&1
+step=TCP_REQUEST_HOST
+env -u LD_RUN_PATH "$NATIVE_CC" -std=gnu11 -O2 -Wall -Wextra -Werror -rdynamic \
+  -isystem "$RUN/include" -o "$RUN/bin/fl-tcp-request-native" "$RUN/provenance/native-tcp-request.c" \
+  -Wl,--enable-new-dtags,-rpath,'$ORIGIN/../lib' \
+  -Wl,--whole-archive "$RUN/lib/runtime.a" -Wl,--no-whole-archive \
+  -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl >"$RUN/build/tcp-request.build.log" 2>&1
 step=PROCESS_HOST
 "$NATIVE_CC" -std=c11 -O2 -Wall -Wextra -Werror -isystem "$RUN/include" \
   -c "$ROOT/native/process-argv.c" -o "$RUN/build/process-argv.o" >"$RUN/build/process-host.build.log" 2>&1
@@ -132,6 +141,8 @@ cat >"$RUN/env.sh" <<'SH'
 fl_sdk_script="$(readlink -f -- "${BASH_SOURCE[0]}")"
 IFS= read -r -d '' fl_sdk_root < <(cd -P -- "${fl_sdk_script%/*}" && printf '%s\0' "$PWD")
 export FREELANG_NATIVE_SDK_ROOT="$fl_sdk_root"
+export FREELANG_NATIVE_TCP_REQUEST="$fl_sdk_root/bin/fl-tcp-request-native"
+export FREELANG_NATIVE_TCP_REQUEST_SOURCE="$fl_sdk_root/provenance/native-tcp-request.c"
 export FREELANG_NATIVE_COMPILER="$fl_sdk_root/bin/flc"
 export FREELANG_NATIVE_COMPILER_C="$fl_sdk_root/provenance/compiler.c"
 export FREELANG_NATIVE_RUNTIME_ARCHIVE="$fl_sdk_root/lib/runtime.a"
@@ -185,6 +196,11 @@ the generated C is preserved in provenance/compiler.c. This is a build
 tool bundle. Packaging does not establish application or DB release acceptance.
 Build logs and generated C are retained in build/ for diagnosis.
 
+fl-tcp-request-native performs the Native tcp-send operation through anonymous
+stdin framing. Source env.sh again after relocation so its explicit helper
+path matches this SDK. Requests and passwords are never executable argv.
+The helper and its source are included in SDK.SHA256.
+
 fl-js-engine evaluates generated JavaScript through the selected SpiderMonkey
 ESR115/GJS pair. Its process uses the interpreter (JIT and WebAssembly disabled)
 under the Native memory cap. It does not implement Island selection, virtual
@@ -215,7 +231,7 @@ TXT
 (
   cd -- "$RUN"
   sha256sum -- env.sh verify.sh README.txt bin/* include/*.h include/ryu/* lib/runtime.a lib/libcurl.so "lib/$curl_soname" \
-    provenance/*.txt provenance/compiler.c provenance/frontend.before.sha256 \
+    provenance/*.txt provenance/compiler.c provenance/native-tcp-request.c provenance/frontend.before.sha256 \
     scripts/fl-island-run-native scripts/fl-release-ready lib/headless-language.fl >SDK.SHA256
   if [[ -d lib/js-engine ]]; then sha256sum -- lib/js-engine/* >>SDK.SHA256; fi
 )

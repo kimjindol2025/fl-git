@@ -23,6 +23,10 @@
 (defn fl-release-unit-config [config]
   (fl-release-unit-settings config)
   (let [root (fl-release-unit-text (get config "release")) hash (get config "manifestSha256")]
+    (if (and (not (nil? (get config "nativeHelper")))
+             (not (= (fl-release-unit-text (get config "nativeHelper"))
+                     (str root "/bin/fl-tcp-request-native"))))
+      (throw "E_RELEASE_UNIT: helper must belong to the selected code release") nil)
     (if (not (and (str-starts-with root "/") (string? hash)
                   (regex_match hash "^[a-f0-9]{64}$")))
       (throw "E_RELEASE_UNIT: release and manifest required") config)))
@@ -31,14 +35,17 @@
         port (str (get config "port"))
         verify ["/usr/bin/env" "-C" root (str root "/bin/fl-front-release")
                 "--verify" root (get config "manifestSha256")]
-        application ["/usr/bin/env" "-C" (str root "/web")
+        application (concat (concat ["/usr/bin/env" "-C" (str root "/web")
                      "FL_HTTP_HOST=127.0.0.1" (str "PORT=" port)
                      (str "FL_GIT_REPO=" (get config "repository"))
                      (str "FL_GIT_ROOTS=" (get config "roots"))
                      (str "FL_GIT_ROLE=" (get config "role"))
                      "FL_HTTP_ALLOW=127.0.0.1,localhost"
                      (str "FL_WEB_PUBLIC=" root "/web/public")
-                     (str "PATH=" (get config "hostPath")) (str root "/web/app-native")]
+                     (str "PATH=" (get config "hostPath"))]
+                     (if (nil? (get config "nativeHelper")) []
+                       [(str "FREELANG_NATIVE_TCP_REQUEST=" (get config "nativeHelper"))]))
+                     [(str root "/web/app-native")])
         ready ["/usr/bin/env" "-C" root "PATH=/usr/bin:/bin"
                (str root "/bin/fl-release-ready") port]]
     (str "[Unit]\nDescription=FreeLang Native " (get config "name") "\n\n"

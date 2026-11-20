@@ -53,6 +53,9 @@ LC_ALL=C readelf -l -- "${link[4]}" >"$RUN/code/provenance/app.program.txt"
 LC_ALL=C readelf -d -- "${link[4]}" >"$RUN/code/provenance/app.dynamic.txt"
 LC_ALL=C readelf -d -- "$RUN/code/lib/libcurl.so.4" >"$RUN/code/provenance/curl.dynamic.txt"
 chmod 555 -- "$RUN/code/web/app-native" "$RUN/code/bin/fl-front-release" "$RUN/code/bin/fl-native-clock" "$RUN/code/bin/fl-release-ready"
+if [[ -f "$RUN/code/bin/fl-tcp-request-native" ]]; then
+  chmod 555 -- "$RUN/code/bin/fl-tcp-request-native"
+fi
 step=SEAL
 "$TOOL" --seal "$RUN/code" >"$RUN/seal.json" 2>"$RUN/seal.stderr"
 "$TOOL" --verify "$RUN/code" >"$RUN/verified.json" 2>"$RUN/verified.stderr"

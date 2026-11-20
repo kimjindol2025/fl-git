@@ -106,6 +106,12 @@
                  [validator "bin/fl-front-release"] [clock "bin/fl-native-clock"]
                  [ready "bin/fl-release-ready"]]]
       (fl-release-copy (get pair 0) (str root "/" (get pair 1))))
+    ;; Older SDKs have no TCP helper. A matching current SDK verifies its
+    ;; helper in SDK.SHA256 before staging; preserve it in the sealed release.
+    (let [helper (str sdk "/bin/fl-tcp-request-native")]
+      (if (file_exists helper)
+        (fl-release-copy (fl-release-file sdk "bin/fl-tcp-request-native")
+                         (str root "/bin/fl-tcp-request-native")) nil))
     (fl-release-write root "provenance/link.nul"
       (str "FL_RELEASE_LINK/1\x00" root "/provenance/app.c\x00" sdk "/include\x00"
            sdk "/lib/runtime.a\x00" root "/web/app-native\x00FL_RELEASE_END/1\x00"))
@@ -165,9 +171,12 @@
       {"ok" true "status" "VERIFIED" "release" root "manifestSha256" hash})))
 (defn fl-release-config [root name port repository roots role host-path digest]
   (if (not (regex_match port "^[0-9]{1,5}$")) (fl-release-error "decimal port required") nil)
-  (fl-release-unit-config {"release" root "name" name "port" (str-to-num port)
-    "repository" (fl-release-root repository) "roots" roots "role" role
-    "hostPath" host-path "manifestSha256" digest}))
+  (let [config {"release" root "name" name "port" (str-to-num port)
+                "repository" (fl-release-root repository) "roots" roots "role" role
+                "hostPath" host-path "manifestSha256" digest}
+        helper (str root "/bin/fl-tcp-request-native")]
+    (fl-release-unit-config
+      (if (file_exists helper) (assoc config "nativeHelper" helper) config))))
 (defn fl-release-check-config [name port repository roots role host-path]
   (if (not (regex_match port "^[0-9]{1,5}$")) (fl-release-error "decimal port required") nil)
   (fl-release-unit-settings {"name" name "port" (str-to-num port)
@@ -186,12 +195,15 @@
   (let [verified (fl-release-verify directory nil) root (get verified "release")
         config (fl-release-config root "fl-git" port repository roots role host-path (get verified "manifestSha256"))]
     (if (not (regex_match instance "^[a-f0-9]{32}$")) (fl-release-error "fresh instance identifier required") nil)
-    (let [arguments ["/usr/bin/env" "-u" "LD_LIBRARY_PATH" "-C" (str root "/web")
+    (let [arguments (concat (concat ["/usr/bin/env" "-u" "LD_LIBRARY_PATH" "-C" (str root "/web")
                      "FL_HTTP_HOST=127.0.0.1" (str "PORT=" (get config "port"))
                      (str "FL_GIT_REPO=" (get config "repository")) (str "FL_GIT_ROOTS=" roots)
                      (str "FL_GIT_ROLE=" role) "FL_HTTP_ALLOW=127.0.0.1,localhost"
                      (str "FL_WEB_PUBLIC=" root "/web/public") (str "PATH=" host-path)
-                     (str "FL_NATIVE_RELEASE_INSTANCE=" instance) (str root "/web/app-native")]]
+                     (str "FL_NATIVE_RELEASE_INSTANCE=" instance)]
+                     (if (nil? (get config "nativeHelper")) []
+                       [(str "FREELANG_NATIVE_TCP_REQUEST=" (get config "nativeHelper"))]))
+                     [(str root "/web/app-native")])]
       (print "FL_RELEASE_RUN/1\x00")
       (doseq [argument arguments] (print (str argument "\x00")))
       (print "FL_RELEASE_END/1\x00"))))

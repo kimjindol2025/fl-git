@@ -1,0 +1,628 @@
+{
+  "schema": "frontend-native-tcp-helper-packaging/1",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "fx_base_commit": "b82f16f820e27f46c54cd6767231b882e74cd07d",
+  "frontend_base_commit": "9e7f73a70dacde0357a81510b73020d350026a90",
+  "runtime_source_sha256": {
+    "runtime/process.c": "7476b860820d188e5aa76fd70ccdae5ccb975bf94d60eedad42080d3d7910bfd",
+    "runtime/process-input.h": "f2f93309c3927f6515ef5648174115dda2b72c4fa7800caa7d5b52df1fb68962",
+    "runtime/tcp-request-frame.h": "f903440399a73bbf344ce9cc9b10790a134c54d7bf06a2066ac8e3a4351b4610",
+    "runtime/native-tcp-request.c": "e086787aee8ecb83dd0fcc67fd4655954967e66eaa7e18a22215bd88e73da574",
+    "runtime/v11-tcp.h": "70bfe096d65cd6f32528866494567b6c7113eb5b748ca28485f8c72bee59df3d",
+    "runtime/v11-ops.h": "0483eb45e7806f53678b521ab1bc5c4a2ba2b37f9bc09a1eb4df8870ccb11731",
+    "runtime/v11-compat.h": "f6a6d8d2b7e4516646e528a0ed0164fed43c44f0e016460fd36e66ab1df696dd"
+  },
+  "frontend_source_sha256": {
+    "scripts/fl-sdk-package-native": "afd5ccf91d2306df17f57133bb99eef13bee1f7dce153703e6f18d4ad75a0d5a",
+    "scripts/fl-release-build-native": "fb6d570a8ead8a0d6cc89e0b9d6e43b7b8827aaf46e85a9cee9434794d3d98eb",
+    "scripts/fl-release-run-native": "2ff4740fb9323aa7ae45ff463bc7b6a8e8c09821b5434938ba45e10aafc10ea4",
+    "tools/front-release.fl": "f8e5439d1b9c73081b6a9952b784970c7e2068eee21fe5e81f948b7844ea0287",
+    "tools/front-release-unit.fl": "215529f5b3333323902ec1ee5c460e8daa999732ea0df18303a157c49be73651"
+  },
+  "limits": {
+    "address_space_bytes": 2147483648,
+    "cold_recovery_native_seconds": 120,
+    "compiler_generation_seconds": 40,
+    "compiler_generation_rss_gib": 1.6
+  },
+  "seed_sha256": "0101cb63a86f20b93451f70b88a0b577f9548ded0a8b328ebdeedb7e8e4fd767",
+  "canonical_c_sha256": "a562273ff556348581688d27f780dfb7486dcac572d671a17ace04715c8808e5",
+  "stage2_equals3_equals4": true,
+  "compiler_measurements": [
+    {
+      "step": "stage0_TO_stage1",
+      "seconds": 1.81,
+      "rssKiB": 391352
+    },
+    {
+      "step": "stage1_TO_stage2",
+      "seconds": 1.55,
+      "rssKiB": 940236
+    },
+    {
+      "step": "stage2_TO_stage3",
+      "seconds": 29.67,
+      "rssKiB": 1558644
+    },
+    {
+      "step": "stage3_TO_stage4",
+      "seconds": 29.57,
+      "rssKiB": 1557660
+    }
+  ],
+  "runtime_archive_sha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+  "helper_elf_sha256": "cf9ef92609a89e6d15187dc76ab660847155e3f6a7db2cf76cf6be5b32d97d3a",
+  "first_sdk_manifest_sha256": "5b17bb522bd7896c185fca52ef064e3da9a6124b9fe5cfbb6b08d5fbdfefca1c",
+  "corrected_sdk_manifest_sha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+  "sdk_elf_count": 18,
+  "sdk_build_traces": {
+    "fresh_runtime_fixed_point": {
+      "traceSha256": "30492a4b506e1097c0225082560f0f93de90e310a05d652404d1e0fac83e1410",
+      "decodedExecs": 335,
+      "resumedExecsJoined": 2,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "ar": 2,
+        "as": 44,
+        "bash": 4,
+        "bwrap": 1,
+        "cat": 3,
+        "cc1": 44,
+        "chmod": 1,
+        "cmp": 2,
+        "collect2": 22,
+        "cp": 36,
+        "env": 15,
+        "fl-sdk-package-native": 1,
+        "flc": 13,
+        "gcc": 45,
+        "grep": 13,
+        "ld": 22,
+        "ln": 1,
+        "mkdir": 3,
+        "mktemp": 1,
+        "readelf": 3,
+        "readlink": 3,
+        "sed": 3,
+        "sha256sum": 9,
+        "stage0-bin": 1,
+        "stage1-bin": 1,
+        "stage2-bin": 1,
+        "stage3-bin": 1,
+        "tee": 1,
+        "time": 8,
+        "timeout": 29,
+        "uname": 1,
+        "verify.sh": 1
+      }
+    },
+    "corrected_frontend_packaging": {
+      "traceSha256": "4e0b455c0987964a8c973c13804a4a768cd4bf27753193fd9a7325f4225b389a",
+      "decodedExecs": 218,
+      "resumedExecsJoined": 2,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "ar": 1,
+        "as": 19,
+        "bash": 5,
+        "bwrap": 1,
+        "cat": 3,
+        "cc1": 19,
+        "chmod": 1,
+        "collect2": 18,
+        "cp": 36,
+        "env": 15,
+        "fl-sdk-package-native": 1,
+        "flc": 15,
+        "gcc": 20,
+        "grep": 13,
+        "ld": 18,
+        "ln": 1,
+        "mkdir": 2,
+        "mktemp": 1,
+        "readelf": 3,
+        "readlink": 5,
+        "sed": 3,
+        "sha256sum": 11,
+        "tee": 1,
+        "timeout": 2,
+        "uname": 1,
+        "verify.sh": 3
+      }
+    }
+  },
+  "sdk_runtime_and_helper_binary_identical_across_frontend_packaging": true,
+  "sdk2_provenance": "Same verified runtime/canonical C; corrected frontend literal argv composition. The subsequent unpackaged launcher host accepts the fixed optional argument count; no SDK binary changed for that host fix.",
+  "process_controls": {
+    "passed": 16,
+    "total": 16,
+    "result_stdout_sha256": "67018b60e08521d964c4d1ba75d167c6f5533ad15a03b82e9ff41cdecc6fc657",
+    "trace": {
+      "traceSha256": "99b8dabedab60ecfcf2dfdb3cb7041c0fb522f773b117c1d9341150851a4ec08",
+      "decodedExecs": 36,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 3,
+        "bash": 1,
+        "bwrap": 1,
+        "cc1": 3,
+        "collect2": 3,
+        "cp": 1,
+        "gcc": 3,
+        "ld": 3,
+        "mkdir": 1,
+        "process-input-probe": 12,
+        "timeout": 4
+      }
+    }
+  },
+  "release": {
+    "passed": 45,
+    "total": 45,
+    "build_seconds": 90,
+    "ready_stop_seconds": 3,
+    "first36_reused_from_successful_sdk2_runs": true,
+    "remaining9_original_assertions_executed_against_corrected_launcher": true,
+    "original_body_fragments_and_bounds_unchanged": true,
+    "traces": [
+      {
+        "file": "failed-build.trace",
+        "traceSha256": "921b46fae1f8e522818592313fe026f838980788f3c7c83088deddaed921fe41",
+        "decodedExecs": 47,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 5,
+          "env": 1,
+          "fl-front-build": 4,
+          "fl-front-build-native": 1,
+          "fl-front-release": 1,
+          "fl-island-headless": 2,
+          "fl-release-build-native": 1,
+          "fl-release-prepare-native": 1,
+          "flc": 1,
+          "flock": 1,
+          "mkdir": 3,
+          "mktemp": 2,
+          "readlink": 20,
+          "sha256sum": 2,
+          "verify.sh": 2
+        }
+      },
+      {
+        "file": "foreground.trace",
+        "traceSha256": "d6bd5c90cf5ba794800b43d1a5d9bc5f0640bc27431a33716f5b0d9dbb5eb2c3",
+        "decodedExecs": 12,
+        "resumedExecsJoined": 2,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "app-native": 1,
+          "bash": 1,
+          "env": 1,
+          "fl-front-release": 1,
+          "fl-release-run-native": 1,
+          "mktemp": 1,
+          "od": 1,
+          "readlink": 2,
+          "rm": 1,
+          "rmdir": 1,
+          "tr": 1
+        }
+      },
+      {
+        "file": "guard-help.trace",
+        "traceSha256": "6e711e15f0b9898addededb47660f16c691c03019ef166ea5e8bfbc93f5c365a",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 1
+        }
+      },
+      {
+        "file": "guard-inside-code.trace",
+        "traceSha256": "f208dee644fd97a7c8bbc9607a62ff03aea45b03d1bb03c86d1a38cd8fa541c0",
+        "decodedExecs": 8,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 6
+        }
+      },
+      {
+        "file": "guard-invalid-name.trace",
+        "traceSha256": "63b1191dcbe12b5d44573b8f4208206fae70fd9dd46518f9c874b18f227e8d6d",
+        "decodedExecs": 14,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 2,
+          "fl-front-release": 1,
+          "fl-release-prepare-native": 1,
+          "mktemp": 1,
+          "readlink": 7,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      {
+        "file": "guard-invalid-port.trace",
+        "traceSha256": "211e31ebce7331c1177b2456c4f981822bd3733e467f27b4d6e2ba2a7f56d788",
+        "decodedExecs": 14,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 2,
+          "fl-front-release": 1,
+          "fl-release-prepare-native": 1,
+          "mktemp": 1,
+          "readlink": 7,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      {
+        "file": "guard-invalid-role.trace",
+        "traceSha256": "292d86424e751bf1ee597e58b2336d55617059173067991e536fee4eaf05fcfa",
+        "decodedExecs": 14,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 2,
+          "fl-front-release": 1,
+          "fl-release-prepare-native": 1,
+          "mktemp": 1,
+          "readlink": 7,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      {
+        "file": "guard-linebreak-port.trace",
+        "traceSha256": "67140058cb30186a6b1d0b98f6c91ae726e2859ac31776adb25895de58ff391c",
+        "decodedExecs": 14,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 2,
+          "fl-front-release": 1,
+          "fl-release-prepare-native": 1,
+          "mktemp": 1,
+          "readlink": 7,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      {
+        "file": "guard-missing-value.trace",
+        "traceSha256": "4ffd6f3d301ff388acccaeeb6389d76daabf7eac8b440cce6da22afbb93fa57c",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 1
+        }
+      },
+      {
+        "file": "guard-no-sdk.trace",
+        "traceSha256": "0c7463107c0a579e475414e84cb7e43fecc0413ec4a718c9ca51efea8c7d8148",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 1
+        }
+      },
+      {
+        "file": "guard-source-and-release.trace",
+        "traceSha256": "24beac35d5ac1181dddfc7e36bf3e086e0273e3a01fe650337037f9d0ebd3b7b",
+        "decodedExecs": 7,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 5
+        }
+      },
+      {
+        "file": "guard-unknown.trace",
+        "traceSha256": "fa8373caa63353841ca2ea6c4bcb4c299964586bf3055187c951bf93a904d898",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 1
+        }
+      },
+      {
+        "file": "guard-wrong-sdk-tool.trace",
+        "traceSha256": "7f40651e8a9f946fc6038331f55c6e94127ba43a1a36c867fedd2aa2797c647c",
+        "decodedExecs": 7,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "fl-release-prepare-native": 1,
+          "readlink": 5
+        }
+      },
+      {
+        "file": "prepare.trace",
+        "traceSha256": "e494523f56a87aaf64385ed9231bdd185d0f6f0a9034c04dddccbd9b96d29e1c",
+        "decodedExecs": 94,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 2,
+          "bash": 7,
+          "cat": 1,
+          "cc1": 2,
+          "chmod": 2,
+          "collect2": 2,
+          "env": 2,
+          "find": 1,
+          "fl-front-build": 11,
+          "fl-front-build-native": 1,
+          "fl-front-release": 5,
+          "fl-island-headless": 2,
+          "fl-release-build-native": 1,
+          "fl-release-prepare-native": 1,
+          "flc": 5,
+          "flock": 1,
+          "gcc": 2,
+          "grep": 1,
+          "ld": 2,
+          "mkdir": 3,
+          "mktemp": 2,
+          "readelf": 4,
+          "readlink": 22,
+          "sha256sum": 5,
+          "tee": 2,
+          "timeout": 1,
+          "verify.sh": 4
+        }
+      },
+      {
+        "file": "rollback-plan.trace",
+        "traceSha256": "1debec25454b895cf03027b24a6b57d981dc69e000c0a44df2ad224810b107c2",
+        "decodedExecs": 25,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 4,
+          "fl-front-release": 3,
+          "fl-release-prepare-native": 1,
+          "mkdir": 1,
+          "mktemp": 1,
+          "readlink": 9,
+          "rollback.sh": 1,
+          "sha256sum": 2,
+          "tee": 1,
+          "verify.sh": 2
+        }
+      }
+    ],
+    "activation": "NOT_RUN"
+  },
+  "relocated_helper_integrity_legacy_argv": {
+    "status": "SCOPED_RELOCATED_HELPER_INTEGRITY_AND_LEGACY_ARGV_PASS_REVIEW_REQUIRED",
+    "cases": [
+      {
+        "case": "same sealed helper is executable and verifies",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "case": "relocated helper transports exact UTF8 and NUL without SDK or library environment",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "case": "sealed verification rejects changed helper before execution",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "case": "legacy17-record release still readies within3s",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "case": "legacy owned foreground stops within3s",
+        "passed": true,
+        "detail": null
+      }
+    ],
+    "passed": 5,
+    "total": 5,
+    "traces": [
+      {
+        "file": "legacy.trace",
+        "traceSha256": "66a6c9827a6c6e867859e6dd032e431453e89e3cc5b342efdd7727c3509afa18",
+        "decodedExecs": 12,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "app-native": 1,
+          "bash": 1,
+          "env": 1,
+          "fl-front-release": 1,
+          "fl-release-run-native": 1,
+          "mktemp": 1,
+          "od": 1,
+          "readlink": 2,
+          "rm": 1,
+          "rmdir": 1,
+          "tr": 1
+        }
+      },
+      {
+        "file": "relocated-helper.trace",
+        "traceSha256": "dc5dac726675defe24042cbc5863a92f430c4a80923e77d2adb82f90ae8b2d53",
+        "decodedExecs": 1,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "fl-tcp-request-native": 1
+        }
+      },
+      {
+        "file": "tamper-after.trace",
+        "traceSha256": "5d0112a1a966998492693f3fad3f0b80c593aeae2d721f7f4db36285720d47bc",
+        "decodedExecs": 1,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "fl-front-release": 1
+        }
+      },
+      {
+        "file": "tamper-before.trace",
+        "traceSha256": "03b637fcba75a21b77bef92846900f639a34cef80085fdc815b311065c256958",
+        "decodedExecs": 1,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "fl-front-release": 1
+        }
+      },
+      {
+        "file": "verify-sealed.trace",
+        "traceSha256": "d5a0297b50dda394d82ab573d0cbf81465ab8a8a10470ff83affba3d8df08454",
+        "decodedExecs": 1,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "fl-front-release": 1
+        }
+      }
+    ],
+    "privatePythonControllerOutsideProductTraces": 1,
+    "oldFailureRetained": true,
+    "sourceSdkUnchanged": true,
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "activation": "NOT_RUN",
+    "commercial": "HOLD",
+    "production": "NO"
+  },
+  "retained_failures": [
+    "Existing runtime.h warnings in first strict helper builds; corrected include search path, own helper code remains Wall/Wextra/Werror.",
+    "Private shell collector guessed33; original evidence/body has30 HTTP cancellation controls; completed tests reused without rerun.",
+    "First frontend producer used three-argument concat; existing vector contract is binary. Nested composition corrected; original45 repeated unchanged.",
+    "Foreground host required17 records; one optional helper requires exactly18. Host now validates both exact shapes and matching helper path.",
+    "First foreground-only private continuation omitted its original clean dictionary; restored context, source/assertions unchanged."
+  ],
+  "original_129_db_tests_runners_expected_outputs_bounds_preserved": true,
+  "db_original_diagnostic": "Most recent original71 result remains the earlier52PASS19FAIL; no new whole71 run claimed here.",
+  "db_utf8_wire_source_applied": false,
+  "full_frontend_dsl_tls_remote_provider_storage_ops_qualification": false,
+  "commercial": "HOLD",
+  "production": "NO",
+  "foreign_user_files_changed_or_committed": false,
+  "qualified_fx_commit": "31701df7a5e345ac64c3ac83d433ce8163768257"
+}

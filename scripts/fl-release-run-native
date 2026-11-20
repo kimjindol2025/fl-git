@@ -29,9 +29,21 @@ while true; do
   if IFS= read -r -d '' field; then invocation+=("$field")
   else [[ -z "$field" ]] || blocked 'Truncated Native invocation records.'; break; fi
 done <"$RUN/run.nul"
-[[ ${#invocation[@]} == 17 && "${invocation[0]}" == FL_RELEASE_RUN/1 \
-  && "${invocation[16]}" == FL_RELEASE_END/1 && "${invocation[1]}" == /usr/bin/env ]] || blocked 'A complete Native invocation is required.'
+[[ "${invocation[0]-}" == FL_RELEASE_RUN/1 && "${invocation[1]-}" == /usr/bin/env ]] \
+  || blocked 'A complete Native invocation is required.'
+if [[ ${#invocation[@]} == 17 && "${invocation[16]}" == FL_RELEASE_END/1 ]]; then
+  native_invocation_arguments=15
+elif [[ ${#invocation[@]} == 18 && "${invocation[17]}" == FL_RELEASE_END/1 ]]; then
+  # One optional literal helper path belongs to the same sealed code release.
+  [[ "${invocation[16]}" == /*/web/app-native ]] || blocked 'A complete Native invocation is required.'
+  native_invocation_helper="${invocation[16]%/web/app-native}/bin/fl-tcp-request-native"
+  [[ "${invocation[15]}" == "FREELANG_NATIVE_TCP_REQUEST=$native_invocation_helper" ]] \
+    || blocked 'A matching Native helper invocation is required.'
+  native_invocation_arguments=16
+else
+  blocked 'A complete Native invocation is required.'
+fi
 rm -- "$RUN/run.nul" "$RUN/policy.stderr"
 rmdir -- "$RUN"
 trap - EXIT
-exec "${invocation[@]:1:15}"
+exec "${invocation[@]:1:$native_invocation_arguments}"
