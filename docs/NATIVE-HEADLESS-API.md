@@ -77,8 +77,9 @@ execution receipt. Zero declared cases are never reported as executed assertions
 
 The original headless comparison remains PARTIAL (27/28 complete typed results),
 including the recorded direct `nil?` reference-emitter difference. The standalone
-cold CLI still compiles all extracted blocks before selection; prepared API
-selection has its own qualified isolation behavior. Full DSL behavior, function
+cold CLI also selects raw blocks and row labels before compilation. Its behavior
+with an invalid unselected block or an empty selection has separate verification.
+Full DSL behavior, function
 introspection, engine error wording, default development/deployment migration,
 real browser/Git flows and the latest whole DB safety/operations gate remain in
 the active objective. Commercial status is HOLD; production deployment has not run.

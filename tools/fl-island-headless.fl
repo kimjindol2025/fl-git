@@ -7,8 +7,38 @@
         (let [field (first selected) key (get field 1) text (str-slice argument (length (get field 0)) (length argument))]
           (if (fl-headless-has? (keys options) key) options
             (assoc options key (if (= key "store") (try (json-parse text) (catch error {})) text))))))) {} args))
+(defn fl-headless-cli-select [source options input receipt]
+  (let [blocks (fl-headless-extract (file_read source))
+        labels (get (fl-headless-cache-groups blocks) "labels")
+        target (get (json-parse (file_read options)) "island")
+        indices (filter (fn [index] (or (not (and (string? target) (not (= target ""))))
+                                     (= (get labels index) (str-lower target)))) (range 0 (length blocks)))
+        static (or (= (length blocks) 0) (= (length indices) 0))
+        record {"schema" "fl-headless/selection/1" "labels" (map (fn [index] (get labels index)) indices)
+                "sourceBlockCount" (length blocks) "selectedCount" (length indices) "static" static
+                "result" (if (= (length blocks) 0) {"ok" false "error" "island 블록 없음" "file" source}
+                           {"ok" true "results" [] "file" (last (str-split source "/"))})}]
+    (fl-headless-cache-write input (str (str-join (map (fn [index] (get blocks index)) indices) "\n") "\n"))
+    (fl-headless-cache-write receipt (json-str record))
+    (println (if static "static" "run"))))
 (defn fl-headless-command [args]
   (cond
+    [(and (= (length args) 5) (= (get args 0) "select"))
+     (fl-headless-cli-select (get args 1) (get args 2) (get args 3) (get args 4))]
+    [(and (= (length args) 2) (= (get args 0) "selection-result"))
+     (let [record (json-parse (file_read (get args 1))) result (get record "result")]
+       (if (not (and (= (get record "schema") "fl-headless/selection/1") (= (get record "static") true)))
+         (throw "E_HEADLESS_SELECTION: static selection receipt required") nil)
+       (println (json-str result))
+       (if (= (get result "ok") true) nil (process-exit 1)))]
+    [(and (= (length args) 6) (= (get args 0) "emit-selected"))
+     (let [parsed (json-parse (file_read (get args 1))) selection (json-parse (file_read (get args 4)))]
+       (if (not (and (= (get selection "schema") "fl-headless/selection/1")
+                     (= (get selection "static") false)
+                     (= (length (get selection "labels")) (length (get parsed "nodes")))))
+         (throw "E_HEADLESS_SELECTION: parsed nodes must match their selected labels") nil)
+       (fl-headless-cache-write (get args 5)
+         (fl-headless-program-named parsed (get args 2) (get args 3) (get selection "labels"))))]
     [(and (= (length args) 4) (= (get args 0) "test-project"))
      (let [result (fl-island-tests (get args 1) (get args 2) (get args 3))]
        (println (json-str result))

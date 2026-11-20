@@ -50,11 +50,18 @@ failed() {
 step=OPTIONS
 run_child timeout --foreground 3s "$TOOL" options "$RUN/options.json" "$@" >"$RUN/options.stdout" 2>"$RUN/options.stderr" || failed "$?"
 step=EXTRACT
-run_child timeout --foreground 3s "$TOOL" extract "$SOURCE" "$RUN/islands.fl" >"$RUN/extract.stdout" 2>"$RUN/extract.stderr" || failed "$?"
+run_child timeout --foreground 3s "$TOOL" select "$SOURCE" "$RUN/options.json" "$RUN/islands.fl" "$RUN/selection.json" >"$RUN/extract.stdout" 2>"$RUN/extract.stderr" || failed "$?"
+case "$(cat -- "$RUN/extract.stdout")" in
+  static)
+    run_child timeout --foreground 3s "$TOOL" selection-result "$RUN/selection.json"
+    exit "$?";;
+  run) ;;
+  *) failed 1;;
+esac
 step=PARSE
 run_child timeout --foreground 15s "$COMPILER" --parse-json "$RUN/islands.fl" >"$RUN/ast.json" 2>"$RUN/parse.stderr" || failed "$?"
 step=LOWER
-run_child timeout --foreground 3s "$TOOL" emit "$RUN/ast.json" "$SUPPORT" "$SOURCE" "$RUN/runtime.fl" >"$RUN/lower.stdout" 2>"$RUN/lower.stderr" || failed "$?"
+run_child timeout --foreground 3s "$TOOL" emit-selected "$RUN/ast.json" "$SUPPORT" "$SOURCE" "$RUN/selection.json" "$RUN/runtime.fl" >"$RUN/lower.stdout" 2>"$RUN/lower.stderr" || failed "$?"
 printf '(front-native-island-headless-main)\n' >"$RUN/program.fl"
 step=GENERATE
 run_child timeout --foreground 15s "$COMPILER" --browser-runtime-js "$RUN/runtime.fl" "$RUN/program.fl" "$RUN/program.js" >"$RUN/generate.stdout" 2>"$RUN/generate.stderr" || failed "$?"

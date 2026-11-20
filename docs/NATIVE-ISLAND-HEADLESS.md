@@ -25,6 +25,16 @@ compiler failures propagate. Each generation retains its 15-second bound,
 engine execution its 3-second bound, and Native processes the 2GiB VM cap.
 Qualification runs hold the existing shared heavy-build lock.
 
+The standalone entry selects raw Island blocks before parsing or lowering.
+Selection uses the runner's case-insensitive row names and preserves all blocks
+with the same name. A malformed unselected block therefore does not prevent a
+valid selected Island from executing. Default selection still parses every
+extracted block; selected parse failures keep the compiler diagnostic and exit
+status. Unknown selection returns the existing empty-results object without
+launching a compiler or engine. A source with no Island blocks keeps its error
+object and exit 1. Configuration checks, first-option precedence, output shapes
+and the existing per-phase bounds remain unchanged.
+
 `tools/front-headless.fl` implements extraction and DSL lowering.
 `web/runtime/headless-language.fl` implements the virtual document, VNode
 prototype/methods/accessors, atoms, store/watchers, mock fetch events, mounting,

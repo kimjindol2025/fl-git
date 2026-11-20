@@ -1,0 +1,116 @@
+{
+  "schema": "native-headless-selection-evidence/1",
+  "date": "2026-11-20",
+  "goalStatus": "ACTIVE",
+  "commercial": "HOLD",
+  "productionDeployment": "NOT_RUN",
+  "change": "Standalone CLI selects raw Island groups and row labels before parsing/lowering; static empty selections return without a compiler or engine.",
+  "verification": {
+    "originalCLI": {
+      "passed": 10,
+      "total": 10,
+      "fixturesAssertionsAndExpectedExits": "unchanged from accepted R18 private cohort"
+    },
+    "selection": {
+      "passed": 16,
+      "total": 16,
+      "scope": [
+        "invalid unselected block isolation",
+        "full typed store/click/dispatch with literal paths",
+        "default and selected parse failures retained",
+        "unknown selection result and zero compiler/engine execution",
+        "all blocks with same name selected",
+        "runner whitespace/case labels preserved",
+        "actual95k application cold selected execution",
+        "decoded product exec traces contain zero Node-family execution"
+      ],
+      "actualApp": {
+        "seconds": 14.758050049000303,
+        "bytes": 95749,
+        "sha256": "78bb9c77ed0b7973c39339eb0306b95cb9bd5a7b579e582c2eac1c5c8733c9f3"
+      }
+    },
+    "preparedCache": {
+      "controls": 5,
+      "passed": 5,
+      "warmSeconds": 0.19064407399855554,
+      "selectedInvalidIsolation": true,
+      "fullTypedData": true,
+      "allFailure": true,
+      "unknownSelection": true,
+      "staleSourceRejected": true
+    },
+    "bounds": {
+      "addressSpaceBytes": 2147483648,
+      "extractLowerAndEngineSeconds": 3,
+      "parseAndGenerateSeconds": 15,
+      "originalCLIOuterSeconds": 40,
+      "sharedHeavyLock": true,
+      "changed": false
+    },
+    "productNodeFamilyExecs": 0,
+    "manifestBeforeAndAfter": "PASS"
+  },
+  "sdk": {
+    "elfCount": 16,
+    "manifestSha256": "6133f45b25ad2f35c33cd1d9f97ff5ba7fdce3948db24a85a960cc8022604927",
+    "runtimeSha256": "22ce727daa24d56a7e357f92ecc5865e1e8856cc2209cf0ae9120e2c22f98caa",
+    "byteIdenticalToR19": [
+      "fl-check",
+      "fl-dev-control",
+      "fl-dev-server",
+      "fl-dev-watch",
+      "fl-dev-watch-host",
+      "fl-front-build",
+      "fl-front-fix",
+      "fl-git",
+      "fl-island-compile",
+      "fl-js-engine",
+      "fl-source-transaction",
+      "fl-style-compile",
+      "fl-tui",
+      "flc",
+      "flp-compile"
+    ],
+    "changedELF": [
+      "fl-island-headless"
+    ],
+    "candidateGeneratedCIdentical": true,
+    "processHostObjectIdentical": true,
+    "relocationCharacters": [
+      "space",
+      "apostrophe",
+      "Korean",
+      "embedded LF"
+    ]
+  },
+  "reusedEvidence": {
+    "reference": "native-headless-api-20261120.json",
+    "basis": "15 other executables, runtime, engine, process host object and cache/service/test modules unchanged; five prepared-cache controls freshly passed with current tool",
+    "r19HTTPControls": 53,
+    "r19BuildGateControls": 21,
+    "r19LifecycleControls": 13,
+    "r19TrackedCommon": 71,
+    "r19SeparateProvider": 9,
+    "scope": "retained R19 evidence, not freshly repeated cohorts"
+  },
+  "sourceSha256": {
+    "tools/fl-island-headless.fl": "7f3fb5e889a3f1776e344b3089bf7a5f76807f65c0c3c4d81cb4149e16e05ab2",
+    "scripts/fl-island-run-native": "78f00bbbfe1ae733f2acb48dcb69f5c47f16e622296cec5cd5da3964f53180ff"
+  },
+  "preservation": {
+    "foreignHashesUnchanged": true,
+    "protectedFixturesAssertionsRunnersBoundsChanged": false,
+    "fxChanges": false,
+    "dbChanges": false,
+    "seedRegenerated": false,
+    "handwrittenProductJavaScriptOrPythonAdded": false
+  },
+  "remaining": [
+    "Full DSL/headless result compatibility (retained27/28 comparison scope)",
+    "Abrupt process-owner death/cancellation qualification",
+    "Default development/deployment and full metadata completion",
+    "Actual browser/Git acceptance",
+    "Latest whole DB95 safety/recovery/concurrency/load/operations"
+  ]
+}
